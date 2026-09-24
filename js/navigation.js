@@ -10,6 +10,8 @@ import { calculerItineraireTomTom } from "./tomtom.js";
 import { haversineKm } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
+import { rechercherBornesZone } from "./ocm.js";
+import { stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import {
   entrerNavigation,
   quitterNavigation,
@@ -18,11 +20,16 @@ import {
   majVoiture,
   cameraNavigation,
   apercuNavigation,
+  afficherBornes,
+  montrerBornes,
 } from "./carte.js";
 
 const $ = (id) => document.getElementById(id);
 const DELAI_TRAFIC_MS = 5 * 60 * 1000;
 const DELAI_MIN_RECALCUL_MS = 20 * 1000;
+const DELAI_BORNES_MS = 90 * 1000;
+const RAYON_BORNES_KM = 12;
+const DISTANCE_MIN_RAFRAICHIR_BORNES_KM = RAYON_BORNES_KM * 0.4;
 
 let etat = null;
 
@@ -365,6 +372,32 @@ function arriveeDestination() {
   $("ev-nav-terminer-btn").addEventListener("click", () => arreterNavigation());
 }
 
+// ── Bornes affichées pendant la conduite ────────────────────────────────────
+
+async function rafraichirBornesProches() {
+  if (!etat?.pos) return;
+  const pos = etat.pos;
+  const maintenant = Date.now();
+  if (
+    etat.posBornes &&
+    maintenant - etat.dernierFetchBornes < DELAI_BORNES_MS &&
+    haversineKm(pos.lat, pos.lon, etat.posBornes.lat, etat.posBornes.lon) < DISTANCE_MIN_RAFRAICHIR_BORNES_KM
+  ) {
+    return;
+  }
+  etat.dernierFetchBornes = maintenant;
+  etat.posBornes = { lat: pos.lat, lon: pos.lon };
+  const jeton = ++etat.jetonBornes;
+  const { openChargeMap } = getApiKeys();
+  const [res, officielles] = await Promise.all([
+    openChargeMap ? rechercherBornesZone(openChargeMap, pos.lat, pos.lon, { rayonKm: RAYON_BORNES_KM, maxResultats: 60 }) : Promise.resolve({ ok: false, bornes: [] }),
+    stationsOfficiellesZone(pos.lat, pos.lon, RAYON_BORNES_KM, { maxLignes: 300 }),
+  ]);
+  if (!etat || jeton !== etat.jetonBornes) return;
+  afficherBornes(fusionnerBornes(res.ok ? res.bornes : [], officielles.bornes), () => {});
+  montrerBornes(true);
+}
+
 // ── Recalculs ───────────────────────────────────────────────────────────────
 
 async function recalculer(raison) {
@@ -463,6 +496,7 @@ function surPosition(p) {
   }
   annonces();
   majEcran();
+  rafraichirBornesProches();
 }
 
 // ── Source de position : GPS réel ───────────────────────────────────────────
@@ -594,6 +628,9 @@ export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, 
     horsRoute: 0,
     dernierRecalcul: 0,
     dernierTrafic: Date.now(),
+    dernierFetchBornes: 0,
+    posBornes: null,
+    jetonBornes: 0,
     annoncesBornes: new Set(),
     capacite: obtenirProfilVehicule().capacite_kwh,
     consoKwhKm: (plan.energie_totale_necessaire_kwh || 13) / Math.max(1, plan.distance_km),
@@ -665,6 +702,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   const onFin = etat.onFin;
   const plan = etat.plan;
   etat = null;
+  montrerBornes(false);
   quitterNavigation();
   document.body.classList.remove("ev-mode-navigation");
   $("ev-navigation").classList.add("hidden");
