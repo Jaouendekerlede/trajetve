@@ -23,7 +23,6 @@ import {
 const $ = (id) => document.getElementById(id);
 const DELAI_TRAFIC_MS = 5 * 60 * 1000;
 const DELAI_MIN_RECALCUL_MS = 20 * 1000;
-const ACCELERATION_DEMO = 4;
 
 let etat = null;
 
@@ -369,7 +368,7 @@ function arriveeDestination() {
 // ── Recalculs ───────────────────────────────────────────────────────────────
 
 async function recalculer(raison) {
-  if (!etat || etat.recalculEnCours || etat.demo) return;
+  if (!etat || etat.recalculEnCours) return;
   etat.recalculEnCours = true;
   etat.dernierRecalcul = Date.now();
   if (raison === "hors_route") {
@@ -444,7 +443,7 @@ function surPosition(p) {
   const seuil = Math.max(40, (p.precision || 20) * 1.5);
   etat.horsRoute = m.d > seuil && (p.vitesse || 0) > 2 ? etat.horsRoute + 1 : 0;
   if (etat.horsRoute >= 3 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
-  else if (!etat.demo && Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
+  else if (Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
 
   // Arrivée à une borne ou à destination
   const arret = etat.arretsRestants[0];
@@ -466,7 +465,7 @@ function surPosition(p) {
   majEcran();
 }
 
-// ── Sources de position : GPS réel ou démo ─────────────────────────────────
+// ── Source de position : GPS réel ───────────────────────────────────────────
 
 function demarrerGps() {
   etat.watchId = navigator.geolocation.watchPosition(
@@ -491,30 +490,6 @@ function demarrerGps() {
     },
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
   );
-}
-
-function pointSurRoute(offset) {
-  const { coords, cum } = etat.route;
-  let i = 0;
-  while (i < cum.length - 2 && cum[i + 1] < offset) i++;
-  const t = cum[i + 1] > cum[i] ? Math.max(0, Math.min(1, (offset - cum[i]) / (cum[i + 1] - cum[i]))) : 0;
-  const [lonA, latA] = coords[i];
-  const [lonB, latB] = coords[i + 1];
-  return { lat: latA + t * (latB - latA), lon: lonA + t * (lonB - lonA), cap: capEntre(latA, lonA, latB, lonB), i };
-}
-
-function demarrerDemo() {
-  let offset = etat.offset;
-  const acceleration = window.TRAJETVE_ACCELERATION_DEMO || ACCELERATION_DEMO;
-  etat.demoTimer = setInterval(() => {
-    if (!etat || etat.aLaBorne || etat.arrive) return;
-    const p0 = pointSurRoute(offset);
-    const kmh = etat.route.limites[p0.i] ? etat.route.limites[p0.i] * 0.93 : 85;
-    offset = Math.max(offset, etat.offset) + (kmh / 3.6) * acceleration;
-    if (offset > etat.route.total) offset = etat.route.total;
-    const p = pointSurRoute(offset);
-    surPosition({ lat: p.lat, lon: p.lon, vitesse: kmh / 3.6, cap: p.cap, precision: 5, t: Date.now() });
-  }, 1000);
 }
 
 async function garderEcranAllume() {
@@ -597,7 +572,7 @@ export function navigationActive() {
 
 // plan : résultat du planificateur ; options : réglages du trajet ;
 // onReplanifier(depart, chargePct) -> nouveau plan ; onFin() à l'arrêt.
-export async function demarrerNavigation(plan, { options = {}, demo = false, chargeDepartPct, onReplanifier, onFin } = {}) {
+export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, onReplanifier, onFin } = {}) {
   if (etat) return;
   if (!getApiKeys().tomtom) {
     alert("Clé TomTom manquante : ajoute-la dans l'onglet 🚗 Profil.");
@@ -607,7 +582,6 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   etat = {
     plan,
     options,
-    demo,
     onReplanifier,
     onFin,
     destination: { lat: plan.to_lat, lon: plan.to_lon, nom: plan.to_name },
@@ -651,23 +625,18 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   });
   garderEcranAllume();
 
-  // Position de départ : GPS réel, ou début du trajet en démo
-  let depart;
-  if (demo) {
-    depart = { lat: plan.from_lat, lon: plan.from_lon, vitesse: 0, cap: NaN, precision: 5, t: Date.now() };
-  } else {
-    depart = await new Promise((resolve) =>
-      navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, vitesse: p.coords.speed ?? NaN, cap: p.coords.heading ?? NaN, precision: p.coords.accuracy, t: p.timestamp }),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
-      ),
-    );
-    if (!depart) {
-      afficherAlerte("⚠️ Position GPS introuvable. Autorise la localisation, ou essaie le mode démo.");
-      $("ev-nav-instruction").textContent = "En attente du GPS…";
-      return;
-    }
+  // Position de départ : GPS réel
+  const depart = await new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, vitesse: p.coords.speed ?? NaN, cap: p.coords.heading ?? NaN, precision: p.coords.accuracy, t: p.timestamp }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
+    ),
+  );
+  if (!depart) {
+    afficherAlerte("⚠️ Position GPS introuvable. Autorise la localisation.");
+    $("ev-nav-instruction").textContent = "En attente du GPS…";
+    return;
   }
   if (!etat) return;
   etat.pos = depart;
@@ -680,15 +649,13 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   installerRoute(route);
   const premiere = route.instructions.find((i) => i.type !== "LOCATION_DEPARTURE");
   parler(`C'est parti. ${premiere ? premiere.message : ""}`, true);
-  if (demo) demarrerDemo();
-  else demarrerGps();
+  demarrerGps();
   surPosition({ ...depart, t: Date.now() });
 }
 
 export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
-  if (etat.demoTimer) clearInterval(etat.demoTimer);
   try {
     etat.wakeLock?.release();
   } catch {

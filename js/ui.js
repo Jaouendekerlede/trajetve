@@ -1160,12 +1160,11 @@ function quitterTrajet() {
   chargerBornesZone(true);
 }
 
-function lancerNavigation(demo) {
+function lancerNavigation() {
   if (!dernierTrajet || navigationActive()) return;
   const options = dernieresOptions || construireOptions();
   demarrerNavigation(dernierTrajet, {
     options,
-    demo,
     chargeDepartPct: dernierChargeDepartPct,
     // Recalcul des recharges en route, depuis la position actuelle de la voiture.
     onReplanifier: async (departCoordonnees, chargePct) => {
@@ -1184,8 +1183,7 @@ function lancerNavigation(demo) {
 }
 
 function cablerResultat() {
-  $("ev-nav-demarrer-btn").addEventListener("click", () => lancerNavigation(false));
-  $("ev-nav-demo-btn").addEventListener("click", () => lancerNavigation(true));
+  $("ev-nav-demarrer-btn").addEventListener("click", () => lancerNavigation());
   $("ev-modifier-btn").addEventListener("click", () => afficherVue("trajet"));
   $("ev-quitter-trajet-btn").addEventListener("click", quitterTrajet);
   $("ev-export-btn").addEventListener("click", () => {
