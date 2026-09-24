@@ -1,5 +1,7 @@
-// Interface -- reproduit le panneau Trajet VE de JARVIS (frontend/src/main.ts)
-// en appelant directement le moteur local (trajet.js) au lieu du websocket.
+// Interface "carte d'abord" : carte plein écran avec les bornes autour,
+// panneau coulissant (liste, fiche borne, trajet, résultat, favoris,
+// outils, profil) et barre de navigation. Les calculs viennent du moteur
+// local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
 import {
@@ -11,6 +13,7 @@ import {
   listerTrajetsFavoris,
   ajouterTrajetFavori,
   retirerTrajetFavori,
+  listerBornesFavorites,
   estBorneFavorite,
   basculerFavoriBorne,
   obtenirNoteBorne,
@@ -22,37 +25,78 @@ import {
 } from "./storage.js";
 import { planifierTrajet, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import { afficherTrajetSurCarte, masquerCarte, placerCurseur } from "./carte.js";
+import {
+  initCarte,
+  fondSuivant,
+  choisirFond,
+  ICONES_FONDS,
+  definirDecalageBas,
+  centreVisible,
+  rayonVisibleKm,
+  zoomActuel,
+  centrer,
+  classePuissance,
+  puissanceBorne,
+  afficherBornes,
+  rafraichirBorne,
+  selectionnerBorne,
+  montrerBornes,
+  afficherPosition,
+  afficherTrajet,
+  effacerTrajet,
+  placerCurseur,
+} from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
+import { rechercherBornesZone, borneCompatible } from "./ocm.js";
+import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze } from "./util.js";
 import { enrichirBornes } from "./irve.js";
 
 const $ = (id) => document.getElementById(id);
+const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
+const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", favoris: "haut", outils: "haut", profil: "haut" };
+const ONGLET_PAR_VUE = { bornes: "bornes", trajet: "trajet", resultat: "trajet", favoris: "favoris", outils: "outils", profil: "profil" };
 const LABELS_MODE = { rapide: "⚡ Rapide", economique: "💶 Économique", confort: "🛋️ Confort", prudent: "🛡️ Prudent" };
 const BOUTONS_CALCUL = ["ev-trajet-run-btn", "ev-aller-retour-btn", "ev-scenarios-btn"];
+const HAUTEUR_REPLIEE = 172;
 
+let vueCourante = "bornes";
+let vueAvantBorne = "bornes";
+let etatFeuille = "bas";
 let modeTrajet = "confort";
 // Suit si marge/objectif ont été touchés à la main APRÈS le choix d'un mode :
 // sans ça, recliquer sur un mode écraserait ces réglages sans prévenir.
 let slidersModifiesManuellement = false;
 let dernierTrajet = null;
+let trajetAffiche = false;
 let dernierChargeDepartPct = 80;
 let dernierScenarios = null;
-let derniereBorneOuverte = null;
+let borneOuverte = null;
 let calculEnCours = false;
+let bornesZone = [];
+let derniereZone = null;
+let rechercheManuelle = null;
+let jetonZone = 0;
+let minuteurDeplacement = null;
+const filtres = new Set();
+const listesAffichees = new Map();
 
-// ── Petits utilitaires d'affichage ─────────────────────────────────────────
+// ── Petits utilitaires ─────────────────────────────────────────────────────
 
 function toast(message) {
   const el = $("ev-toast");
   el.textContent = message;
   el.classList.add("visible");
   clearTimeout(toast.minuteur);
-  toast.minuteur = setTimeout(() => el.classList.remove("visible"), 2600);
+  toast.minuteur = setTimeout(() => el.classList.remove("visible"), 2800);
 }
 
 function euros(x) {
   return `${Number(x).toFixed(2).replace(".", ",")} €`;
+}
+
+function nombre(x, dec = 0) {
+  return Number(x).toFixed(dec).replace(".", ",");
 }
 
 function nomCourt(nom) {
@@ -76,25 +120,647 @@ function hint(texte) {
   return `<div class="ev-hint">${escapeHtml(texte)}</div>`;
 }
 
-function defiler(el) {
-  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+function alerte(texte) {
+  return `<div class="ev-alerte">${escapeHtml(texte)}</div>`;
 }
 
-// Le bouton "retour" d'Android ferme la fenêtre ouverte au lieu de quitter l'appli.
-function ouvrirOverlay(el) {
-  el.classList.remove("hidden");
-  if (!history.state?.overlay) history.pushState({ overlay: true }, "");
-}
-function fermerOverlays() {
-  $("ev-station-modal").classList.add("hidden");
-  $("ev-urgence-panel").classList.add("hidden");
-}
-function fermerOverlayDepuisBouton() {
-  if (history.state?.overlay) history.back();
-  else fermerOverlays();
+function dateFr(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? escapeHtml(iso) : d.toLocaleDateString("fr-FR");
 }
 
-// ── Jauge batterie, curseurs, modes ────────────────────────────────────────
+function heure(ms) {
+  return new Date(ms).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function classeBatterie(pct) {
+  return pct >= 50 ? "good" : pct >= 20 ? "warn" : "bad";
+}
+
+function batterieHtml(pct) {
+  return `<span class="ev-batt ${classeBatterie(pct)}">🔋 ${nombre(pct, pct % 1 ? 1 : 0)} %</span>`;
+}
+
+function ecranLarge() {
+  return window.matchMedia("(min-width: 900px)").matches;
+}
+
+// ── Panneau coulissant ─────────────────────────────────────────────────────
+
+function positionsFeuille() {
+  const h = $("ev-feuille").offsetHeight;
+  return { haut: 0, mi: Math.max(0, h - Math.round(window.innerHeight * 0.5)), bas: Math.max(0, h - HAUTEUR_REPLIEE) };
+}
+
+function appliquerPosition(y, anime) {
+  const feuille = $("ev-feuille");
+  const nav = document.querySelector(".ev-nav").offsetHeight;
+  if (ecranLarge()) {
+    feuille.style.transform = "";
+    $("ev-feuille-corps").style.paddingBottom = "";
+    document.documentElement.style.setProperty("--feuille-visible", "0px");
+    definirDecalageBas(0);
+    return;
+  }
+  feuille.style.transition = anime ? "" : "none";
+  feuille.style.transform = `translateY(${y}px)`;
+  $("ev-feuille-corps").style.paddingBottom = `${y + 24}px`;
+  const visible = feuille.offsetHeight - y + nav;
+  document.documentElement.style.setProperty("--feuille-visible", `${visible}px`);
+  definirDecalageBas(visible);
+}
+
+function definirFeuille(etat) {
+  etatFeuille = etat;
+  document.body.dataset.feuille = etat;
+  appliquerPosition(positionsFeuille()[etat], true);
+}
+
+function cablerFeuille() {
+  const poignee = $("ev-poignee");
+  const zones = [poignee, ...document.querySelectorAll(".ev-vue-entete")];
+  let debutY = null;
+  let debutPos = 0;
+  let pos = 0;
+  let t0 = 0;
+  let deplace = false;
+  let zoneActive = null;
+
+  const debut = (e) => {
+    if (ecranLarge()) return;
+    debutY = e.clientY;
+    debutPos = positionsFeuille()[etatFeuille];
+    pos = debutPos;
+    t0 = Date.now();
+    deplace = false;
+    zoneActive = e.currentTarget;
+  };
+  const bouger = (e) => {
+    if (debutY === null) return;
+    const dy = e.clientY - debutY;
+    if (!deplace && Math.abs(dy) > 8) {
+      deplace = true;
+      try {
+        zoneActive.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!deplace) return;
+    pos = Math.max(0, Math.min(positionsFeuille().bas, debutPos + dy));
+    appliquerPosition(pos, false);
+  };
+  const fin = (e) => {
+    if (debutY === null) return;
+    const dy = e.clientY - debutY;
+    const vitesse = dy / Math.max(1, Date.now() - t0);
+    debutY = null;
+    if (!deplace) {
+      if (zoneActive === poignee) definirFeuille(etatFeuille === "bas" ? "mi" : etatFeuille === "mi" ? "haut" : "mi");
+      return;
+    }
+    const p = positionsFeuille();
+    let cible;
+    if (vitesse < -0.5) cible = pos <= p.mi ? "haut" : "mi";
+    else if (vitesse > 0.5) cible = pos >= p.mi ? "bas" : "mi";
+    else cible = ["haut", "mi", "bas"].reduce((a, b) => (Math.abs(p[b] - pos) < Math.abs(p[a] - pos) ? b : a));
+    definirFeuille(cible);
+  };
+  for (const z of zones) {
+    z.addEventListener("pointerdown", debut);
+    z.addEventListener("pointermove", bouger);
+    z.addEventListener("pointerup", fin);
+    z.addEventListener("pointercancel", fin);
+  }
+  window.addEventListener("resize", () => definirFeuille(etatFeuille));
+}
+
+// ── Navigation entre les vues ──────────────────────────────────────────────
+
+function afficherVue(vue, { etat, historique = true } = {}) {
+  if (vue === "borne" && vueCourante !== "borne") vueAvantBorne = vueCourante;
+  for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
+  vueCourante = vue;
+  const onglet = ONGLET_PAR_VUE[vue];
+  if (onglet) document.querySelectorAll(".ev-nav-btn").forEach((b) => b.classList.toggle("actif", b.dataset.vue === onglet));
+  $("ev-feuille-corps").scrollTop = 0;
+  definirFeuille(etat || ETAT_FEUILLE_PAR_VUE[vue]);
+  const contexteTrajet = vue === "resultat" || (vue === "borne" && vueAvantBorne === "resultat");
+  montrerBornes(!contexteTrajet);
+
+  // Le bouton "retour" d'Android revient en arrière dans l'appli au lieu de la quitter.
+  if (historique && vue !== "bornes") {
+    if (vue === "borne" || !history.state?.vue) history.pushState({ vue }, "");
+    else history.replaceState({ vue }, "");
+  }
+}
+
+function revenirDeBorne() {
+  selectionnerBorne(null);
+  borneOuverte = null;
+  afficherVue(vueAvantBorne === "borne" ? "bornes" : vueAvantBorne, { historique: false });
+}
+
+function cablerNavigation() {
+  document.querySelectorAll(".ev-nav-btn").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const cible = btn.dataset.vue;
+      if (cible === "trajet" && trajetAffiche && vueCourante !== "resultat") afficherVue("resultat");
+      else if (cible === "bornes") afficherVue("bornes", { etat: vueCourante === "bornes" ? (etatFeuille === "bas" ? "mi" : "bas") : "bas", historique: false });
+      else afficherVue(cible);
+      if (cible === "favoris") renderFavoris();
+    }),
+  );
+  $("ev-borne-retour").addEventListener("click", () => {
+    if (history.state?.vue === "borne") history.back();
+    else revenirDeBorne();
+  });
+  window.addEventListener("popstate", () => {
+    if (!$("ev-urgence-panel").classList.contains("hidden")) {
+      $("ev-urgence-panel").classList.add("hidden");
+      return;
+    }
+    if (vueCourante === "borne") revenirDeBorne();
+    else if (vueCourante !== "bornes") afficherVue("bornes", { historique: false });
+  });
+  $("ev-recherche-rapide").addEventListener("click", () => {
+    afficherVue("trajet");
+    setTimeout(() => $("ev-destination-input").focus(), 320);
+  });
+}
+
+// ── Paiement : état "carte bancaire" toujours sourcé ───────────────────────
+
+const OUI_NON = { oui: "✅ oui", partiel: "⚠️ sur une partie des points", non: "❌ non" };
+
+function officielValide(b) {
+  return b.officiel && !b.officiel.indisponible ? b.officiel : null;
+}
+
+function etatCb(b) {
+  const o = officielValide(b);
+  if (o) {
+    if (o.paiement_cb === "oui") return { classe: "ok", court: "💳 CB acceptée", long: "✅ Acceptée" };
+    if (o.paiement_cb === "partiel") return { classe: "warn", court: "💳 CB sur certains points", long: "⚠️ Sur une partie des points seulement" };
+    return { classe: "non", court: "🚫 Pas de CB", long: "❌ Non acceptée" };
+  }
+  if (b.officiel === undefined) return { classe: "attente", court: "💳 vérification…", long: "Vérification en cours…" };
+  if (b.paiement_cb_probable) return { classe: "inconnu", court: "💳 CB probable", long: "❓ Non confirmé — probable : borne ≥50 kW, terminal CB obligatoire sur les bornes neuves depuis 04/2024" };
+  return { classe: "inconnu", court: "💳 CB non renseignée", long: "❓ Non renseigné" };
+}
+
+function prixConnu(b) {
+  if (b.prix_kwh_eur == null || b.prix_est_estimation) return null;
+  return b.prix_kwh_eur;
+}
+
+function prixRetenuHtml(b) {
+  if (b.prix_kwh_eur == null) return "";
+  const source = b.prix_source === "officiel" ? "tarif officiel déclaré" : b.prix_est_estimation ? "estimation par défaut, tarif réel non communiqué" : "tarif Open Charge Map";
+  return `${euros(b.prix_kwh_eur)}/kWh (${source})`;
+}
+
+function coutHtml(coutEstime, prixKwh, estimation) {
+  if (coutEstime !== undefined && coutEstime !== null) {
+    return `💶 ${estimation ? "~" : ""}${euros(coutEstime)}${estimation ? " (estimé, tarif non communiqué)" : ""}`;
+  }
+  if (prixKwh !== undefined && prixKwh !== null) return `💶 ~${euros(prixKwh)}/kWh${estimation ? " (estimé)" : ""}`;
+  return "";
+}
+
+function pastillesBorne(b) {
+  const o = officielValide(b);
+  const cb = etatCb(b);
+  const morceaux = [`<span class="ev-cb-pill ${cb.classe}">${cb.court}</span>`];
+  const prix = prixConnu(b);
+  if (o?.gratuit === "oui") morceaux.push(`<span class="ev-cb-pill ok">🎁 Gratuit</span>`);
+  else if (prix !== null) morceaux.push(`<span class="ev-cb-pill neutre">💶 ${euros(prix)}/kWh</span>`);
+  if (o && /24\s*\/\s*7|24\s*h/i.test(o.horaires)) morceaux.push(`<span class="ev-cb-pill neutre">🕐 24h/24</span>`);
+  return morceaux.join("");
+}
+
+// ── Liste de bornes ────────────────────────────────────────────────────────
+
+function ligneBorneHtml(b, i, suffixeDistance = "") {
+  const kw = puissanceBorne(b);
+  const o = officielValide(b);
+  const points = o?.nombre_points || b.nombre_points;
+  const sous = [b.operateur || o?.operateur || "Opérateur inconnu", b.distance_km != null ? `${nombre(b.distance_km, 1)} km${suffixeDistance}` : "", points ? `${points} pts` : ""]
+    .filter(Boolean)
+    .join(" · ");
+  return `
+    <button type="button" class="ev-borne-ligne" data-idx="${i}">
+      <div class="ev-borne-puissance ${classePuissance(kw)}">${kw || "?"}<small>kW</small></div>
+      <div class="ev-borne-infos">
+        <div class="ev-borne-nom">${escapeHtml(b.nom || b.nom_borne || "Borne de recharge")}</div>
+        <div class="ev-borne-sous">${escapeHtml(sous)}</div>
+        <div class="ev-borne-pastilles">${pastillesBorne(b)}</div>
+      </div>
+    </button>`;
+}
+
+function afficherListe(conteneur, bornes, messageVide, suffixeDistance = "") {
+  listesAffichees.set(conteneur.id, bornes);
+  conteneur.innerHTML = bornes.map((b, i) => ligneBorneHtml(b, i, suffixeDistance)).join("") || hint(messageVide);
+}
+
+function cablerListe(conteneur, action) {
+  conteneur.addEventListener("click", (e) => {
+    const ligne = e.target.closest("[data-idx]");
+    if (!ligne) return;
+    const b = listesAffichees.get(conteneur.id)?.[Number(ligne.dataset.idx)];
+    if (b) action(b);
+  });
+}
+
+// ── Bornes autour de la carte ──────────────────────────────────────────────
+
+function cbPossible(b) {
+  const o = officielValide(b);
+  if (o) return o.paiement_cb !== "non";
+  if (b.officiel === undefined) return true;
+  return !!b.paiement_cb_probable;
+}
+
+function passeFiltres(b) {
+  const o = officielValide(b);
+  const enAttente = b.officiel === undefined;
+  if (filtres.has("rapide") && puissanceBorne(b) < 50) return false;
+  if (filtres.has("cb") && !cbPossible(b)) return false;
+  if (filtres.has("compatible") && !borneCompatible(b, obtenirProfilVehicule().connecteurs_acceptes)) return false;
+  if (filtres.has("h24") && !enAttente && !(o && /24\s*\/\s*7|24\s*h/i.test(o.horaires))) return false;
+  if (filtres.has("gratuit") && !enAttente && !(o?.gratuit === "oui" || /gratuit|free/i.test(b.cout_texte || ""))) return false;
+  return true;
+}
+
+function renderBornes({ carteAussi = true } = {}) {
+  const liste = bornesZone.filter(passeFiltres);
+  if (carteAussi) afficherBornes(liste, (b) => ouvrirBorne(b, { centrerCarte: false }));
+  const nbFiltres = filtres.size ? ` · ${filtres.size} filtre${filtres.size > 1 ? "s" : ""}` : "";
+  $("ev-bornes-titre").textContent = rechercheManuelle
+    ? `🔍 ${liste.length} borne${liste.length > 1 ? "s" : ""} — ${rechercheManuelle}`
+    : `📍 ${liste.length} borne${liste.length > 1 ? "s" : ""} à proximité${nbFiltres}`;
+  $("ev-recherche-effacer").classList.toggle("hidden", !rechercheManuelle);
+  afficherListe(
+    $("ev-bornes-liste"),
+    liste,
+    bornesZone.length ? "Aucune borne ne correspond aux filtres choisis." : "Aucune borne trouvée dans cette zone. Déplace ou dézoome la carte.",
+  );
+}
+
+async function enrichirProgressivement(bornes, toujoursValide) {
+  for (let k = 0; k < bornes.length; k += 6) {
+    const groupe = bornes.slice(k, k + 6);
+    await enrichirBornes(groupe);
+    if (!toujoursValide()) return;
+    if (filtres.size) renderBornes();
+    else {
+      groupe.forEach(rafraichirBorne);
+      renderBornes({ carteAussi: false });
+    }
+  }
+}
+
+async function chargerBornesZone(force = false) {
+  const { openChargeMap } = getApiKeys();
+  if (!openChargeMap) {
+    $("ev-bornes-titre").textContent = "📍 Bornes à proximité";
+    $("ev-bornes-liste").innerHTML = hint("Ajoute ta clé Open Charge Map dans l'onglet 🚗 Profil pour voir les bornes sur la carte.");
+    return;
+  }
+  const rayon = rayonVisibleKm();
+  if (rayon > 60) {
+    jetonZone++;
+    bornesZone = [];
+    derniereZone = null;
+    renderBornes();
+    $("ev-bornes-titre").textContent = "🔎 Zoome sur la carte pour voir les bornes";
+    return;
+  }
+  const c = centreVisible();
+  const r = Math.max(1.5, Math.min(40, rayon));
+  if (
+    !force &&
+    derniereZone &&
+    haversineKm(c.lat, c.lon, derniereZone.lat, derniereZone.lon) < derniereZone.rayon * 0.3 &&
+    r <= derniereZone.rayon * 1.25 &&
+    r >= derniereZone.rayon * 0.5
+  ) {
+    return;
+  }
+  const jeton = ++jetonZone;
+  $("ev-bornes-titre").textContent = "⏳ Recherche des bornes…";
+  const res = await rechercherBornesZone(openChargeMap, c.lat, c.lon, { rayonKm: r, maxResultats: 80 });
+  if (jeton !== jetonZone) return;
+  if (!res.ok) {
+    $("ev-bornes-titre").textContent = "📍 Bornes à proximité";
+    $("ev-bornes-liste").innerHTML = alerte(
+      res.erreur === "cle_manquante" ? "Clé Open Charge Map refusée : vérifie-la dans 🚗 Profil." : `Recherche de bornes indisponible (${res.erreur}).`,
+    );
+    return;
+  }
+  derniereZone = { lat: c.lat, lon: c.lon, rayon: r };
+  bornesZone = res.bornes;
+  renderBornes();
+  enrichirProgressivement(bornesZone, () => jeton === jetonZone);
+}
+
+function surDeplacementCarte() {
+  const contexteTrajet = vueCourante === "resultat" || (vueCourante === "borne" && vueAvantBorne === "resultat");
+  if (rechercheManuelle || contexteTrajet) return;
+  clearTimeout(minuteurDeplacement);
+  minuteurDeplacement = setTimeout(() => chargerBornesZone(), 650);
+}
+
+function cablerCarte() {
+  const reglages = lireReglages();
+  const fond = choisirFond(reglages.fond_carte || "sombre");
+  $("ev-fond-btn").textContent = ICONES_FONDS[fond];
+  $("ev-fond-btn").addEventListener("click", () => {
+    const nom = fondSuivant();
+    $("ev-fond-btn").textContent = ICONES_FONDS[nom];
+    sauverReglages({ fond_carte: nom });
+    toast({ sombre: "🌙 Carte sombre", plan: "🗺️ Plan clair", satellite: "🛰️ Vue satellite" }[nom]);
+  });
+
+  for (const f of reglages.filtres_carte || []) filtres.add(f);
+  document.querySelectorAll(".ev-chip").forEach((chip) => {
+    chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
+    chip.addEventListener("click", () => {
+      const f = chip.dataset.filtre;
+      if (filtres.has(f)) filtres.delete(f);
+      else filtres.add(f);
+      chip.classList.toggle("actif", filtres.has(f));
+      sauverReglages({ filtres_carte: [...filtres] });
+      renderBornes();
+      if (vueCourante !== "bornes" && vueCourante !== "resultat") afficherVue("bornes", { etat: "mi", historique: false });
+    });
+  });
+
+  $("ev-localiser-btn").addEventListener("click", localiser);
+  $("ev-recherche-effacer").addEventListener("click", () => {
+    rechercheManuelle = null;
+    derniereZone = null;
+    chargerBornesZone(true);
+  });
+  cablerListe($("ev-bornes-liste"), (b) => ouvrirBorne(b));
+}
+
+async function localiser() {
+  toast("📍 Recherche de ta position…");
+  const pos = await resoudreLieu("ma position");
+  if (pos.erreur) {
+    toast(pos.erreur);
+    return false;
+  }
+  afficherPosition(pos.lat, pos.lon);
+  centrer(pos.lat, pos.lon, Math.max(zoomActuel(), 13.5));
+  return true;
+}
+
+async function positionDeDepart() {
+  const pos = await resoudreLieu("ma position");
+  if (!pos.erreur) {
+    afficherPosition(pos.lat, pos.lon);
+    centrer(pos.lat, pos.lon, 13.5);
+    return;
+  }
+  const domicile = lireReglages().adresse_domicile;
+  if (domicile) {
+    const lieu = await resoudreLieu("chez moi", domicile);
+    if (!lieu.erreur) {
+      centrer(lieu.lat, lieu.lon, 13);
+      return;
+    }
+  }
+  chargerBornesZone(true);
+}
+
+// ── Fiche borne ────────────────────────────────────────────────────────────
+
+function ligneInfo(label, valeurHtml) {
+  return valeurHtml ? `<div class="ev-ligne-info"><span class="label">${label}</span><span class="value">${valeurHtml}</span></div>` : "";
+}
+
+function prisesHtml(b) {
+  const o = officielValide(b);
+  let prises = [];
+  if (o?.prises?.length) {
+    prises = o.prises.map((p) => ({ nom: p.libelle, kw: p.puissance_max_kw, nb: p.nombre }));
+  } else {
+    const groupes = new Map();
+    for (const c of b.connecteurs || []) {
+      const cle = `${c.type}|${c.puissance_kw}`;
+      const g = groupes.get(cle) || { nom: c.type, kw: c.puissance_kw, nb: 0 };
+      g.nb += c.quantite || 1;
+      groupes.set(cle, g);
+    }
+    prises = [...groupes.values()].sort((a, z) => z.kw - a.kw);
+  }
+  if (!prises.length) return "";
+  return `<div class="ev-prises">${prises
+    .map((p) => `<div class="ev-prise"><span class="ev-prise-kw">${p.kw ? `${escapeHtml(p.kw)} kW` : "? kW"}</span><strong>${escapeHtml(p.nom)}</strong><span>${p.nb} point${p.nb > 1 ? "s" : ""}</span></div>`)
+    .join("")}</div>`;
+}
+
+function ficheBorneHtml(b, ctx) {
+  const o = officielValide(b);
+  const kw = puissanceBorne(b);
+  const cb = etatCb(b);
+  const nom = b.nom_borne || b.nom || o?.nom_station || "Borne de recharge";
+  const favori = estBorneFavorite(nom, b.lat, b.lon);
+  const statutOk = (b.statut || "").toLowerCase().includes("operational");
+  const points = o?.nombre_points || b.nombre_points;
+
+  let html = `
+    <div class="ev-fiche-tete">
+      <div class="ev-borne-puissance ${classePuissance(kw)}">${kw || "?"}<small>kW max</small></div>
+      <div>
+        <div class="ev-fiche-titre">${escapeHtml(nom)}</div>
+        <div class="ev-fiche-sous">${escapeHtml([b.operateur || o?.operateur, b.adresse || o?.adresse].filter(Boolean).join(" · "))}</div>
+      </div>
+    </div>
+    <div class="ev-badges">
+      <span class="ev-cb-pill ${cb.classe}">${cb.court}</span>
+      ${points ? `<span class="ev-cb-pill neutre">🔌 ${escapeHtml(points)} point${points > 1 ? "s" : ""}</span>` : ""}
+      ${o?.horaires ? `<span class="ev-cb-pill neutre">🕐 ${escapeHtml(o.horaires)}</span>` : ""}
+      ${b.statut ? `<span class="ev-cb-pill ${statutOk ? "ok" : "warn"}">${statutOk ? "✅ En service (déclaré)" : `⚠️ ${escapeHtml(b.statut)}`}</span>` : ""}
+      ${o?.gratuit === "oui" ? `<span class="ev-cb-pill ok">🎁 Gratuit</span>` : ""}
+    </div>
+    <div class="ev-actions-rangee">
+      <a class="ev-action" href="${lienGoogleMaps(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🧭</span>Y aller</a>
+      <a class="ev-action" href="${lienWaze(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🚗</span>Waze</a>
+      <button id="ev-borne-fav-btn" class="ev-action${favori ? " actif" : ""}" type="button"><span>${favori ? "★" : "☆"}</span>${favori ? "Favorite" : "Favori"}</button>
+      ${
+        o?.telephone
+          ? `<a class="ev-action" href="${escapeHtml(o.telephone.lien)}"><span>📞</span>Assistance</a>`
+          : `<button id="ev-borne-partager-btn" class="ev-action" type="button"><span>📤</span>Partager</button>`
+      }
+    </div>`;
+
+  if (ctx) {
+    html += `<div class="ev-carte-bloc"><h3>🔋 Cet arrêt dans ton trajet</h3>
+      <div class="ev-meta"><span>km ${escapeHtml(ctx.km_depuis_depart)}</span><span>⚡ ${escapeHtml(ctx.puissance_kw)} kW</span><span>+${escapeHtml(ctx.kwh_ajoutes)} kWh</span><span>⏱️ ${escapeHtml(ctx.temps_charge_min)} min</span></div>
+      <div>${batterieHtml(ctx.pct_arrivee_borne)} → ${batterieHtml(ctx.pct_depart_borne)}</div>
+      ${ctx.cout_estime_eur != null ? `<div>${coutHtml(ctx.cout_estime_eur, ctx.prix_kwh_eur, ctx.prix_est_estimation)}</div>` : ""}
+      ${ctx.distance_borne_km != null ? `<div class="ev-hint">À ${escapeHtml(ctx.distance_borne_km)} km du tracé.</div>` : ""}`;
+    if (typeof ctx.score === "number") {
+      const c = ctx.score >= 70 ? "" : ctx.score >= 40 ? "warn" : "bad";
+      html += `<div><span class="ev-score ${c}">Recommandation ${ctx.score}/100</span></div>
+        <div class="ev-details-score">${(ctx.score_details || []).map((d) => `<span>${d.points >= 0 ? "+" : ""}${d.points} ${escapeHtml(d.label)}</span>`).join("")}</div>`;
+    }
+    if (ctx.alternatives?.length) {
+      html += `<h3>🔁 Plan B à proximité</h3>`;
+      ctx.alternatives.forEach((alt, i) => {
+        const cbAlt = etatCb(alt);
+        html += `<div class="ev-alternative" data-alt="${i}">
+          <strong>${escapeHtml(alt.nom)}</strong>
+          <div class="ev-meta"><span>${escapeHtml(alt.operateur || "opérateur ?")}</span><span>${escapeHtml(alt.distance_km)} km</span><span>${escapeHtml(alt.puissance_max_kw)} kW</span><span>score ${alt.score}/100</span><span class="ev-cb-pill ${cbAlt.classe}">${cbAlt.court}</span></div>
+        </div>`;
+      });
+    }
+    html += `</div>`;
+  }
+
+  const prises = prisesHtml(b);
+  if (prises) html += `<div class="ev-carte-bloc"><h3>🔌 Prises</h3>${prises}${o?.cable_attache === "oui" ? hint("Câble Type 2 attaché à la borne.") : ""}</div>`;
+
+  let paiement = ligneInfo("Carte bancaire", `<strong class="ev-cb-texte ${cb.classe}">${escapeHtml(cb.long)}</strong>`);
+  if (o) {
+    paiement += ligneInfo("Sans abonnement (à l'acte)", OUI_NON[o.paiement_acte]);
+    paiement += ligneInfo("Badge, appli, abonnement", OUI_NON[o.paiement_autre]);
+    paiement += ligneInfo("Recharge gratuite", OUI_NON[o.gratuit]);
+    paiement += ligneInfo("Tarif officiel", o.tarifs.length ? escapeHtml(o.tarifs.join(" · ")) : "Non communiqué");
+  }
+  if (b.cout_texte) paiement += ligneInfo("Tarif Open Charge Map", escapeHtml(b.cout_texte));
+  paiement += ligneInfo("Prix utilisé pour les calculs", prixRetenuHtml(b));
+  html += `<div class="ev-carte-bloc"><h3>💳 Paiement et tarifs</h3><div>${paiement}</div></div>`;
+
+  if (o) {
+    const acces =
+      ligneInfo("Conditions d'accès", escapeHtml(o.condition_acces)) +
+      ligneInfo("Horaires", escapeHtml(o.horaires)) +
+      ligneInfo("Réservation possible", OUI_NON[o.reservation]) +
+      ligneInfo("Accessibilité PMR", escapeHtml(o.accessibilite_pmr)) +
+      ligneInfo("Restriction de gabarit", escapeHtml(o.restriction_gabarit)) +
+      ligneInfo("Emplacement", escapeHtml(o.implantation)) +
+      ligneInfo("Adresse déclarée", escapeHtml(o.adresse));
+    html += `<div class="ev-carte-bloc"><h3>🕐 Accès</h3><div>${acces}</div></div>`;
+
+    const contact = o.contact ? (o.contact.includes("@") ? `<a href="mailto:${escapeHtml(o.contact)}">${escapeHtml(o.contact)}</a>` : escapeHtml(o.contact)) : "";
+    const operateur =
+      ligneInfo("Opérateur", escapeHtml(o.operateur)) +
+      (o.enseigne && o.enseigne !== o.operateur ? ligneInfo("Enseigne", escapeHtml(o.enseigne)) : "") +
+      (o.amenageur && o.amenageur !== o.operateur ? ligneInfo("Propriétaire", escapeHtml(o.amenageur)) : "") +
+      (o.telephone ? ligneInfo("Assistance", `<a href="${escapeHtml(o.telephone.lien)}">${escapeHtml(o.telephone.affichage)}</a>`) : "") +
+      ligneInfo("Contact", contact) +
+      ligneInfo("Remarques", escapeHtml(o.observations)) +
+      (o.date_mise_en_service ? ligneInfo("Mise en service", dateFr(o.date_mise_en_service)) : "") +
+      (o.date_maj ? ligneInfo("Mise à jour officielle", dateFr(o.date_maj)) : "");
+    html += `<div class="ev-carte-bloc"><h3>🏢 Opérateur</h3><div>${operateur}</div></div>`;
+    html += hint(
+      `Source : Base nationale officielle des bornes (IRVE, data.gouv.fr), déclarée par l'opérateur — station « ${o.nom_station || o.id_station} » à ${o.distance_m} m.` +
+        (o.points_consultes < o.nombre_points ? ` Détail établi sur ${o.points_consultes} des ${o.nombre_points} points.` : ""),
+    );
+  } else if (b.officiel === undefined) {
+    html += hint("🔎 Recherche des informations officielles (paiement CB, tarifs, horaires, accès)…");
+  } else if (b.officiel?.indisponible) {
+    html += hint("Base officielle des bornes momentanément injoignable : réessaie plus tard.");
+  } else {
+    html += hint("Aucune déclaration officielle trouvée à moins de 150 m (borne hors de France, très récente ou non déclarée) : informations Open Charge Map uniquement.");
+  }
+  if (b.fraicheur) html += hint(`Open Charge Map : ${b.fraicheur.label}. Occupation en temps réel non disponible.`);
+  return html;
+}
+
+function remplirFiche(b, ctx) {
+  const contenu = $("ev-borne-contenu");
+  contenu.innerHTML = ficheBorneHtml(b, ctx);
+  contenu.querySelectorAll(".ev-alternative").forEach((el) =>
+    el.addEventListener("click", () => ouvrirBorne(ctx.alternatives[Number(el.dataset.alt)], { remplacer: true })),
+  );
+  const nom = b.nom_borne || b.nom || officielValide(b)?.nom_station || "Borne de recharge";
+  $("ev-borne-fav-btn")?.addEventListener("click", () => {
+    basculerFavoriBorne(nom, b.lat, b.lon, b.adresse || officielValide(b)?.adresse || "");
+    toast(estBorneFavorite(nom, b.lat, b.lon) ? "⭐ Borne ajoutée aux favoris" : "Borne retirée des favoris");
+    remplirFiche(b, ctx);
+  });
+  $("ev-borne-partager-btn")?.addEventListener("click", () => partagerTexte(nom, `${nom}\n${b.adresse || ""}\n${lienGoogleMaps(b.lat, b.lon)}`));
+}
+
+function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer = false } = {}) {
+  borneOuverte = { b, ctx: contexteArret };
+  if (remplacer && vueCourante === "borne") {
+    $("ev-feuille-corps").scrollTop = 0;
+  } else {
+    afficherVue("borne");
+  }
+  selectionnerBorne(b);
+  if (centrerCarte || !remplacer) centrer(b.lat, b.lon, Math.max(zoomActuel(), 14));
+  remplirFiche(b, contexteArret);
+  const nom = b.nom_borne || b.nom || "";
+  $("ev-station-note-input").value = obtenirNoteBorne(nom, b.lat, b.lon);
+
+  if (b.officiel === undefined) {
+    enrichirBornes([b]).then(() => {
+      if (borneOuverte?.b === b) remplirFiche(b, contexteArret);
+      rafraichirBorne(b);
+    });
+  }
+}
+
+function cablerFiche() {
+  $("ev-station-note-save-btn").addEventListener("click", () => {
+    if (!borneOuverte) return;
+    const { b } = borneOuverte;
+    definirNoteBorne(b.nom_borne || b.nom || "", b.lat, b.lon, $("ev-station-note-input").value || "");
+    toast("📝 Note enregistrée");
+  });
+}
+
+// ── Partage ────────────────────────────────────────────────────────────────
+
+async function partagerTexte(titre, texte) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: titre, text: texte });
+    } catch (e) {
+      if (e.name !== "AbortError") toast("Partage impossible sur cet appareil.");
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(texte);
+    toast("📋 Copié dans le presse-papiers");
+  } catch {
+    location.href = `mailto:?subject=${encodeURIComponent(titre)}&body=${encodeURIComponent(texte)}`;
+  }
+}
+
+function telechargerTexte(nomFichier, texte) {
+  const url = URL.createObjectURL(new Blob([texte], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nomFichier;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast("⬇️ Fichier enregistré dans Téléchargements");
+}
+
+// ── Formulaire de trajet ───────────────────────────────────────────────────
+
+const CASES = {
+  eviter_peages: "ev-eviter-peages-checkbox",
+  eviter_ferries: "ev-eviter-ferries-checkbox",
+  eviter_zones_faibles_emissions: "ev-eviter-zfe-checkbox",
+  eviter_routes_non_revetues: "ev-eviter-non-revetues-checkbox",
+  charge_lourde: "ev-charge-lourde-checkbox",
+  modele_detaille: "ev-modele-detaille-checkbox",
+  preferer_cb: "ev-preferer-cb-checkbox",
+  ajuster_meteo: "ev-ajuster-meteo-checkbox",
+};
 
 function majJaugeBatterie() {
   const pct = parseFloat($("ev-charge-pct-input").value);
@@ -116,7 +782,7 @@ function appliquerPresetMode(mode) {
   setSlider("ev-cible-pct", preset.cible_pct);
 }
 
-function cablerCurseursEtModes() {
+function cablerFormulaire() {
   $("ev-charge-pct-input").addEventListener("input", () => {
     $("ev-charge-pct-value").textContent = $("ev-charge-pct-input").value;
     majJaugeBatterie();
@@ -127,37 +793,45 @@ function cablerCurseursEtModes() {
       slidersModifiesManuellement = true;
     });
   }
-
-  document.querySelectorAll(".ev-charge-mode-btn").forEach((btn) => {
+  document.querySelectorAll(".ev-charge-mode-btn").forEach((btn) =>
     btn.addEventListener("click", () => {
       const mode = btn.dataset.mode || "confort";
-      if (slidersModifiesManuellement) {
-        const continuer = confirm("Tu as modifié la marge/l'objectif de charge à la main. Choisir un mode va remplacer ces réglages par ses valeurs par défaut. Continuer ?");
-        if (!continuer) return;
-      }
+      if (slidersModifiesManuellement && !confirm("Tu as modifié la marge ou l'objectif de charge à la main. Choisir un mode remplace ces réglages par ses valeurs. Continuer ?")) return;
       modeTrajet = mode;
       slidersModifiesManuellement = false;
       activerModeVisuel(mode);
       appliquerPresetMode(mode);
-      // Un trajet est déjà affiché : on le recalcule avec le nouveau mode
-      // plutôt que de laisser l'ancien résultat à l'écran.
-      if (dernierTrajet && $("ev-destination-input").value.trim()) lancerTrajet();
-    });
+    }),
+  );
+  $("ev-depart-gps-btn").addEventListener("click", () => ($("ev-depart-input").value = "Ma position"));
+  $("ev-inverser-btn").addEventListener("click", () => {
+    const d = $("ev-depart-input").value;
+    $("ev-depart-input").value = $("ev-destination-input").value;
+    $("ev-destination-input").value = d;
+  });
+  $("ev-destination-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.target.blur();
+      lancerTrajet();
+    }
+  });
+  $("ev-trajet-run-btn").addEventListener("click", lancerTrajet);
+  $("ev-aller-retour-btn").addEventListener("click", lancerAllerRetour);
+  $("ev-scenarios-btn").addEventListener("click", lancerScenarios);
+  $("ev-voir-resultat-btn").addEventListener("click", () => {
+    if (dernierTrajet) afficherResultat(dernierTrajet);
+  });
+  $("ev-favori-trajet-btn").addEventListener("click", () => {
+    const destination = $("ev-destination-input").value.trim();
+    if (!destination) {
+      toast("Indique d'abord une destination.");
+      return;
+    }
+    ajouterTrajetFavori($("ev-depart-input").value.trim() || "Ma position", destination);
+    toast("⭐ Trajet ajouté aux favoris");
   });
 }
-
-// ── Préférences mémorisées (confort, par appareil) ─────────────────────────
-
-const CASES = {
-  eviter_peages: "ev-eviter-peages-checkbox",
-  eviter_ferries: "ev-eviter-ferries-checkbox",
-  eviter_zones_faibles_emissions: "ev-eviter-zfe-checkbox",
-  eviter_routes_non_revetues: "ev-eviter-non-revetues-checkbox",
-  charge_lourde: "ev-charge-lourde-checkbox",
-  modele_detaille: "ev-modele-detaille-checkbox",
-  preferer_cb: "ev-preferer-cb-checkbox",
-  ajuster_meteo: "ev-ajuster-meteo-checkbox",
-};
 
 function chargerPrefs() {
   const p = lirePrefs();
@@ -175,7 +849,8 @@ function chargerPrefs() {
     if (p.puissance_min_kw !== undefined) $("ev-puissance-min-input").value = String(p.puissance_min_kw);
     if (p.seuil_cout_eur !== undefined && p.seuil_cout_eur !== null) $("ev-seuil-cout-input").value = String(p.seuil_cout_eur);
     const preset = MODES_TRAJET[modeTrajet];
-    slidersModifiesManuellement = preset && (preset.marge_pct !== Number(p.marge_pct ?? preset.marge_pct) || preset.cible_pct !== Number(p.cible_pct ?? preset.cible_pct));
+    slidersModifiesManuellement =
+      !!preset && (preset.marge_pct !== Number(p.marge_pct ?? preset.marge_pct) || preset.cible_pct !== Number(p.cible_pct ?? preset.cible_pct));
   }
   majJaugeBatterie();
 }
@@ -205,39 +880,37 @@ function sauverPrefsDepuis(options) {
 
 // ── Calculs ────────────────────────────────────────────────────────────────
 
-async function avecVerrou(action) {
+async function avecVerrou(boutonId, texteAttente, action) {
   if (calculEnCours) return;
   calculEnCours = true;
+  const bouton = $(boutonId);
+  const texteOrigine = bouton.textContent;
+  bouton.textContent = texteAttente;
   BOUTONS_CALCUL.forEach((id) => ($(id).disabled = true));
+  $("ev-trajet-erreur").classList.add("hidden");
   try {
     await action();
   } catch (e) {
     console.error(e);
-    renderTrajet({ ok: false, erreur: `Erreur inattendue : ${e?.message || e}` });
+    montrerErreurTrajet(`Erreur inattendue : ${e?.message || e}`);
   } finally {
     calculEnCours = false;
+    bouton.textContent = texteOrigine;
     BOUTONS_CALCUL.forEach((id) => ($(id).disabled = false));
   }
 }
 
-function preparerResultats(message) {
-  $("ev-trajet-results").classList.remove("hidden");
-  $("ev-trajet-summary").innerHTML = hint(message);
-  $("ev-confiance-box").innerHTML = "";
-  $("ev-domicile-box").classList.add("hidden");
-  $("ev-cout-alerte").classList.add("hidden");
-  $("ev-result-actions").classList.add("hidden");
-  $("ev-qrcode-box").classList.add("hidden");
-  $("ev-time-slider-row").classList.add("hidden");
-  $("ev-profil-trajet").classList.add("hidden");
-  detruireCourbe();
-  $("ev-stops-title").classList.add("hidden");
-  $("ev-trajet-stops").innerHTML = "";
+function montrerErreurTrajet(message) {
+  const zone = $("ev-trajet-erreur");
+  zone.textContent = `⚠️ ${message}`;
+  zone.classList.remove("hidden");
+  if (vueCourante !== "trajet") afficherVue("trajet");
+  zone.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function exigerDestination(options) {
   if (options.destination) return true;
-  alert("Indique une destination.");
+  toast("Indique une destination.");
   $("ev-destination-input").focus();
   return false;
 }
@@ -245,45 +918,35 @@ function exigerDestination(options) {
 async function lancerTrajet() {
   const options = construireOptions();
   if (!exigerDestination(options)) return;
-  await avecVerrou(async () => {
-    preparerResultats("Calcul de l'itinéraire et des arrêts de recharge en cours...");
+  await avecVerrou("ev-trajet-run-btn", "⏳ Calcul en cours…", async () => {
     sauverPrefsDepuis(options);
     const resultat = await planifierTrajet(options.depart, options.destination, options);
-    renderTrajet(resultat);
-    if (resultat.ok) {
-      annoncer(resultat);
-      rafraichirHistoriqueSiOuvert();
-    }
+    if (!resultat.ok) return montrerErreurTrajet(resultat.erreur || "Calcul impossible.");
+    afficherResultat(resultat);
+    annoncer(resultat);
   });
 }
 
 async function lancerAllerRetour() {
   const options = construireOptions();
   if (!exigerDestination(options)) return;
-  await avecVerrou(async () => {
-    preparerResultats("Calcul de l'aller et du retour en cours...");
+  await avecVerrou("ev-aller-retour-btn", "⏳ Aller + retour…", async () => {
     sauverPrefsDepuis(options);
     const { aller, retour } = await planifierAllerRetour(options.depart, options.destination, options);
-    renderTrajet({ ...aller, retour });
-    const texteRetour = retour.ok
-      ? `↩️ Retour : ${retour.distance_km} km, ${retour.duree_text}, ${retour.nb_arrets} arrêt(s), arrivée à ${retour.pct_batterie_arrivee}%.`
-      : `↩️ Retour impossible à calculer : ${retour.erreur}`;
-    $("ev-trajet-summary").insertAdjacentHTML("beforeend", `<div class="ev-charge-retour-info">${escapeHtml(texteRetour)}</div>`);
-    if (aller.ok) {
-      annoncer(aller);
-      rafraichirHistoriqueSiOuvert();
-    }
+    if (!aller.ok) return montrerErreurTrajet(aller.erreur || "Calcul impossible.");
+    afficherResultat({ ...aller, retour });
+    annoncer(aller);
   });
 }
 
 async function lancerScenarios() {
   const options = construireOptions();
   if (!exigerDestination(options)) return;
-  await avecVerrou(async () => {
+  await avecVerrou("ev-scenarios-btn", "⏳ 4 modes…", async () => {
     const table = $("ev-scenarios-table");
-    table.innerHTML = hint("Calcul des 4 scénarios en cours...");
+    table.innerHTML = hint("Calcul des 4 modes en cours…");
     table.classList.remove("hidden");
-    defiler(table);
+    table.scrollIntoView({ behavior: "smooth", block: "start" });
     sauverPrefsDepuis(options);
     renderScenarios(await comparerScenarios(options.depart, options.destination, options));
   });
@@ -293,13 +956,13 @@ function annoncer(r) {
   if (!lireReglages().annonce_vocale || !("speechSynthesis" in window)) return;
   let phrase = `Trajet de ${nomCourt(r.from_name)} à ${nomCourt(r.to_name)} : ${Math.round(r.distance_km)} kilomètres, environ ${r.duree_text} de route.`;
   if (r.nb_arrets === 0) {
-    phrase += ` Vous arrivez avec ${r.pct_batterie_arrivee}% de batterie, pas besoin de recharger.`;
+    phrase += ` Vous arrivez avec ${Math.round(r.pct_batterie_arrivee)} pour cent de batterie, pas besoin de recharger.`;
   } else {
     const premier = r.arrets[0];
     phrase +=
       ` Il vous faudra ${r.nb_arrets} arrêt${r.nb_arrets > 1 ? "s" : ""} de recharge, le premier à ${premier.nom_borne}` +
       ` après ${Math.round(premier.km_depuis_depart)} kilomètres, environ ${premier.temps_charge_min} minutes de charge.` +
-      ` Vous arriverez avec ${r.pct_batterie_arrivee}% de batterie.`;
+      ` Vous arriverez avec ${Math.round(r.pct_batterie_arrivee)} pour cent de batterie.`;
   }
   const voix = new SpeechSynthesisUtterance(phrase);
   voix.lang = "fr-FR";
@@ -307,353 +970,165 @@ function annoncer(r) {
   speechSynthesis.speak(voix);
 }
 
-// ── Rendu du résultat ──────────────────────────────────────────────────────
+// ── Résultat ───────────────────────────────────────────────────────────────
 
-function coutHtml(coutEstime, prixKwh, estimation) {
-  if (coutEstime !== undefined && coutEstime !== null) {
-    return `💶 ${estimation ? "~" : ""}${euros(coutEstime)}${estimation ? " (estimé, tarif réel non communiqué)" : ""}`;
-  }
-  if (prixKwh !== undefined && prixKwh !== null) return `💶 ~${euros(prixKwh)}/kWh${estimation ? " (estimé)" : ""}`;
-  return "";
+function tuile(couleur, valeur, label) {
+  return `<div class="ev-tuile ${couleur}"><span class="t-valeur">${escapeHtml(valeur)}</span><span class="t-label">${escapeHtml(label)}</span></div>`;
 }
 
-const OUI_NON = { oui: "✅ oui", partiel: "⚠️ sur une partie des points", non: "❌ non" };
+function etapesHtml(p) {
+  const arrets = p.arrets || [];
+  const departMs = p.depart_ms || Date.now();
+  let chargeCumulMin = 0;
+  const pointHoraire = (km) => departMs + (minutesDepuisKm(p, km) + chargeCumulMin) * 60000;
+  const route = (kmA, kmB) => {
+    const min = minutesDepuisKm(p, kmB) - minutesDepuisKm(p, kmA);
+    return `<div class="ev-etape-route">↓ ${nombre(kmB - kmA)} km · ${formaterMinutes(Math.max(0, min))} de route</div>`;
+  };
 
-function dateFr(iso) {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? escapeHtml(iso) : d.toLocaleDateString("fr-FR");
-}
+  let html = `
+    <div class="ev-etape depart">
+      <div class="ev-etape-rail"><div class="ev-etape-icone">🚗</div></div>
+      <div class="ev-etape-corps">
+        <div class="ev-etape-titre">Départ · ${escapeHtml(nomCourt(p.from_name))}</div>
+        <div class="ev-etape-sous">${heure(departMs)} · ${batterieHtml(dernierChargeDepartPct)}</div>
+        ${route(0, arrets.length ? arrets[0].km_depuis_depart : p.distance_km)}
+      </div>
+    </div>`;
 
-function officielValide(b) {
-  return b.officiel && !b.officiel.indisponible ? b.officiel : null;
-}
+  arrets.forEach((a, i) => {
+    const arriveeMs = pointHoraire(a.km_depuis_depart);
+    chargeCumulMin += a.temps_charge_min;
+    const cb = etatCb(a);
+    const suivant = i + 1 < arrets.length ? arrets[i + 1].km_depuis_depart : p.distance_km;
+    html += `
+      <div class="ev-etape arret">
+        <div class="ev-etape-rail"><div class="ev-etape-icone">🔋</div></div>
+        <div class="ev-etape-corps">
+          <div class="ev-etape-titre">Arrêt ${a.numero} · km ${nombre(a.km_depuis_depart)}</div>
+          <div class="ev-etape-sous">Arrivée ${heure(arriveeMs)} · repart ${heure(arriveeMs + a.temps_charge_min * 60000)}</div>
+          <div class="ev-etape-carte" data-arret="${i}">
+            <strong>${escapeHtml(a.nom_borne)}</strong>
+            <div class="ev-borne-sous">${escapeHtml(a.operateur || "")}${a.adresse ? ` · ${escapeHtml(a.adresse)}` : ""}</div>
+            <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
+            <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
+            <div class="ev-borne-pastilles"><span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+          </div>
+          ${route(a.km_depuis_depart, suivant)}
+        </div>
+      </div>`;
+  });
 
-// État "carte bancaire" le plus fiable disponible, toujours avec sa source.
-function etatCb(b) {
-  const o = officielValide(b);
-  if (o) {
-    if (o.paiement_cb === "oui") return { classe: "ok", court: "💳 CB acceptée", long: "✅ Acceptée" };
-    if (o.paiement_cb === "partiel") return { classe: "warn", court: "💳 CB sur certains points", long: "⚠️ Sur une partie des points seulement" };
-    return { classe: "non", court: "🚫 Pas de CB", long: "❌ Non acceptée" };
-  }
-  if (b.officiel === undefined) return { classe: "attente", court: "💳 CB : vérification…", long: "Vérification en cours…" };
-  if (b.paiement_cb_probable) return { classe: "inconnu", court: "💳 CB probable (non confirmé)", long: "❓ Non confirmé — probable : borne ≥50 kW, terminal CB obligatoire sur les bornes neuves depuis 04/2024" };
-  return { classe: "inconnu", court: "💳 CB : non renseigné", long: "❓ Non renseigné" };
-}
-
-function prixRetenuHtml(b) {
-  if (b.prix_kwh_eur == null) return "";
-  const source = b.prix_source === "officiel" ? "tarif officiel déclaré" : b.prix_est_estimation ? "estimation par défaut, tarif réel non communiqué" : "tarif Open Charge Map";
-  return `${euros(b.prix_kwh_eur)}/kWh (${source})`;
-}
-
-function paiementLigneHtml(b) {
-  const cb = etatCb(b);
-  const o = officielValide(b);
-  const morceaux = [`<span class="ev-cb-pill ${cb.classe}">${cb.court}</span>`];
-  if (o) {
-    if (o.gratuit === "oui") morceaux.push(`<span class="ev-cb-pill ok">🎁 Gratuit</span>`);
-    morceaux.push(`<span>Sans abonnement : ${OUI_NON[o.paiement_acte]}</span>`);
-    if (o.tarifs.length) morceaux.push(`<span>💶 ${escapeHtml(o.tarifs.slice(0, 2).join(" · "))}</span>`);
-    if (o.horaires) morceaux.push(`<span>🕐 ${escapeHtml(o.horaires)}</span>`);
-  }
-  return `<div class="ev-paiement-ligne">${morceaux.join("")}</div>`;
-}
-
-function stationFactsHtml(b) {
-  const connecteurs = (b.connecteurs || [])
-    .map((c) => `<span class="ev-charge-connector-pill">${escapeHtml(c.type)} · ${escapeHtml(c.puissance_kw)} kW${c.quantite > 1 ? ` ×${escapeHtml(c.quantite)}` : ""}</span>`)
-    .join("");
-  const statutOk = (b.statut || "").toLowerCase().includes("operational");
-  return `
-    <div class="ev-charge-stop-facts">
-      <span>${escapeHtml(b.operateur || officielValide(b)?.operateur || "Opérateur inconnu")}</span>
-      <span class="ev-charge-status-pill ${statutOk ? "ok" : "warn"}">${escapeHtml(b.statut || "Statut inconnu")}</span>
-      ${b.nombre_points ? `<span>${escapeHtml(b.nombre_points)} point(s)</span>` : ""}
-    </div>
-    ${paiementLigneHtml(b)}
-    ${b.type_acces ? `<div class="ev-charge-stop-acces">🔑 ${escapeHtml(b.type_acces)}</div>` : ""}
-    ${b.fraicheur ? `<div class="ev-charge-freshness ${escapeHtml(b.fraicheur.niveau)}">🕐 ${escapeHtml(b.fraicheur.label)}</div>` : ""}
-    ${connecteurs ? `<div class="ev-charge-connectors">${connecteurs}</div>` : ""}
-  `;
-}
-
-// Rubriques détaillées de la fiche borne, depuis la base officielle IRVE.
-function sectionsOfficiellesHtml(b) {
-  const ligne = (label, valeurHtml) =>
-    valeurHtml ? `<div class="ev-station-detail-row"><span class="label">${label}</span><span class="value">${valeurHtml}</span></div>` : "";
-  const section = (titre) => `<div class="ev-station-detail-section-title">${titre}</div>`;
-  const o = officielValide(b);
-  const cb = etatCb(b);
-
-  let html = section("💳 Paiement");
-  html += ligne("Carte bancaire", `<strong class="ev-cb-texte ${cb.classe}">${escapeHtml(cb.long)}</strong>`);
-  if (o) {
-    html += ligne("Paiement sans abonnement (à l'acte)", OUI_NON[o.paiement_acte]);
-    html += ligne("Autres moyens (badge, appli, abonnement…)", OUI_NON[o.paiement_autre]);
-    html += ligne("Recharge gratuite", OUI_NON[o.gratuit]);
-    html += ligne("Tarif officiel déclaré", o.tarifs.length ? escapeHtml(o.tarifs.join(" · ")) : "Non communiqué");
-  }
-  if (b.cout_texte) html += ligne("Tarif Open Charge Map", escapeHtml(b.cout_texte));
-  html += ligne("Prix utilisé pour le calcul", prixRetenuHtml(b));
-
-  if (o) {
-    html += section("🔌 Points de charge (officiel)");
-    html += ligne("Nombre de points", escapeHtml(o.nombre_points));
-    html += ligne("Puissance maximale", `${escapeHtml(o.puissance_max_kw)} kW`);
-    for (const p of o.prises) html += ligne(escapeHtml(p.libelle), `${p.nombre} point(s), jusqu'à ${escapeHtml(p.puissance_max_kw)} kW`);
-    if (o.cable_attache !== "non") html += ligne("Câble Type 2 attaché", OUI_NON[o.cable_attache]);
-    if (o.deux_roues === "oui") html += ligne("Adaptée aux deux-roues", OUI_NON.oui);
-
-    html += section("🕐 Accès");
-    html += ligne("Conditions d'accès", escapeHtml(o.condition_acces));
-    html += ligne("Horaires", escapeHtml(o.horaires));
-    html += ligne("Réservation possible", OUI_NON[o.reservation]);
-    html += ligne("Accessibilité PMR", escapeHtml(o.accessibilite_pmr));
-    html += ligne("Restriction de gabarit", escapeHtml(o.restriction_gabarit));
-    html += ligne("Emplacement", escapeHtml(o.implantation));
-    html += ligne("Adresse déclarée", escapeHtml(o.adresse));
-
-    html += section("🏢 Opérateur");
-    html += ligne("Opérateur", escapeHtml(o.operateur));
-    if (o.enseigne && o.enseigne !== o.operateur) html += ligne("Enseigne", escapeHtml(o.enseigne));
-    if (o.amenageur && o.amenageur !== o.operateur) html += ligne("Propriétaire (aménageur)", escapeHtml(o.amenageur));
-    if (o.telephone) html += ligne("Téléphone (assistance)", `<a href="${escapeHtml(o.telephone.lien)}">${escapeHtml(o.telephone.affichage)}</a>`);
-    if (o.contact) {
-      const contact = o.contact.includes("@") ? `<a href="mailto:${escapeHtml(o.contact)}">${escapeHtml(o.contact)}</a>` : escapeHtml(o.contact);
-      html += ligne("Contact", contact);
-    }
-    if (o.observations) html += ligne("Remarques de l'opérateur", escapeHtml(o.observations));
-    if (o.date_mise_en_service) html += ligne("Mise en service", dateFr(o.date_mise_en_service));
-    if (o.date_maj) html += ligne("Dernière mise à jour officielle", dateFr(o.date_maj));
-    html += hint(
-      `Source : Base nationale officielle des bornes (IRVE, data.gouv.fr), déclarée par l'opérateur — station « ${o.nom_station || o.id_station} » à ${o.distance_m} m de ce point.` +
-        (o.points_consultes < o.nombre_points ? ` Détail établi sur ${o.points_consultes} des ${o.nombre_points} points.` : ""),
-    );
-  } else if (b.officiel?.indisponible) {
-    html += hint("Base officielle des bornes momentanément injoignable : réessaie plus tard pour voir le paiement CB, les horaires et l'accès.");
-  } else if (b.officiel === null) {
-    html += hint("Aucune déclaration officielle trouvée à moins de 150 m (borne hors de France, très récente ou non déclarée) : informations Open Charge Map uniquement.");
-  }
+  html += `
+    <div class="ev-etape arrivee">
+      <div class="ev-etape-rail"><div class="ev-etape-icone">🏁</div></div>
+      <div class="ev-etape-corps">
+        <div class="ev-etape-titre">Arrivée · ${escapeHtml(nomCourt(p.to_name))}</div>
+        <div class="ev-etape-sous">vers ${heure(pointHoraire(p.distance_km))} · ${batterieHtml(p.pct_batterie_arrivee)}</div>
+      </div>
+    </div>`;
   return html;
 }
 
-function tuile(couleur, icone, valeur, label) {
-  return `<div class="ev-charge-summary-tile tile-${couleur}"><span class="tile-icon">${icone}</span><span class="tile-value">${escapeHtml(valeur)}</span><span class="tile-label">${escapeHtml(label)}</span></div>`;
-}
+function afficherResultat(p) {
+  dernierTrajet = p;
+  trajetAffiche = true;
+  $("ev-voir-resultat-btn").classList.remove("hidden");
+  $("ev-scenarios-table").classList.toggle("hidden", !dernierScenarios);
 
-function renderTrajet(p) {
-  $("ev-trajet-results").classList.remove("hidden");
-  if (!p.ok) {
-    $("ev-trajet-summary").innerHTML = `<div class="ev-charge-cout-alerte">Erreur : ${escapeHtml(p.erreur || "inconnue")}</div>`;
-    $("ev-confiance-box").innerHTML = "";
-    ["ev-domicile-box", "ev-cout-alerte", "ev-result-actions", "ev-qrcode-box", "ev-time-slider-row", "ev-profil-trajet", "ev-stops-title"].forEach((id) =>
-      $(id).classList.add("hidden"),
-    );
-    detruireCourbe();
-    $("ev-trajet-stops").innerHTML = "";
-    masquerCarte();
-    dernierTrajet = null;
-    defiler($("ev-trajet-results"));
-    return;
-  }
-
-  afficherTrajetSurCarte(p, (arret) => ouvrirDetailBorne(arret, arret));
-  $("ev-maps-link").href = lienGoogleMaps(p.to_lat, p.to_lon);
-  $("ev-result-actions").classList.remove("hidden");
-  $("ev-qrcode-box").classList.add("hidden");
-  $("ev-qrcode-box").innerHTML = "";
-
-  const pctArrivee = p.pct_batterie_arrivee;
-  const couleurBatterie = pctArrivee >= 50 ? "good" : pctArrivee >= 20 ? "warn" : "bad";
+  $("ev-resultat-titre").textContent = `${nomCourt(p.from_name).split(",")[0]} → ${nomCourt(p.to_name).split(",")[0]}`;
   const tuiles = [
-    tuile("cyan", "🛣️", `${p.distance_km} km`, "Distance"),
-    tuile("violet", "⏱️", p.duree_text, "Route"),
-    p.duree_totale_min != null ? tuile("cyan", "🏁", formaterMinutes(p.duree_totale_min), "Total porte-à-porte") : "",
-    tuile(
-      p.nb_arrets === 0 ? "good" : "warn",
-      "🔌",
-      p.nb_arrets === 0 ? "Aucun" : String(p.nb_arrets),
-      `${p.nb_arrets === 0 ? "Arrêt" : "Arrêt(s)"}${p.temps_charge_total_min ? ` · ${p.temps_charge_total_min} min` : ""}`,
-    ),
-    tuile(couleurBatterie, "🔋", `${pctArrivee}%`, "À l'arrivée"),
-    p.cout_total_eur ? tuile(p.depasse_seuil_cout ? "bad" : "good", "💶", euros(p.cout_total_eur), "Coût estimé") : "",
+    tuile("cyan", `${nombre(p.distance_km)} km`, "Distance"),
+    tuile("violet", p.duree_text, "Route"),
+    tuile("cyan", p.duree_totale_min != null ? formaterMinutes(p.duree_totale_min) : "—", "Total avec charge"),
+    tuile(p.nb_arrets === 0 ? "good" : "warn", p.nb_arrets === 0 ? "Aucun" : String(p.nb_arrets), p.nb_arrets ? `Arrêt(s) · ${p.temps_charge_total_min} min` : "Arrêt"),
+    tuile(classeBatterie(p.pct_batterie_arrivee), `${nombre(p.pct_batterie_arrivee)} %`, "À l'arrivée"),
+    tuile(p.depasse_seuil_cout ? "bad" : "good", p.cout_total_eur ? euros(p.cout_total_eur) : "0 €", "Coût en route"),
   ].join("");
-
   let meteo = "";
   if (p.meteo_info) {
     meteo = p.meteo_info.ok
-      ? `🌡️ Météo au départ : ${p.meteo_info.temperature_c} °C (${p.meteo_info.description}) — consommation ×${p.meteo_info.multiplicateur}`
-      : "🌡️ Météo indisponible : le réglage saisonnier du profil a été utilisé.";
+      ? `🌡️ Météo au départ : ${p.meteo_info.temperature_c} °C (${p.meteo_info.description}) — conso ×${p.meteo_info.multiplicateur}`
+      : "🌡️ Météo indisponible : réglage saisonnier utilisé.";
   }
-
-  $("ev-trajet-summary").innerHTML = `
-    <div class="ev-charge-summary-route" title="${escapeHtml(p.from_name)} → ${escapeHtml(p.to_name)}">📍 ${escapeHtml(nomCourt(p.from_name))} <span class="arrow">→</span> ${escapeHtml(nomCourt(p.to_name))}</div>
-    <div class="ev-charge-summary-grid">${tuiles}</div>
-    ${meteo ? `<div class="ev-meteo-info">${escapeHtml(meteo)}</div>` : ""}
-  `;
-
-  const alerte = $("ev-cout-alerte");
-  alerte.textContent = p.depasse_seuil_cout ? `⚠️ Le coût estimé de ce trajet (${euros(p.cout_total_eur)}) dépasse le seuil que tu as fixé.` : "";
-  alerte.classList.toggle("hidden", !p.depasse_seuil_cout);
-
-  if (p.confiance) {
-    const c = p.confiance;
-    const couleur = c.score >= 70 ? "good" : c.score >= 40 ? "warn" : "bad";
-    $("ev-confiance-box").innerHTML = `
-      <div class="ev-charge-score-badge tile-${couleur}">Confiance du trajet : ${c.score}/100</div>
-      <div class="ev-charge-confiance-details">
-        ${c.details.map((d) => `<span>${d.points >= 0 ? "+" : ""}${d.points} ${escapeHtml(d.label)}</span>`).join("")}
-      </div>`;
+  let retour = "";
+  if (p.retour) {
+    retour = p.retour.ok
+      ? `↩️ Retour : ${nombre(p.retour.distance_km)} km, ${p.retour.duree_text}, ${p.retour.nb_arrets} arrêt(s), arrivée à ${nombre(p.retour.pct_batterie_arrivee)} % (tracé orange).`
+      : `↩️ Retour impossible à calculer : ${p.retour.erreur}`;
   }
+  $("ev-trajet-summary").innerHTML = `<div class="ev-tuiles">${tuiles}</div>${meteo ? `<div class="ev-meteo-info">${escapeHtml(meteo)}</div>` : ""}${
+    retour ? `<div class="ev-meteo-info">${escapeHtml(retour)}</div>` : ""
+  }`;
 
-  const domicile = $("ev-domicile-box");
+  const alerteCout = $("ev-cout-alerte");
+  alerteCout.textContent = p.depasse_seuil_cout ? `⚠️ Le coût estimé (${euros(p.cout_total_eur)}) dépasse le seuil que tu as fixé.` : "";
+  alerteCout.classList.toggle("hidden", !p.depasse_seuil_cout);
+
+  $("ev-etapes").innerHTML = etapesHtml(p);
+  $("ev-etapes")
+    .querySelectorAll("[data-arret]")
+    .forEach((el) => el.addEventListener("click", () => {
+      const a = p.arrets[Number(el.dataset.arret)];
+      ouvrirBorne(a, { contexteArret: a });
+    }));
+
   const d = p.comparaison_domicile;
+  const domicile = $("ev-domicile-box");
   if (d && d.economie_eur > 0.5) {
-    const detailHcHp =
+    const detail =
       d.cout_hc_eur != null
         ? `${euros(d.cout_hc_eur)} en heures creuses (${euros(d.prix_hc_eur_kwh)}/kWh) ou ${euros(d.cout_hp_eur)} en heures pleines (${euros(d.prix_hp_eur_kwh)}/kWh)`
-        : `${euros(d.cout_domicile_eur)} (${euros(d.prix_domicile_eur_kwh)}/kWh)`;
-    domicile.innerHTML =
-      `💡 Recharger ces ${d.kwh} kWh à domicile coûterait ${detailHcHp}, contre ${euros(d.cout_public_eur)} en public.` +
-      `<br>Économie estimée : <strong>${euros(d.economie_eur)}</strong>${d.part_hc_pct != null ? ` (avec ${escapeHtml(d.part_hc_pct)} % de recharge en heures creuses)` : ""}.`;
+        : `${euros(d.cout_domicile_eur)}`;
+    domicile.innerHTML = `💡 Ces ${nombre(d.kwh, 1)} kWh coûteraient ${detail} à la maison, contre ${euros(d.cout_public_eur)} en public.<br>Économie possible : <strong>${euros(d.economie_eur)}</strong>${
+      d.part_hc_pct != null ? ` (avec ${escapeHtml(d.part_hc_pct)} % en heures creuses)` : ""
+    }.`;
     domicile.classList.remove("hidden");
   } else {
     domicile.classList.add("hidden");
   }
 
-  const arrets = p.arrets || [];
-  $("ev-stops-title").classList.remove("hidden");
-  $("ev-trajet-stops").innerHTML = arrets.length
-    ? arrets
-        .map(
-          (a, i) => `
-      <div class="ev-charge-stop-card ev-charge-stop-clickable" data-idx="${i}">
-        <div class="ev-charge-stop-header">
-          <span class="ev-charge-stop-num">Arrêt ${a.numero}</span>
-          <span class="ev-charge-stop-km">km ${a.km_depuis_depart}</span>
-        </div>
-        <div class="ev-charge-stop-name">🔌 ${escapeHtml(a.nom_borne)} ${typeof a.score === "number" ? `<span class="ev-charge-score-pill">${a.score}/100</span>` : ""}</div>
-        <div class="ev-charge-stop-addr">${escapeHtml(a.adresse || "")}</div>
-        ${stationFactsHtml(a)}
-        <div class="ev-charge-stop-meta">
-          <span>+${a.kwh_ajoutes} kWh</span>
-          <span>${a.puissance_kw} kW</span>
-          <span>${a.temps_charge_min} min</span>
-          <span>${a.pct_arrivee_borne}% → ${a.pct_depart_borne}%</span>
-        </div>
-        <div class="ev-charge-stop-cost">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</div>
-      </div>`,
-        )
-        .join("")
-    : `<div class="ev-charge-stop-card">✅ Aucune recharge nécessaire : autonomie suffisante, arrivée avec ${pctArrivee}% de batterie.</div>`;
-  $("ev-trajet-stops")
-    .querySelectorAll(".ev-charge-stop-clickable")
-    .forEach((el) => el.addEventListener("click", () => {
-      const arret = arrets[Number(el.dataset.idx)];
-      ouvrirDetailBorne(arret, arret);
-    }));
-
-  // Frise "où serai-je ?" : seulement si un tracé réel existe.
-  if (p.coords && p.coords.length && p.duree_min) {
-    dernierTrajet = p;
-    renderProfilTrajet(p);
-    $("ev-time-slider-row").classList.remove("hidden");
-    $("ev-timeline-stops").innerHTML = arrets
-      .map((a) => {
-        const pct = (minutesDepuisKm(p, a.km_depuis_depart) / p.duree_min) * 100;
-        return `<div class="ev-charge-timeline-stop" style="left:${pct}%" data-km="${a.km_depuis_depart}" title="Arrêt ${a.numero} : ${escapeHtml(a.nom_borne)} (km ${a.km_depuis_depart})">🔋</div>`;
-      })
-      .join("");
-    $("ev-timeline-stops")
-      .querySelectorAll(".ev-charge-timeline-stop")
-      .forEach((el) =>
-        el.addEventListener("pointerdown", (e) => {
-          e.stopPropagation();
-          sauterFriseAuKm(parseFloat(el.dataset.km || "0"));
-        }),
-      );
-    $("ev-time-slider-stations").innerHTML = "";
-    deplacerFrise(0);
-  } else {
-    dernierTrajet = null;
-    $("ev-time-slider-row").classList.add("hidden");
-    $("ev-profil-trajet").classList.add("hidden");
-    detruireCourbe();
+  if (p.confiance) {
+    const c = p.confiance;
+    const classe = c.score >= 70 ? "" : c.score >= 40 ? "warn" : "bad";
+    $("ev-confiance-box").innerHTML = `<h3>✅ Fiabilité du plan</h3><div><span class="ev-score ${classe}">${c.score}/100</span></div>
+      <div class="ev-details-score">${c.details.map((x) => `<span>${x.points >= 0 ? "+" : ""}${x.points} ${escapeHtml(x.label)}</span>`).join("")}</div>`;
   }
 
-  defiler(document.querySelector(".ev-carte-wrap"));
+  $("ev-maps-link").href = lienGoogleMaps(p.to_lat, p.to_lon);
+  $("ev-qrcode-box").classList.add("hidden");
+  $("ev-qrcode-box").innerHTML = "";
+
+  afficherVue("resultat");
+  afficherTrajet(p, (arret) => ouvrirBorne(arret, { contexteArret: arret }));
+  renderProfilTrajet(p);
+  preparerFrise(p);
 }
 
-// ── Profil du trajet : statistiques et courbes au km ───────────────────────
-
-let vueCourbe = "batterie";
-
-function statistique(icone, texte) {
-  return `<span>${icone} ${texte}</span>`;
+function quitterTrajet() {
+  effacerTrajet();
+  trajetAffiche = false;
+  detruireCourbe();
+  afficherVue("bornes", { etat: "bas", historique: false });
+  chargerBornesZone(true);
 }
 
-function renderProfilTrajet(p) {
-  const pt = p.profil_trajet;
-  const section = $("ev-profil-trajet");
-  if (!pt) {
-    section.classList.add("hidden");
-    detruireCourbe();
-    return;
-  }
-  section.classList.remove("hidden");
-  const s = pt.stats;
-  const nombre = (x, dec = 0) => Number(x).toFixed(dec).replace(".", ",");
-  const stats = [
-    statistique("⚡", `<strong>${nombre(s.conso_moyenne_kwh100, 1)}</strong> kWh/100 km en moyenne`),
-    statistique("🔋", `<strong>${nombre(s.energie_totale_kwh, 1)}</strong> kWh au total`),
-  ];
-  if (s.vitesse_moyenne_kmh) stats.push(statistique("🚗", `<strong>${nombre(s.vitesse_moyenne_kmh)}</strong> km/h de moyenne`));
-  if (pt.relief_ok) {
-    stats.push(statistique("⛰️", `+<strong>${nombre(s.denivele_positif_m)}</strong> m / −<strong>${nombre(s.denivele_negatif_m)}</strong> m`));
-    stats.push(statistique("🏔️", `alt. max <strong>${nombre(s.altitude_max_m)}</strong> m`));
-  }
-  if (pt.meteo_ok) {
-    stats.push(statistique("🌡️", `<strong>${nombre(s.temperature_min)}</strong> à <strong>${nombre(s.temperature_max)}</strong> °C`));
-    stats.push(statistique("🌧️", s.km_sous_la_pluie > 0.5 ? `pluie sur <strong>${nombre(s.km_sous_la_pluie)}</strong> km` : "pas de pluie prévue"));
-    const vent = s.vent_face_moyen_kmh;
-    stats.push(statistique("💨", Math.abs(vent) < 3 ? "vent neutre" : `vent ${vent > 0 ? "de face" : "dans le dos"} ~<strong>${nombre(Math.abs(vent))}</strong> km/h`));
-  }
-  $("ev-profil-stats").innerHTML = stats.join("");
-
-  const notes = [];
-  if (p.modele === "detaille") {
-    notes.push("Consommation calculée tronçon par tronçon : vitesse (limitations et trafic TomTom)");
-    notes.push(pt.relief_ok ? "relief" : "relief indisponible (trajet supposé plat)");
-    notes.push(pt.meteo_ok ? "météo à l'heure de passage (chauffage, clim, pluie, vent)" : "réglage saisonnier du profil");
-  } else {
-    notes.push("Consommation constante (mode JARVIS) — coche « Calcul détaillé » dans les options avancées pour tenir compte de la vitesse et du relief");
-  }
-  $("ev-profil-note").textContent = `ℹ️ ${notes.join(", ")}. Estimation : la conduite réelle peut s'en écarter.`;
-
-  afficherVueCourbe();
-}
-
-function afficherVueCourbe() {
-  const pt = dernierTrajet?.profil_trajet;
-  document.querySelectorAll(".ev-courbe-btn").forEach((b) => b.classList.toggle("active", b.dataset.vue === vueCourbe));
-  const vide = $("ev-courbe-vide");
-  const conteneur = document.querySelector(".ev-courbe-wrap");
-  let message = "";
-  if (!pt) message = "Profil indisponible.";
-  else if (!window.Chart) message = "Courbes indisponibles (pas de connexion pour charger le module graphique).";
-  else if (vueCourbe === "meteo" && !pt.meteo_ok) message = "Coche « 🌦️ Météo réelle sur tout le trajet » dans les options avancées, puis relance le calcul, pour voir température, pluie et vent le long du trajet.";
-  vide.textContent = message;
-  vide.classList.toggle("hidden", !message);
-  conteneur.classList.toggle("hidden", !!message);
-  if (message) {
-    detruireCourbe();
-    return;
-  }
-  afficherCourbe($("ev-courbe-canvas"), pt, dernierTrajet.arrets, vueCourbe, (km) => sauterFriseAuKm(km));
-}
-
-function cablerCourbes() {
+function cablerResultat() {
+  $("ev-modifier-btn").addEventListener("click", () => afficherVue("trajet"));
+  $("ev-quitter-trajet-btn").addEventListener("click", quitterTrajet);
+  $("ev-export-btn").addEventListener("click", () => {
+    if (dernierTrajet) telechargerTexte(`trajet_ve_${Date.now()}.txt`, exporterTrajetTexte(dernierTrajet));
+  });
+  $("ev-partager-btn").addEventListener("click", () => {
+    if (dernierTrajet) partagerTexte(`Trajet électrique : ${nomCourt(dernierTrajet.from_name)} → ${nomCourt(dernierTrajet.to_name)}`, exporterTrajetTexte(dernierTrajet));
+  });
+  $("ev-qrcode-btn").addEventListener("click", () => {
+    if (!dernierTrajet) return;
+    const box = $("ev-qrcode-box");
+    const texte = `Trajet : ${nomCourt(dernierTrajet.from_name)} -> ${nomCourt(dernierTrajet.to_name)} (${dernierTrajet.distance_km} km). Destination : ${lienGoogleMaps(dernierTrajet.to_lat, dernierTrajet.to_lon)}`;
+    box.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(texte)}" alt="QR code du trajet" width="220" height="220">`;
+    box.classList.toggle("hidden");
+  });
   document.querySelectorAll(".ev-courbe-btn").forEach((btn) =>
     btn.addEventListener("click", () => {
       vueCourbe = btn.dataset.vue;
@@ -667,122 +1142,107 @@ function cablerCourbes() {
 function renderScenarios(payload) {
   const table = $("ev-scenarios-table");
   if (!payload.ok) {
-    table.innerHTML = `<div class="ev-charge-cout-alerte">Erreur : ${escapeHtml(payload.erreur || "inconnue")}</div>`;
+    table.innerHTML = alerte(`Erreur : ${payload.erreur || "inconnue"}`);
     return;
   }
   dernierScenarios = payload;
   const colonnes = Object.entries(payload.scenarios)
     .map(([mode, r]) => {
-      if (!r.ok) {
-        return `<div class="ev-charge-scenario-col"><div class="ev-charge-scenario-mode">${LABELS_MODE[mode] || mode}</div>${hint(r.erreur || "Erreur")}</div>`;
-      }
+      if (!r.ok) return `<div class="ev-scenario"><div class="ev-scenario-mode">${LABELS_MODE[mode] || mode}</div>${hint(r.erreur || "Erreur")}</div>`;
       return `
-      <div class="ev-charge-scenario-col">
-        <div class="ev-charge-scenario-mode">${LABELS_MODE[mode] || mode}</div>
-        <div class="ev-charge-scenario-row"><span>🏁 Total</span><strong>${formaterMinutes(r.duree_totale_min ?? 0)}</strong></div>
-        <div class="ev-charge-scenario-row"><span>⏱️ Charge</span><strong>${r.temps_charge_total_min} min</strong></div>
-        <div class="ev-charge-scenario-row"><span>💶 Coût</span><strong>${euros(r.cout_total_eur)}</strong></div>
-        <div class="ev-charge-scenario-row"><span>🔋 Arrivée</span><strong>${r.pct_batterie_arrivee}%</strong></div>
-        <div class="ev-charge-scenario-row"><span>🔌 Arrêts</span><strong>${r.nb_arrets}</strong></div>
-        <div class="ev-charge-scenario-row"><span>✅ Confiance</span><strong>${r.confiance?.score ?? "?"}/100</strong></div>
-        <button type="button" class="ev-btn-secondaire ev-charge-scenario-choisir" data-mode="${mode}">✅ Choisir</button>
+      <div class="ev-scenario">
+        <div class="ev-scenario-mode">${LABELS_MODE[mode] || mode}</div>
+        <div class="ev-scenario-ligne"><span>🏁 Total</span><strong>${formaterMinutes(r.duree_totale_min ?? 0)}</strong></div>
+        <div class="ev-scenario-ligne"><span>⏱️ Charge</span><strong>${r.temps_charge_total_min} min</strong></div>
+        <div class="ev-scenario-ligne"><span>💶 Coût</span><strong>${euros(r.cout_total_eur)}</strong></div>
+        <div class="ev-scenario-ligne"><span>🔋 Arrivée</span><strong>${nombre(r.pct_batterie_arrivee)} %</strong></div>
+        <div class="ev-scenario-ligne"><span>🔌 Arrêts</span><strong>${r.nb_arrets}</strong></div>
+        <div class="ev-scenario-ligne"><span>✅ Fiabilité</span><strong>${r.confiance?.score ?? "?"}/100</strong></div>
+        <button type="button" class="ev-btn ev-scenario-choisir" data-mode="${mode}">Choisir</button>
       </div>`;
     })
     .join("");
-  table.innerHTML = `
-    <div class="ev-charge-scenarios-header">
-      <span>📊 Comparaison des scénarios</span>
-      <button type="button" id="ev-scenarios-export-btn" class="ev-btn-secondaire">⬇️ Exporter</button>
-    </div>
-    <div class="ev-charge-scenarios-grid">${colonnes}</div>`;
-
-  table.querySelectorAll(".ev-charge-scenario-choisir").forEach((btn) => {
+  table.innerHTML = `<h3>📊 Comparaison des modes <button type="button" id="ev-scenarios-export-btn" class="ev-lien">⬇️ Exporter</button></h3><div class="ev-scenarios-grille">${colonnes}</div>`;
+  table.querySelectorAll(".ev-scenario-choisir").forEach((btn) =>
     btn.addEventListener("click", () => {
       const mode = btn.dataset.mode || "confort";
       modeTrajet = mode;
       slidersModifiesManuellement = false;
       activerModeVisuel(mode);
       appliquerPresetMode(mode);
-      renderTrajet(payload.scenarios[mode]);
-    });
-  });
-  $("ev-scenarios-export-btn").addEventListener("click", () => {
-    if (!dernierScenarios) return;
-    telechargerTexte(`trajet_ve_scenarios_${Date.now()}.txt`, exporterScenariosTexte(dernierScenarios.depart, dernierScenarios.destination, dernierScenarios.scenarios));
-  });
+      afficherResultat(payload.scenarios[mode]);
+    }),
+  );
+  $("ev-scenarios-export-btn").addEventListener("click", () =>
+    telechargerTexte(`trajet_ve_modes_${Date.now()}.txt`, exporterScenariosTexte(payload.depart, payload.destination, payload.scenarios)),
+  );
 }
 
-// ── Export, partage, QR code ───────────────────────────────────────────────
+// ── Profil du trajet (courbes) ─────────────────────────────────────────────
 
-function telechargerTexte(nomFichier, texte) {
-  const url = URL.createObjectURL(new Blob([texte], { type: "text/plain;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nomFichier;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast("Fichier enregistré dans Téléchargements.");
-}
+let vueCourbe = "batterie";
 
-function cablerActionsResultat() {
-  $("ev-export-btn").addEventListener("click", () => {
-    if (dernierTrajet) telechargerTexte(`trajet_ve_${Date.now()}.txt`, exporterTrajetTexte(dernierTrajet));
-  });
-
-  $("ev-partager-btn").addEventListener("click", async () => {
-    if (!dernierTrajet) return;
-    const sujet = `Trajet électrique : ${nomCourt(dernierTrajet.from_name)} → ${nomCourt(dernierTrajet.to_name)}`;
-    const texte = exporterTrajetTexte(dernierTrajet);
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: sujet, text: texte });
-      } catch (e) {
-        if (e.name !== "AbortError") toast("Partage impossible sur cet appareil.");
-      }
-    } else {
-      location.href = `mailto:?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(texte)}`;
-    }
-  });
-
-  $("ev-qrcode-btn").addEventListener("click", () => {
-    if (!dernierTrajet) return;
-    const box = $("ev-qrcode-box");
-    const texte = `Trajet : ${nomCourt(dernierTrajet.from_name)} -> ${nomCourt(dernierTrajet.to_name)} (${dernierTrajet.distance_km} km). Destination : ${lienGoogleMaps(dernierTrajet.to_lat, dernierTrajet.to_lon)}`;
-    box.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(texte)}" alt="QR code du trajet" width="220" height="220">`;
-    box.classList.toggle("hidden");
-  });
-}
-
-// ── Frise chronologique "où serai-je ?" ────────────────────────────────────
-
-function estimerBatteriePourDistance(distanceKm, p, chargeDepartPct) {
-  // Courbe réelle du plan (vitesse, relief, météo, remontées aux arrêts).
-  const courbe = p.profil_trajet?.batterie;
-  if (courbe && courbe.length > 1) {
-    for (let i = courbe.length - 1; i > 0; i--) {
-      const a = courbe[i - 1];
-      const b = courbe[i];
-      if (distanceKm >= a.km && distanceKm <= b.km) {
-        return b.km > a.km ? a.pct + ((b.pct - a.pct) * (distanceKm - a.km)) / (b.km - a.km) : b.pct;
-      }
-    }
-    return courbe[courbe.length - 1].pct;
+function renderProfilTrajet(p) {
+  const pt = p.profil_trajet;
+  const section = $("ev-profil-trajet");
+  if (!pt) {
+    section.classList.add("hidden");
+    detruireCourbe();
+    return;
   }
-  const autonomieTotale = p.autonomie_totale_km || 1;
-  let departKm = 0;
-  let departPct = chargeDepartPct;
-  for (const a of p.arrets || []) {
-    if (distanceKm <= a.km_depuis_depart) return departPct - ((distanceKm - departKm) / autonomieTotale) * 100;
-    departKm = a.km_depuis_depart;
-    departPct = a.pct_depart_borne;
+  section.classList.remove("hidden");
+  const s = pt.stats;
+  const stat = (icone, texte) => `<span>${icone} ${texte}</span>`;
+  const stats = [
+    stat("⚡", `<strong>${nombre(s.conso_moyenne_kwh100, 1)}</strong> kWh/100 km`),
+    stat("🔋", `<strong>${nombre(s.energie_totale_kwh, 1)}</strong> kWh au total`),
+  ];
+  if (s.vitesse_moyenne_kmh) stats.push(stat("🚗", `<strong>${nombre(s.vitesse_moyenne_kmh)}</strong> km/h de moyenne`));
+  if (pt.relief_ok) {
+    stats.push(stat("⛰️", `+<strong>${nombre(s.denivele_positif_m)}</strong> m / −<strong>${nombre(s.denivele_negatif_m)}</strong> m`));
+    stats.push(stat("🏔️", `alt. max <strong>${nombre(s.altitude_max_m)}</strong> m`));
   }
-  return departPct - ((distanceKm - departKm) / autonomieTotale) * 100;
+  if (pt.meteo_ok) {
+    stats.push(stat("🌡️", `<strong>${nombre(s.temperature_min)}</strong> à <strong>${nombre(s.temperature_max)}</strong> °C`));
+    stats.push(stat("🌧️", s.km_sous_la_pluie > 0.5 ? `pluie sur <strong>${nombre(s.km_sous_la_pluie)}</strong> km` : "pas de pluie prévue"));
+    const vent = s.vent_face_moyen_kmh;
+    stats.push(stat("💨", Math.abs(vent) < 3 ? "vent neutre" : `vent ${vent > 0 ? "de face" : "dans le dos"} ~<strong>${nombre(Math.abs(vent))}</strong> km/h`));
+  }
+  $("ev-profil-stats").innerHTML = stats.join("");
+
+  const notes =
+    p.modele === "detaille"
+      ? [
+          "Conso calculée tronçon par tronçon : vitesse (limitations et trafic TomTom)",
+          pt.relief_ok ? "relief" : "relief indisponible (supposé plat)",
+          pt.meteo_ok ? "météo à l'heure de passage" : "réglage saisonnier du profil",
+        ]
+      : ["Consommation constante (mode JARVIS) — coche « Calcul détaillé » dans les options avancées pour tenir compte de la vitesse et du relief"];
+  $("ev-profil-note").textContent = `ℹ️ ${notes.join(", ")}. Estimation : la conduite réelle peut s'en écarter.`;
+  afficherVueCourbe();
 }
 
-// Table temps ↔ distance tirée du profil de vitesse (sinon vitesse moyenne
-// constante, comme JARVIS), recalée sur la durée totale TomTom.
+function afficherVueCourbe() {
+  const pt = dernierTrajet?.profil_trajet;
+  document.querySelectorAll(".ev-courbe-btn").forEach((b) => b.classList.toggle("active", b.dataset.vue === vueCourbe));
+  const vide = $("ev-courbe-vide");
+  const conteneur = document.querySelector(".ev-courbe-wrap");
+  let message = "";
+  if (!pt) message = "Profil indisponible.";
+  else if (!window.Chart) message = "Courbes indisponibles (module graphique non chargé : pas de connexion ?).";
+  else if (vueCourbe === "meteo" && !pt.meteo_ok) message = "Coche « 🌦️ Météo réelle sur le trajet » dans les options avancées, puis relance le calcul.";
+  vide.textContent = message;
+  vide.classList.toggle("hidden", !message);
+  conteneur.classList.toggle("hidden", !!message);
+  if (message) {
+    detruireCourbe();
+    return;
+  }
+  afficherCourbe($("ev-courbe-canvas"), pt, dernierTrajet.arrets, vueCourbe, (km) => sauterFriseAuKm(km));
+}
+
+// ── Frise "où serai-je ?" ──────────────────────────────────────────────────
+
 function tableTemps(p) {
   if (p._tableTemps !== undefined) return p._tableTemps;
   const seg = p.profil_trajet?.segments;
@@ -808,13 +1268,58 @@ function interpoler(xs, ys, x) {
 function kmDepuisMinutes(p, minutes) {
   const table = tableTemps(p);
   if (table) return interpoler(table.min, table.km, minutes);
-  return p.duree_min > 0 ? (Math.max(0, Math.min(1, minutes / p.duree_min)) * p.distance_km) : 0;
+  return p.duree_min > 0 ? Math.max(0, Math.min(1, minutes / p.duree_min)) * p.distance_km : 0;
 }
 
 function minutesDepuisKm(p, km) {
   const table = tableTemps(p);
   if (table) return interpoler(table.km, table.min, km);
   return p.distance_km > 0 ? (km / p.distance_km) * p.duree_min : 0;
+}
+
+function estimerBatteriePourDistance(distanceKm, p) {
+  const courbe = p.profil_trajet?.batterie;
+  if (courbe && courbe.length > 1) {
+    for (let i = courbe.length - 1; i > 0; i--) {
+      const a = courbe[i - 1];
+      const b = courbe[i];
+      if (distanceKm >= a.km && distanceKm <= b.km) return b.km > a.km ? a.pct + ((b.pct - a.pct) * (distanceKm - a.km)) / (b.km - a.km) : b.pct;
+    }
+    return courbe[courbe.length - 1].pct;
+  }
+  const autonomie = p.autonomie_totale_km || 1;
+  let departKm = 0;
+  let departPct = dernierChargeDepartPct;
+  for (const a of p.arrets || []) {
+    if (distanceKm <= a.km_depuis_depart) return departPct - ((distanceKm - departKm) / autonomie) * 100;
+    departKm = a.km_depuis_depart;
+    departPct = a.pct_depart_borne;
+  }
+  return departPct - ((distanceKm - departKm) / autonomie) * 100;
+}
+
+function preparerFrise(p) {
+  if (!(p.coords?.length && p.duree_min)) {
+    $("ev-time-slider-row").classList.add("hidden");
+    return;
+  }
+  $("ev-time-slider-row").classList.remove("hidden");
+  $("ev-timeline-stops").innerHTML = (p.arrets || [])
+    .map((a) => {
+      const pct = (minutesDepuisKm(p, a.km_depuis_depart) / p.duree_min) * 100;
+      return `<div class="ev-charge-timeline-stop" style="left:${pct}%" data-km="${a.km_depuis_depart}" title="Arrêt ${a.numero}">🔋</div>`;
+    })
+    .join("");
+  $("ev-timeline-stops")
+    .querySelectorAll(".ev-charge-timeline-stop")
+    .forEach((el) =>
+      el.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        sauterFriseAuKm(parseFloat(el.dataset.km || "0"));
+      }),
+    );
+  $("ev-time-slider-stations").innerHTML = "";
+  deplacerFrise(0);
 }
 
 function deplacerFrise(minutes) {
@@ -825,8 +1330,7 @@ function deplacerFrise(minutes) {
   $("ev-timeline-fill").style.width = `${ratio * 100}%`;
   const km = kmDepuisMinutes(t, ratio * t.duree_min);
   $("ev-time-slider-value").textContent = minutes <= 0.5 ? "Départ" : `${formaterMinutes(minutes)} · km ${Math.round(km)}`;
-  const pct = estimerBatteriePourDistance(km, t, dernierChargeDepartPct);
-  $("ev-timeline-battery-estimate").textContent = `🔋 ~${Math.round(pct)}%`;
+  $("ev-timeline-battery-estimate").innerHTML = batterieHtml(Math.round(estimerBatteriePourDistance(km, t)));
 }
 
 let minuteurFrise = null;
@@ -838,9 +1342,20 @@ function demanderBornesADistance(minutes) {
   minuteurFrise = setTimeout(async () => {
     const jeton = ++jetonFrise;
     const trajet = dernierTrajet;
-    $("ev-time-slider-stations").innerHTML = hint("Recherche des bornes à ce point du trajet...");
+    $("ev-time-slider-stations").innerHTML = hint("Recherche des bornes à ce point du trajet…");
     const r = await bornesADistance(trajet, kmDepuisMinutes(trajet, minutes));
-    if (jeton === jetonFrise && trajet === dernierTrajet) renderBornesADistance(r);
+    if (jeton !== jetonFrise || trajet !== dernierTrajet) return;
+    const zone = $("ev-time-slider-stations");
+    if (!r.ok) {
+      zone.innerHTML = hint(`Erreur : ${r.erreur || "inconnue"}`);
+      placerCurseur(undefined, undefined);
+      return;
+    }
+    placerCurseur(r.lat, r.lon, `km ${r.distance_cible_km}`);
+    const bornes = r.bornes || [];
+    afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
+    await enrichirBornes(bornes);
+    if (jeton === jetonFrise) afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
   }, 250);
 }
 
@@ -854,7 +1369,6 @@ function sauterFriseAuKm(km) {
 function cablerFrise() {
   const piste = $("ev-timeline-track");
   let glissement = false;
-
   const minutesDepuisX = (clientX) => {
     const rect = piste.getBoundingClientRect();
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (dernierTrajet?.duree_min || 0);
@@ -865,8 +1379,7 @@ function cablerFrise() {
     deplacerFrise(minutes);
     demanderBornesADistance(minutes);
   };
-  // Relâche toujours la capture du pointeur (pointerup/pointercancel) : un
-  // glissement interrompu ne doit jamais laisser la frise bloquée.
+  // Relâche toujours la capture : un glissement interrompu ne doit jamais bloquer la frise.
   const terminer = (e) => {
     if (!glissement) return;
     glissement = false;
@@ -877,7 +1390,6 @@ function cablerFrise() {
     }
     bouger(e.clientX);
   };
-
   piste.addEventListener("pointerdown", (e) => {
     glissement = true;
     try {
@@ -890,178 +1402,12 @@ function cablerFrise() {
   piste.addEventListener("pointermove", (e) => glissement && bouger(e.clientX));
   piste.addEventListener("pointerup", terminer);
   piste.addEventListener("pointercancel", terminer);
+  cablerListe($("ev-time-slider-stations"), (b) => ouvrirBorne(b));
 }
 
-function contenuCarteBorne(b, etiquetteDistance) {
-  return `
-      <div class="ev-charge-stop-header">
-        <span class="ev-charge-stop-num">🔌 ${escapeHtml(b.nom)}</span>
-        <span class="ev-charge-stop-km">${escapeHtml(b.distance_km)} km${etiquetteDistance}</span>
-      </div>
-      <div class="ev-charge-stop-addr">${escapeHtml(b.adresse || "")}</div>
-      ${stationFactsHtml(b)}
-      <div class="ev-charge-stop-meta"><span>${escapeHtml(b.puissance_max_kw)} kW max</span></div>
-      <div class="ev-charge-stop-cost">${coutHtml(undefined, b.prix_kwh_eur, b.prix_est_estimation)}${b.prix_source === "officiel" ? " (tarif officiel)" : ""}</div>`;
-}
+// ── Favoris ────────────────────────────────────────────────────────────────
 
-let jetonListe = 0;
-
-function listeBornes(conteneur, bornes, etiquetteDistance, messageVide) {
-  conteneur.innerHTML =
-    bornes.map((b, i) => `<div class="ev-charge-stop-card ev-charge-stop-clickable" data-idx="${i}">${contenuCarteBorne(b, etiquetteDistance)}</div>`).join("") ||
-    hint(messageVide);
-  conteneur.querySelectorAll(".ev-charge-stop-clickable").forEach((el) => {
-    el.addEventListener("click", () => ouvrirDetailBorne(bornes[Number(el.dataset.idx)]));
-  });
-
-  // Complète chaque carte avec les données officielles, par groupes de 5 ;
-  // s'arrête si une nouvelle liste a remplacé celle-ci entre-temps.
-  const jeton = String(++jetonListe);
-  conteneur.dataset.jeton = jeton;
-  (async () => {
-    for (let k = 0; k < bornes.length; k += 5) {
-      const groupe = bornes.slice(k, k + 5);
-      await enrichirBornes(groupe);
-      if (conteneur.dataset.jeton !== jeton) return;
-      groupe.forEach((b, j) => {
-        const carte = conteneur.querySelector(`.ev-charge-stop-clickable[data-idx="${k + j}"]`);
-        if (carte) carte.innerHTML = contenuCarteBorne(b, etiquetteDistance);
-      });
-    }
-  })();
-}
-
-function renderBornesADistance(r) {
-  const zone = $("ev-time-slider-stations");
-  if (!r.ok) {
-    zone.innerHTML = hint(`Erreur : ${r.erreur || "inconnue"}`);
-    placerCurseur(undefined, undefined);
-    return;
-  }
-  placerCurseur(r.lat, r.lon, `À ce point du trajet (km ${r.distance_cible_km})`);
-  listeBornes(zone, r.bornes || [], " à l'écart", "Aucune borne trouvée à proximité de ce point.");
-}
-
-// ── Fiche détaillée d'une borne ────────────────────────────────────────────
-
-function ouvrirDetailBorne(borne, contexteArret) {
-  $("ev-station-modal-title").textContent = borne.nom_borne || borne.nom || "Borne de recharge";
-  const ligne = (label, valeurHtml) =>
-    valeurHtml ? `<div class="ev-station-detail-row"><span class="label">${label}</span><span class="value">${valeurHtml}</span></div>` : "";
-  const section = (titre) => `<div class="ev-station-detail-section-title">${titre}</div>`;
-
-  let html = "";
-  html += ligne("Adresse", escapeHtml(borne.adresse || "Non renseignée"));
-  html += ligne("Opérateur", escapeHtml(borne.operateur || "Inconnu"));
-  html += ligne("Statut déclaré", escapeHtml(borne.statut || "Inconnu"));
-  if (borne.nombre_points) html += ligne("Nombre de points", escapeHtml(borne.nombre_points));
-  if (borne.distance_km !== undefined) html += ligne("Distance au point recherché", `${escapeHtml(borne.distance_km)} km`);
-  if (borne.distance_borne_km !== undefined) html += ligne("Écart par rapport au trajet", `${escapeHtml(borne.distance_borne_km)} km`);
-  if (borne.puissance_max_kw) html += ligne("Puissance max", `${escapeHtml(borne.puissance_max_kw)} kW`);
-  if (borne.type_acces) html += ligne("Type d'accès", escapeHtml(borne.type_acces));
-  if (borne.fraicheur) html += ligne("Fraîcheur Open Charge Map", escapeHtml(borne.fraicheur.label));
-
-  html += `<div id="ev-station-officiel">${
-    borne.officiel === undefined ? hint("🔎 Recherche des informations officielles (paiement CB, tarifs, horaires, accès)…") : sectionsOfficiellesHtml(borne)
-  }</div>`;
-
-  if (contexteArret) {
-    html += section("Plan de recharge à cet arrêt");
-    html += ligne("Distance depuis le départ", `${contexteArret.km_depuis_depart} km`);
-    html += ligne("Énergie à ajouter", `${contexteArret.kwh_ajoutes} kWh`);
-    html += ligne("Temps de charge estimé", `${contexteArret.temps_charge_min} min`);
-    html += ligne("Batterie à l'arrivée à la borne", `${contexteArret.pct_arrivee_borne}%`);
-    html += ligne("Batterie au départ de la borne", `${contexteArret.pct_depart_borne}%`);
-
-    if (typeof contexteArret.score === "number") {
-      html += section("Score de recommandation");
-      html += `<div class="ev-charge-score-badge">${contexteArret.score}/100</div>`;
-      for (const d of contexteArret.score_details || []) {
-        html += ligne(escapeHtml(d.label), `${d.points >= 0 ? "+" : ""}${d.points}`);
-      }
-    }
-    const alternatives = contexteArret.alternatives || [];
-    if (alternatives.length) {
-      html += section("Alternatives à cet arrêt (plan B) — touche pour la fiche");
-      alternatives.forEach((alt, i) => {
-        const cb = etatCb(alt);
-        html += `<div class="ev-alternative" data-alt="${i}">
-          <div><strong>${escapeHtml(alt.nom)}</strong> <span class="ev-charge-stop-km">(${escapeHtml(alt.operateur || "opérateur ?")})</span></div>
-          <div class="ev-charge-stop-meta"><span>${escapeHtml(alt.distance_km)} km</span><span>${escapeHtml(alt.puissance_max_kw)} kW</span><span>score ${alt.score}/100</span><span class="ev-cb-pill ${cb.classe}">${cb.court}</span></div>
-        </div>`;
-      });
-    }
-  }
-
-  const connecteurs = borne.connecteurs || [];
-  if (connecteurs.length) {
-    html += section("Connecteurs");
-    for (const c of connecteurs) html += ligne(escapeHtml(c.type), `${escapeHtml(c.puissance_kw)} kW × ${escapeHtml(c.quantite)} · ${escapeHtml(c.statut)}`);
-  }
-
-  if (borne.cout_estime_eur != null) {
-    html += section("Coût de cet arrêt");
-    html += ligne("Coût estimé de la recharge", coutHtml(borne.cout_estime_eur, borne.prix_kwh_eur, borne.prix_est_estimation));
-  }
-
-  if (borne.lat !== undefined && borne.lon !== undefined) {
-    html += `<div class="ev-charge-nav-links">
-      <a href="${lienGoogleMaps(borne.lat, borne.lon)}" target="_blank" rel="noopener" class="ev-btn-secondaire">🗺️ Google Maps</a>
-      <a href="${lienWaze(borne.lat, borne.lon)}" target="_blank" rel="noopener" class="ev-btn-secondaire">🚗 Waze</a>
-    </div>`;
-  }
-  html += hint("ℹ️ Occupation en temps réel non disponible (Open Charge Map est un registre statique, pas un flux live).");
-
-  $("ev-station-modal-body").innerHTML = html;
-  $("ev-station-modal-body")
-    .querySelectorAll(".ev-alternative")
-    .forEach((el) => el.addEventListener("click", () => ouvrirDetailBorne(contexteArret.alternatives[Number(el.dataset.alt)])));
-  derniereBorneOuverte = { nom: borne.nom_borne || borne.nom || "", lat: borne.lat, lon: borne.lon, adresse: borne.adresse || "" };
-  $("ev-station-note-input").value = obtenirNoteBorne(derniereBorneOuverte.nom, derniereBorneOuverte.lat, derniereBorneOuverte.lon);
-  majBoutonFavoriBorne();
-  ouvrirOverlay($("ev-station-modal"));
-  $("ev-station-modal-body").scrollTop = 0;
-
-  if (borne.officiel === undefined) {
-    const ouverte = derniereBorneOuverte;
-    enrichirBornes([borne]).then(() => {
-      if (derniereBorneOuverte === ouverte && $("ev-station-officiel")) $("ev-station-officiel").innerHTML = sectionsOfficiellesHtml(borne);
-    });
-  }
-}
-
-function majBoutonFavoriBorne() {
-  if (!derniereBorneOuverte) return;
-  const b = derniereBorneOuverte;
-  const favori = estBorneFavorite(b.nom, b.lat, b.lon);
-  const btn = $("ev-station-modal-fav-btn");
-  btn.textContent = favori ? "★" : "☆";
-  btn.classList.toggle("active", favori);
-}
-
-function cablerFicheBorne() {
-  $("ev-station-modal-close-btn").addEventListener("click", fermerOverlayDepuisBouton);
-  $("ev-station-modal").addEventListener("click", (e) => {
-    if (e.target === $("ev-station-modal")) fermerOverlayDepuisBouton();
-  });
-  $("ev-station-modal-fav-btn").addEventListener("click", () => {
-    if (!derniereBorneOuverte) return;
-    const b = derniereBorneOuverte;
-    basculerFavoriBorne(b.nom, b.lat, b.lon, b.adresse);
-    majBoutonFavoriBorne();
-    toast(estBorneFavorite(b.nom, b.lat, b.lon) ? "Borne ajoutée aux favoris." : "Borne retirée des favoris.");
-  });
-  $("ev-station-note-save-btn").addEventListener("click", () => {
-    if (!derniereBorneOuverte) return;
-    const b = derniereBorneOuverte;
-    definirNoteBorne(b.nom, b.lat, b.lon, $("ev-station-note-input").value || "");
-    const btn = $("ev-station-note-save-btn");
-    btn.textContent = "✅ Enregistré";
-    setTimeout(() => (btn.textContent = "Enregistrer la note"), 1500);
-  });
-}
-
-// ── Historique et favoris de trajets ───────────────────────────────────────
+let ongletFavoris = "trajets";
 
 function chargerEtLancerTrajet(depart, destination, reglages) {
   $("ev-depart-input").value = depart;
@@ -1080,207 +1426,210 @@ function chargerEtLancerTrajet(depart, destination, reglages) {
     if (reglages.eviter_peages !== undefined) $("ev-eviter-peages-checkbox").checked = !!reglages.eviter_peages;
     if (reglages.puissance_min_kw !== undefined) $("ev-puissance-min-input").value = String(reglages.puissance_min_kw);
   }
-  $("ev-panel-historique").classList.add("hidden");
-  $("ev-panel-favoris").classList.add("hidden");
+  afficherVue("trajet");
   lancerTrajet();
 }
 
-function renderHistorique() {
-  const historique = listerHistoriqueTrajets();
-  const liste = $("ev-historique-list");
-  liste.innerHTML =
-    historique
-      .map(
-        (h, i) => `
-    <div class="ev-charge-stop-card ev-charge-stop-clickable" data-idx="${i}">
-      <div class="ev-charge-stop-header">
-        <span class="ev-charge-stop-num">${escapeHtml(nomCourt(h.from_name) || h.depart)} → ${escapeHtml(nomCourt(h.to_name) || h.destination)}</span>
-        <button type="button" class="ev-charge-mini-btn ev-charge-hist-delete" data-id="${escapeHtml(h.id)}" title="Supprimer">🗑️</button>
-      </div>
-      <div class="ev-charge-stop-meta"><span>${escapeHtml(h.distance_km)} km</span><span>${escapeHtml(h.duree_text || "")}</span><span>${escapeHtml(h.nb_arrets)} arrêt(s)</span>${
-        h.reglages?.mode ? `<span>${escapeHtml(LABELS_MODE[h.reglages.mode] || h.reglages.mode)}</span>` : ""
-      }<span>${new Date(h.ts * 1000).toLocaleDateString("fr-FR")}</span></div>
-    </div>`,
-      )
-      .join("") || hint("Aucun trajet calculé pour le moment.");
-  liste.querySelectorAll(".ev-charge-hist-delete").forEach((btn) =>
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      supprimerTrajetHistorique(btn.dataset.id);
-      renderHistorique();
-    }),
-  );
-  liste.querySelectorAll(".ev-charge-stop-clickable").forEach((el) =>
-    el.addEventListener("click", () => {
-      const h = historique[Number(el.dataset.idx)];
-      chargerEtLancerTrajet(h.depart, h.destination, h.reglages);
-    }),
-  );
-}
-
-function rafraichirHistoriqueSiOuvert() {
-  if (!$("ev-panel-historique").classList.contains("hidden")) renderHistorique();
+function ligneSimple(titre, sous, idx, idSuppr) {
+  return `<div class="ev-borne-ligne" data-idx="${idx}">
+    <div class="ev-borne-infos"><div class="ev-borne-nom">${titre}</div>${sous ? `<div class="ev-borne-sous">${sous}</div>` : ""}</div>
+    <button type="button" class="ev-mini-btn" data-suppr="${escapeHtml(idSuppr)}" title="Supprimer">🗑️</button>
+  </div>`;
 }
 
 function renderFavoris() {
+  document.querySelectorAll(".ev-fav-onglet").forEach((b) => b.classList.toggle("active", b.dataset.onglet === ongletFavoris));
+  $("ev-favoris-list").classList.toggle("hidden", ongletFavoris !== "trajets");
+  $("ev-historique-bloc").classList.toggle("hidden", ongletFavoris !== "historique");
+  $("ev-bornes-favorites-list").classList.toggle("hidden", ongletFavoris !== "bornes");
+
   const favoris = listerTrajetsFavoris();
-  const liste = $("ev-favoris-list");
-  liste.innerHTML =
-    favoris
-      .map(
-        (f, i) => `
-    <div class="ev-charge-stop-card ev-charge-stop-clickable" data-idx="${i}">
-      <div class="ev-charge-stop-header">
-        <span class="ev-charge-stop-num">⭐ ${escapeHtml(f.depart)} → ${escapeHtml(f.destination)}</span>
-        <button type="button" class="ev-charge-mini-btn ev-charge-fav-delete" data-id="${escapeHtml(f.id)}" title="Retirer">🗑️</button>
-      </div>
-    </div>`,
+  listesAffichees.set("ev-favoris-list", favoris);
+  $("ev-favoris-list").innerHTML =
+    favoris.map((f, i) => ligneSimple(`⭐ ${escapeHtml(f.depart)} → ${escapeHtml(f.destination)}`, "", i, f.id)).join("") ||
+    hint("Aucun trajet favori. Utilise « ☆ Trajet favori » dans l'onglet Trajet.");
+
+  const historique = listerHistoriqueTrajets();
+  listesAffichees.set("ev-historique-list", historique);
+  $("ev-historique-list").innerHTML =
+    historique
+      .map((h, i) =>
+        ligneSimple(
+          `${escapeHtml(nomCourt(h.from_name) || h.depart)} → ${escapeHtml(nomCourt(h.to_name) || h.destination)}`,
+          escapeHtml(
+            [`${h.distance_km} km`, h.duree_text, `${h.nb_arrets} arrêt(s)`, LABELS_MODE[h.reglages?.mode] || "", new Date(h.ts * 1000).toLocaleDateString("fr-FR")]
+              .filter(Boolean)
+              .join(" · "),
+          ),
+          i,
+          h.id,
+        ),
       )
-      .join("") || hint("Aucun trajet favori pour le moment.");
-  liste.querySelectorAll(".ev-charge-fav-delete").forEach((btn) =>
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      retirerTrajetFavori(btn.dataset.id);
+      .join("") || hint("Aucun trajet calculé pour le moment.");
+
+  const bornes = listerBornesFavorites();
+  listesAffichees.set("ev-bornes-favorites-list", bornes);
+  $("ev-bornes-favorites-list").innerHTML =
+    bornes.map((b, i) => ligneSimple(`🔌 ${escapeHtml(b.nom)}`, escapeHtml(b.adresse || ""), i, b.id)).join("") ||
+    hint("Aucune borne favorite. Ouvre la fiche d'une borne et touche ☆ Favori.");
+}
+
+function cablerFavoris() {
+  document.querySelectorAll(".ev-fav-onglet").forEach((b) =>
+    b.addEventListener("click", () => {
+      ongletFavoris = b.dataset.onglet;
       renderFavoris();
     }),
   );
-  liste.querySelectorAll(".ev-charge-stop-clickable").forEach((el) =>
-    el.addEventListener("click", () => {
-      const f = favoris[Number(el.dataset.idx)];
-      chargerEtLancerTrajet(f.depart, f.destination);
-    }),
+  const gerer = (id, ouvrir, supprimer) =>
+    $(id).addEventListener("click", (e) => {
+      const suppr = e.target.closest("[data-suppr]");
+      if (suppr) {
+        e.stopPropagation();
+        supprimer(suppr.dataset.suppr);
+        renderFavoris();
+        return;
+      }
+      const ligne = e.target.closest("[data-idx]");
+      const element = ligne && listesAffichees.get(id)?.[Number(ligne.dataset.idx)];
+      if (element) ouvrir(element);
+    });
+  gerer("ev-favoris-list", (f) => chargerEtLancerTrajet(f.depart, f.destination), retirerTrajetFavori);
+  gerer("ev-historique-list", (h) => chargerEtLancerTrajet(h.depart, h.destination, h.reglages), supprimerTrajetHistorique);
+  gerer(
+    "ev-bornes-favorites-list",
+    (f) => {
+      const connue = bornesZone.find((b) => haversineKm(b.lat, b.lon, f.lat, f.lon) < 0.06);
+      ouvrirBorne(connue || { nom: f.nom, lat: f.lat, lon: f.lon, adresse: f.adresse, connecteurs: [] });
+    },
+    (id) => {
+      const f = listerBornesFavorites().find((x) => x.id === id);
+      if (f) basculerFavoriBorne(f.nom, f.lat, f.lon, f.adresse);
+    },
   );
-}
-
-function cablerHistoriqueFavoris() {
-  $("ev-historique-btn").addEventListener("click", () => {
-    $("ev-panel-favoris").classList.add("hidden");
-    $("ev-panel-historique").classList.remove("hidden");
-    renderHistorique();
-  });
-  $("ev-historique-close-btn").addEventListener("click", () => $("ev-panel-historique").classList.add("hidden"));
   $("ev-historique-clear-btn").addEventListener("click", () => {
     if (confirm("Effacer tout l'historique des trajets ?")) {
       effacerHistoriqueTrajets();
-      renderHistorique();
+      renderFavoris();
     }
   });
-  $("ev-favoris-btn").addEventListener("click", () => {
-    $("ev-panel-historique").classList.add("hidden");
-    $("ev-panel-favoris").classList.remove("hidden");
-    renderFavoris();
-  });
-  $("ev-favoris-close-btn").addEventListener("click", () => $("ev-panel-favoris").classList.add("hidden"));
-  $("ev-favori-trajet-btn").addEventListener("click", () => {
-    const destination = $("ev-destination-input").value.trim();
-    if (!destination) {
-      alert("Indique une destination avant de l'ajouter aux favoris.");
-      return;
-    }
-    ajouterTrajetFavori($("ev-depart-input").value.trim() || "Ma position", destination);
-    if (!$("ev-panel-favoris").classList.contains("hidden")) renderFavoris();
-    toast("⭐ Trajet ajouté aux favoris.");
-  });
 }
 
-// ── Mode urgence ───────────────────────────────────────────────────────────
+// ── Outils : recherche de bornes et calculateur ────────────────────────────
 
-function renderUrgence(r) {
-  const corps = $("ev-urgence-body");
-  if (!r.ok) {
-    corps.innerHTML = `<div class="ev-charge-cout-alerte">Erreur : ${escapeHtml(r.erreur || "inconnue")}</div>`;
-    return;
-  }
-  const bornes = (r.bornes || []).slice(0, 3);
-  if (!bornes.length) {
-    corps.innerHTML = hint("Aucune borne compatible trouvée dans un rayon de 30 km. Élargis le rayon depuis l'onglet 🔍 Bornes.");
-    return;
-  }
-  corps.innerHTML =
-    hint(`Autour de : ${nomCourt(r.lieu)}`) +
-    bornes
-      .map(
-        (b, i) => `
-    <div class="ev-charge-urgence-card ${i === 0 ? "principale" : ""}">
-      <div class="ev-charge-urgence-title">${i === 0 ? "🎯 RECOMMANDÉE" : "🔁 Solution de secours"} : ${escapeHtml(b.nom)}</div>
-      <div class="ev-charge-stop-addr">${escapeHtml(b.adresse || "")}</div>
-      ${stationFactsHtml(b)}
-      <div class="ev-charge-stop-meta"><span>${escapeHtml(b.distance_km)} km</span><span>${escapeHtml(b.puissance_max_kw)} kW</span></div>
-      <div class="ev-charge-nav-links">
-        <a href="${lienGoogleMaps(b.lat, b.lon)}" target="_blank" rel="noopener" class="ev-btn-secondaire">🗺️ Naviguer (Maps)</a>
-        <a href="${lienWaze(b.lat, b.lon)}" target="_blank" rel="noopener" class="ev-btn-secondaire">🚗 Naviguer (Waze)</a>
-      </div>
-    </div>`,
-      )
-      .join("");
-}
-
-function cablerUrgence() {
-  $("ev-urgence-btn").addEventListener("click", async () => {
-    ouvrirOverlay($("ev-urgence-panel"));
-    $("ev-urgence-body").innerHTML = hint("Recherche des bornes compatibles les plus proches de ta position...");
-    renderUrgence(await bornesUrgence($("ev-depart-input").value.trim()));
-  });
-  $("ev-urgence-close-btn").addEventListener("click", fermerOverlayDepuisBouton);
-}
-
-// ── Calculateur rapide ─────────────────────────────────────────────────────
-
-function cablerCalculateur() {
-  $("ev-calc-run-btn").addEventListener("click", () => {
-    const types = typesDeCharge(obtenirProfilVehicule());
-    const type = types[$("ev-calc-type-select").value] || types.rapide;
-    const kwh = parseFloat($("ev-calc-kwh-input").value) || 0;
-    const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw));
-    const resultat = $("ev-calc-result");
-    resultat.classList.remove("hidden");
-    const profil = obtenirProfilVehicule();
-    resultat.innerHTML =
-      `⏱️ Temps de charge estimé : <strong>${formaterMinutes(minutes)}</strong> (à ${escapeHtml(type.puissance_kw)} kW).` +
-      `<br>🏠 Coût à domicile : <strong>${euros(kwh * profil.prix_hc_eur_kwh)}</strong> en heures creuses, <strong>${euros(kwh * profil.prix_hp_eur_kwh)}</strong> en heures pleines.` +
-      `<br>🔌 Sur une borne publique (~${euros(0.45)}/kWh) : environ <strong>${euros(kwh * 0.45)}</strong>.`;
-  });
-}
-
-// ── Recherche de bornes ────────────────────────────────────────────────────
-
-function cablerRecherche() {
+function cablerOutils() {
   const select = $("ev-recherche-operateur-select");
   select.addEventListener("change", () => {
     const autre = select.value === "__autre__";
     $("ev-recherche-operateur-input").classList.toggle("hidden", !autre);
     if (autre) $("ev-recherche-operateur-input").focus();
   });
-  $("ev-recherche-rayon-input").addEventListener("input", () => {
-    $("ev-recherche-rayon-value").textContent = $("ev-recherche-rayon-input").value;
-  });
+  $("ev-recherche-rayon-input").addEventListener("input", () => ($("ev-recherche-rayon-value").textContent = $("ev-recherche-rayon-input").value));
   $("ev-recherche-gps-btn").addEventListener("click", () => ($("ev-recherche-lieu-input").value = "Ma position"));
 
   $("ev-recherche-run-btn").addEventListener("click", async () => {
     const operateur = select.value === "__autre__" ? $("ev-recherche-operateur-input").value.trim() : select.value;
-    const zone = $("ev-recherche-results");
-    zone.innerHTML = hint("Recherche en cours...");
+    const rayon = parseFloat($("ev-recherche-rayon-input").value);
+    const cb = $("ev-recherche-cb-checkbox").checked;
     const btn = $("ev-recherche-run-btn");
     btn.disabled = true;
+    $("ev-recherche-etat").textContent = "⏳ Recherche en cours…";
     try {
       const r = await rechercherBornesAutour($("ev-recherche-lieu-input").value.trim() || "Ma position", {
         operateur,
         type_acces: $("ev-recherche-acces-select").value,
-        rayon_km: parseFloat($("ev-recherche-rayon-input").value),
-        carte_bancaire_uniquement: $("ev-recherche-cb-checkbox").checked,
+        rayon_km: rayon,
+        carte_bancaire_uniquement: cb,
       });
       if (!r.ok) {
-        zone.innerHTML = `<div class="ev-charge-cout-alerte">Erreur : ${escapeHtml(r.erreur || "inconnue")}</div>`;
+        $("ev-recherche-etat").textContent = `⚠️ ${r.erreur || "Recherche impossible."}`;
         return;
       }
-      listeBornes(zone, r.bornes || [], "", `Aucune borne trouvée pour ces critères autour de « ${nomCourt(r.lieu)} ».`);
+      $("ev-recherche-etat").textContent = "";
+      rechercheManuelle = [nomCourt(r.lieu).split(",")[0], operateur, cb ? "CB" : ""].filter(Boolean).join(" · ");
+      jetonZone++;
+      bornesZone = r.bornes;
+      derniereZone = { lat: r.lat, lon: r.lon, rayon };
+      afficherVue("bornes", { etat: "mi", historique: false });
+      centrer(r.lat, r.lon, Math.max(9, Math.min(14, 14 - Math.log2(rayon / 2))));
+      renderBornes();
+      const jeton = jetonZone;
+      enrichirProgressivement(bornesZone, () => jeton === jetonZone);
     } finally {
       btn.disabled = false;
     }
   });
+
+  $("ev-calc-run-btn").addEventListener("click", () => {
+    const profil = obtenirProfilVehicule();
+    const types = typesDeCharge(profil);
+    const type = types[$("ev-calc-type-select").value] || types.rapide;
+    const kwh = parseFloat($("ev-calc-kwh-input").value) || 0;
+    const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw));
+    const resultat = $("ev-calc-result");
+    resultat.classList.remove("hidden");
+    resultat.innerHTML =
+      `⏱️ Temps de charge : <strong>${formaterMinutes(minutes)}</strong> (à ${escapeHtml(type.puissance_kw)} kW)` +
+      `<br>🏠 À la maison : <strong>${euros(kwh * profil.prix_hc_eur_kwh)}</strong> en heures creuses, <strong>${euros(kwh * profil.prix_hp_eur_kwh)}</strong> en heures pleines` +
+      `<br>🔌 Sur borne publique (~${euros(0.45)}/kWh) : environ <strong>${euros(kwh * 0.45)}</strong>`;
+  });
 }
 
-// ── Profil véhicule, domicile, clés API ────────────────────────────────────
+// ── Mode urgence ───────────────────────────────────────────────────────────
+
+function cablerUrgence() {
+  const panneau = $("ev-urgence-panel");
+  const corps = $("ev-urgence-body");
+  let bornesUrg = [];
+  $("ev-urgence-btn").addEventListener("click", async () => {
+    panneau.classList.remove("hidden");
+    history.pushState({ urgence: true }, "");
+    corps.innerHTML = hint("Recherche des bornes compatibles les plus proches de ta position…");
+    const r = await bornesUrgence($("ev-depart-input").value.trim());
+    if (!r.ok) {
+      corps.innerHTML = alerte(`Erreur : ${r.erreur || "inconnue"}`);
+      return;
+    }
+    bornesUrg = r.bornes || [];
+    if (!bornesUrg.length) {
+      corps.innerHTML = hint("Aucune borne compatible dans un rayon de 30 km. Élargis la recherche depuis l'onglet ⚡ Outils.");
+      return;
+    }
+    corps.innerHTML =
+      hint(`Autour de : ${nomCourt(r.lieu)}`) +
+      bornesUrg
+        .map((b, i) => {
+          const kw = puissanceBorne(b);
+          return `
+        <div class="ev-urgence-carte ${i === 0 ? "principale" : ""}">
+          <div class="ev-urgence-titre">${i === 0 ? "🎯 RECOMMANDÉE" : "🔁 Secours"} : ${escapeHtml(b.nom)}</div>
+          <div class="ev-borne-sous">${escapeHtml(b.adresse || "")}</div>
+          <div class="ev-meta"><span>📍 ${nombre(b.distance_km, 1)} km</span><span>⚡ ${kw} kW</span><span>${escapeHtml(b.operateur || "")}</span></div>
+          <div class="ev-borne-pastilles">${pastillesBorne(b)}</div>
+          <div class="ev-actions-rangee">
+            <a class="ev-action" href="${lienGoogleMaps(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🧭</span>Maps</a>
+            <a class="ev-action" href="${lienWaze(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🚗</span>Waze</a>
+            <button class="ev-action" type="button" data-fiche="${i}"><span>📋</span>Fiche</button>
+          </div>
+        </div>`;
+        })
+        .join("");
+  });
+  corps.addEventListener("click", (e) => {
+    const bouton = e.target.closest("[data-fiche]");
+    if (!bouton) return;
+    const b = bornesUrg[Number(bouton.dataset.fiche)];
+    panneau.classList.add("hidden");
+    history.replaceState({}, "");
+    ouvrirBorne(b);
+  });
+  $("ev-urgence-close-btn").addEventListener("click", () => {
+    if (history.state?.urgence) history.back();
+    else panneau.classList.add("hidden");
+  });
+}
+
+// ── Profil ─────────────────────────────────────────────────────────────────
 
 function majBandeauCles() {
   const { tomtom, openChargeMap } = getApiKeys();
@@ -1316,17 +1665,9 @@ function rendreProfil() {
   }
 }
 
-function basculerProfil(afficher) {
-  $("ev-charge-profil-panel").classList.toggle("hidden", !afficher);
-  $("ev-charge-form").classList.toggle("hidden", afficher);
-  if (afficher) rendreProfil();
-  window.scrollTo({ top: 0 });
-}
-
 function cablerProfil() {
-  $("ev-charge-profil-btn").addEventListener("click", () => basculerProfil($("ev-charge-profil-panel").classList.contains("hidden")));
-  $("ev-profil-cancel-btn").addEventListener("click", () => basculerProfil(false));
   $("ev-profil-save-btn").addEventListener("click", () => {
+    const avaitCleOcm = !!getApiKeys().openChargeMap;
     const connecteurs = $("ev-profil-connecteurs").value.split(",").map((s) => s.trim()).filter(Boolean);
     definirProfilVehicule({
       nom: $("ev-profil-nom").value.trim() || undefined,
@@ -1344,57 +1685,33 @@ function cablerProfil() {
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
     rendreProfil();
     majBandeauCles();
-    basculerProfil(false);
-    toast("✅ Profil et réglages enregistrés.");
+    toast("✅ Profil et réglages enregistrés");
+    if (!avaitCleOcm && getApiKeys().openChargeMap) {
+      derniereZone = null;
+      chargerBornesZone(true);
+    }
   });
-}
-
-// ── Onglets ────────────────────────────────────────────────────────────────
-
-function choisirOnglet(onglet) {
-  for (const nom of ["trajet", "calc", "recherche"]) {
-    $(`ev-tab-${nom}`).classList.toggle("hidden", nom !== onglet);
-    $(`ev-tab-${nom}-btn`).classList.toggle("accent", nom === onglet);
-  }
 }
 
 // ── Démarrage ──────────────────────────────────────────────────────────────
 
 export function initialiserUI() {
-  $("ev-tab-trajet-btn").addEventListener("click", () => choisirOnglet("trajet"));
-  $("ev-tab-calc-btn").addEventListener("click", () => choisirOnglet("calc"));
-  $("ev-tab-recherche-btn").addEventListener("click", () => choisirOnglet("recherche"));
-
-  $("ev-trajet-run-btn").addEventListener("click", lancerTrajet);
-  $("ev-aller-retour-btn").addEventListener("click", lancerAllerRetour);
-  $("ev-scenarios-btn").addEventListener("click", lancerScenarios);
-  $("ev-destination-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.target.blur();
-      lancerTrajet();
-    }
-  });
-  $("ev-depart-gps-btn").addEventListener("click", () => ($("ev-depart-input").value = "Ma position"));
-
-  window.addEventListener("popstate", fermerOverlays);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") fermerOverlayDepuisBouton();
-  });
-
-  cablerCurseursEtModes();
-  cablerActionsResultat();
-  cablerCourbes();
+  initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || "sombre", onDeplacement: surDeplacementCarte });
+  cablerFeuille();
+  cablerNavigation();
+  cablerCarte();
+  cablerFiche();
+  cablerFormulaire();
+  cablerResultat();
   cablerFrise();
-  cablerFicheBorne();
-  cablerHistoriqueFavoris();
+  cablerFavoris();
+  cablerOutils();
   cablerUrgence();
-  cablerCalculateur();
-  cablerRecherche();
   cablerProfil();
 
   chargerPrefs();
   rendreProfil();
   majBandeauCles();
-  choisirOnglet("trajet");
+  afficherVue("bornes", { etat: "bas", historique: false });
+  positionDeDepart();
 }
