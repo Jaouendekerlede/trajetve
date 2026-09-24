@@ -50,7 +50,8 @@ import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze } from "./util.js";
-import { enrichirBornes } from "./irve.js";
+import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
+import { demarrerNavigation, navigationActive, retourNavigationEnCours } from "./navigation.js";
 
 const $ = (id) => document.getElementById(id);
 const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
@@ -71,11 +72,13 @@ let dernierTrajet = null;
 let trajetAffiche = false;
 let dernierChargeDepartPct = 80;
 let dernierScenarios = null;
+let dernieresOptions = null;
 let borneOuverte = null;
 let calculEnCours = false;
 let bornesZone = [];
 let derniereZone = null;
 let rechercheManuelle = null;
+let zoneIncomplete = false;
 let jetonZone = 0;
 let minuteurDeplacement = null;
 const filtres = new Set();
@@ -276,6 +279,7 @@ function cablerNavigation() {
     else revenirDeBorne();
   });
   window.addEventListener("popstate", () => {
+    if (navigationActive() || retourNavigationEnCours()) return;
     if (!$("ev-urgence-panel").classList.contains("hidden")) {
       $("ev-urgence-panel").classList.add("hidden");
       return;
@@ -406,6 +410,9 @@ function renderBornes({ carteAussi = true } = {}) {
     liste,
     bornesZone.length ? "Aucune borne ne correspond aux filtres choisis." : "Aucune borne trouvée dans cette zone. Déplace ou dézoome la carte.",
   );
+  if (zoneIncomplete && !rechercheManuelle) {
+    $("ev-bornes-liste").insertAdjacentHTML("afterbegin", hint("Beaucoup de bornes ici : seules les plus proches du centre de la carte sont affichées. Zoome pour voir les autres."));
+  }
 }
 
 async function enrichirProgressivement(bornes, toujoursValide) {
@@ -423,11 +430,6 @@ async function enrichirProgressivement(bornes, toujoursValide) {
 
 async function chargerBornesZone(force = false) {
   const { openChargeMap } = getApiKeys();
-  if (!openChargeMap) {
-    $("ev-bornes-titre").textContent = "📍 Bornes à proximité";
-    $("ev-bornes-liste").innerHTML = hint("Ajoute ta clé Open Charge Map dans l'onglet 🚗 Profil pour voir les bornes sur la carte.");
-    return;
-  }
   const rayon = rayonVisibleKm();
   if (rayon > 60) {
     jetonZone++;
@@ -450,19 +452,28 @@ async function chargerBornesZone(force = false) {
   }
   const jeton = ++jetonZone;
   $("ev-bornes-titre").textContent = "⏳ Recherche des bornes…";
-  const res = await rechercherBornesZone(openChargeMap, c.lat, c.lon, { rayonKm: r, maxResultats: 80 });
+  // Deux sources : Open Charge Map (collaborative, monde entier) et la base
+  // officielle française (plus complète en France, avec le paiement CB).
+  const [res, officielles] = await Promise.all([
+    openChargeMap ? rechercherBornesZone(openChargeMap, c.lat, c.lon, { rayonKm: r, maxResultats: 80 }) : Promise.resolve({ ok: false, erreur: "cle_manquante", bornes: [] }),
+    stationsOfficiellesZone(c.lat, c.lon, r, { maxLignes: 450 }),
+  ]);
   if (jeton !== jetonZone) return;
-  if (!res.ok) {
+  if (!res.ok && !officielles.bornes.length) {
     $("ev-bornes-titre").textContent = "📍 Bornes à proximité";
     $("ev-bornes-liste").innerHTML = alerte(
-      res.erreur === "cle_manquante" ? "Clé Open Charge Map refusée : vérifie-la dans 🚗 Profil." : `Recherche de bornes indisponible (${res.erreur}).`,
+      res.erreur === "cle_manquante" ? "Clé Open Charge Map manquante ou refusée : vérifie-la dans 🚗 Profil." : `Recherche de bornes indisponible (${res.erreur}).`,
     );
     return;
   }
   derniereZone = { lat: c.lat, lon: c.lon, rayon: r };
-  bornesZone = res.bornes;
+  bornesZone = fusionnerBornes(res.ok ? res.bornes : [], officielles.bornes);
+  zoneIncomplete = !!officielles.incomplet;
   renderBornes();
-  enrichirProgressivement(bornesZone, () => jeton === jetonZone);
+  enrichirProgressivement(
+    bornesZone.filter((b) => b.officiel === undefined),
+    () => jeton === jetonZone,
+  );
 }
 
 function surDeplacementCarte() {
@@ -472,9 +483,44 @@ function surDeplacementCarte() {
   minuteurDeplacement = setTimeout(() => chargerBornesZone(), 650);
 }
 
+// ── Thème clair / sombre ───────────────────────────────────────────────────
+
+function themeResolu(choix) {
+  if (choix === "auto") return window.matchMedia("(prefers-color-scheme: light)").matches ? "clair" : "sombre";
+  return choix === "clair" ? "clair" : "sombre";
+}
+
+function fondParDefaut() {
+  return document.documentElement.dataset.theme === "clair" ? "plan" : "sombre";
+}
+
+function appliquerTheme() {
+  const reglages = lireReglages();
+  const choix = reglages.theme || "sombre";
+  const theme = themeResolu(choix);
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "clair" ? "#ffffff" : "#05080e");
+  document.querySelectorAll("[data-theme-choix]").forEach((b) => b.classList.toggle("active", b.dataset.themeChoix === choix));
+  // Tant que l'utilisateur n'a pas choisi de fond de carte, il suit le thème.
+  if (!reglages.fond_carte) $("ev-fond-btn").textContent = ICONES_FONDS[choisirFond(fondParDefaut())];
+  if (dernierTrajet && !$("ev-profil-trajet").classList.contains("hidden")) afficherVueCourbe();
+}
+
+function cablerTheme() {
+  document.querySelectorAll("[data-theme-choix]").forEach((b) =>
+    b.addEventListener("click", () => {
+      sauverReglages({ theme: b.dataset.themeChoix });
+      appliquerTheme();
+    }),
+  );
+  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+    if (lireReglages().theme === "auto") appliquerTheme();
+  });
+}
+
 function cablerCarte() {
   const reglages = lireReglages();
-  const fond = choisirFond(reglages.fond_carte || "sombre");
+  const fond = choisirFond(reglages.fond_carte || fondParDefaut());
   $("ev-fond-btn").textContent = ICONES_FONDS[fond];
   $("ev-fond-btn").addEventListener("click", () => {
     const nom = fondSuivant();
@@ -632,7 +678,7 @@ function ficheBorneHtml(b, ctx) {
     paiement += ligneInfo("Recharge gratuite", OUI_NON[o.gratuit]);
     paiement += ligneInfo("Tarif officiel", o.tarifs.length ? escapeHtml(o.tarifs.join(" · ")) : "Non communiqué");
   }
-  if (b.cout_texte) paiement += ligneInfo("Tarif Open Charge Map", escapeHtml(b.cout_texte));
+  if (b.cout_texte && b.source !== "irve") paiement += ligneInfo("Tarif Open Charge Map", escapeHtml(b.cout_texte));
   paiement += ligneInfo("Prix utilisé pour les calculs", prixRetenuHtml(b));
   html += `<div class="ev-carte-bloc"><h3>💳 Paiement et tarifs</h3><div>${paiement}</div></div>`;
 
@@ -870,6 +916,7 @@ function construireOptions() {
     depart_prevu: $("ev-depart-prevu-input").value || null,
   };
   for (const [cle, id] of Object.entries(CASES)) options[cle] = $(id).checked;
+  dernieresOptions = options;
   return options;
 }
 
@@ -1113,7 +1160,32 @@ function quitterTrajet() {
   chargerBornesZone(true);
 }
 
+function lancerNavigation(demo) {
+  if (!dernierTrajet || navigationActive()) return;
+  const options = dernieresOptions || construireOptions();
+  demarrerNavigation(dernierTrajet, {
+    options,
+    demo,
+    chargeDepartPct: dernierChargeDepartPct,
+    // Recalcul des recharges en route, depuis la position actuelle de la voiture.
+    onReplanifier: async (departCoordonnees, chargePct) => {
+      const o = { ...options, charge_pct: chargePct, depart_prevu: null };
+      const plan = await planifierTrajet(departCoordonnees, o.destination, o, false);
+      if (plan.ok) {
+        dernierTrajet = plan;
+        dernierChargeDepartPct = chargePct;
+      }
+      return plan;
+    },
+    onFin: () => {
+      if (dernierTrajet) afficherResultat(dernierTrajet);
+    },
+  });
+}
+
 function cablerResultat() {
+  $("ev-nav-demarrer-btn").addEventListener("click", () => lancerNavigation(false));
+  $("ev-nav-demo-btn").addEventListener("click", () => lancerNavigation(true));
   $("ev-modifier-btn").addEventListener("click", () => afficherVue("trajet"));
   $("ev-quitter-trajet-btn").addEventListener("click", quitterTrajet);
   $("ev-export-btn").addEventListener("click", () => {
@@ -1548,6 +1620,7 @@ function cablerOutils() {
       $("ev-recherche-etat").textContent = "";
       rechercheManuelle = [nomCourt(r.lieu).split(",")[0], operateur, cb ? "CB" : ""].filter(Boolean).join(" · ");
       jetonZone++;
+      zoneIncomplete = false;
       bornesZone = r.bornes;
       derniereZone = { lat: r.lat, lon: r.lon, rayon };
       afficherVue("bornes", { etat: "mi", historique: false });
@@ -1696,7 +1769,8 @@ function cablerProfil() {
 // ── Démarrage ──────────────────────────────────────────────────────────────
 
 export function initialiserUI() {
-  initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || "sombre", onDeplacement: surDeplacementCarte });
+  initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || fondParDefaut(), onDeplacement: surDeplacementCarte });
+  cablerTheme();
   cablerFeuille();
   cablerNavigation();
   cablerCarte();
@@ -1712,6 +1786,7 @@ export function initialiserUI() {
   chargerPrefs();
   rendreProfil();
   majBandeauCles();
+  appliquerTheme();
   afficherVue("bornes", { etat: "bas", historique: false });
   positionDeDepart();
 }

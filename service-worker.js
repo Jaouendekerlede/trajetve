@@ -1,9 +1,9 @@
-﻿// Garde une copie de l'appli (HTML/CSS/JS/icônes) pour qu'elle démarre même
+// Garde une copie de l'appli (HTML/CSS/JS/icônes) pour qu'elle démarre même
 // sans réseau. Réseau d'abord : une mise à jour publiée est prise tout de
 // suite, la copie ne sert que hors connexion. Les API externes (TomTom,
 // Open Charge Map, IRVE, Open-Meteo, cartes) ne passent jamais par ici.
 
-const CACHE_NOM = "trajetve-v3";
+const CACHE_NOM = "trajetve-v4";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const FICHIERS_COQUILLE = [
   "./js/energie.js",
   "./js/courbe.js",
   "./js/carte.js",
+  "./js/navigation.js",
   "./js/irve.js",
   "./js/ocm.js",
   "./js/tomtom.js",

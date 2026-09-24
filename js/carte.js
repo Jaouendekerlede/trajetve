@@ -35,14 +35,122 @@ const FONDS = {
 export const ORDRE_FONDS = ["sombre", "plan", "satellite"];
 export const ICONES_FONDS = { sombre: "🌙", plan: "🗺️", satellite: "🛰️" };
 
+let rotationDispo = false;
+let coucheNav = null;
+let ligneParcourue = null;
+let ligneRestante = null;
+let marqueurVoiture = null;
+let surDeplacementManuel = null;
+
 export function initCarte(idElement, { fondInitial = "sombre", onDeplacement } = {}) {
-  carte = L.map(idElement, { zoomControl: false, attributionControl: true, zoomSnap: 0.5 }).setView([46.6, 2.4], 6);
+  carte = L.map(idElement, {
+    zoomControl: false,
+    attributionControl: true,
+    zoomSnap: 0.5,
+    // module leaflet-rotate : carte orientable (navigation "sens de marche")
+    rotate: true,
+    bearing: 0,
+    rotateControl: false,
+    touchRotate: false,
+    shiftKeyRotate: false,
+  }).setView([46.6, 2.4], 6);
+  rotationDispo = typeof carte.setBearing === "function";
   carte.attributionControl.setPrefix(false);
   choisirFond(fondInitial);
   coucheBornes = L.layerGroup().addTo(carte);
   coucheTrajet = L.layerGroup().addTo(carte);
   carte.on("moveend", () => onDeplacement?.());
+  carte.on("dragstart zoomstart", (e) => {
+    if (e.type === "dragstart" || e.originalEvent) surDeplacementManuel?.();
+  });
   return carte;
+}
+
+// ── Mode navigation ─────────────────────────────────────────────────────────
+
+export function rotationDisponible() {
+  return rotationDispo;
+}
+
+export function entrerNavigation({ onDeplacementManuel } = {}) {
+  surDeplacementManuel = onDeplacementManuel;
+  montrerBornes(false);
+  if (carte.hasLayer(coucheTrajet)) carte.removeLayer(coucheTrajet);
+  placerCurseur(undefined, undefined);
+  coucheNav = coucheNav || L.layerGroup();
+  coucheNav.clearLayers();
+  coucheNav.addTo(carte);
+  setTimeout(() => carte.invalidateSize(), 50);
+}
+
+export function quitterNavigation() {
+  surDeplacementManuel = null;
+  if (coucheNav) {
+    coucheNav.clearLayers();
+    carte.removeLayer(coucheNav);
+  }
+  if (marqueurVoiture) {
+    carte.removeLayer(marqueurVoiture);
+    marqueurVoiture = null;
+  }
+  if (rotationDispo) carte.setBearing(0);
+  if (!carte.hasLayer(coucheTrajet)) carte.addLayer(coucheTrajet);
+  setTimeout(() => carte.invalidateSize(), 50);
+}
+
+export function dessinerRouteNavigation(coords, arrets, destination) {
+  coucheNav.clearLayers();
+  const ll = coords.map(([lon, lat]) => [lat, lon]);
+  L.polyline(ll, { color: "#062a1e", weight: 14, opacity: 0.55, interactive: false }).addTo(coucheNav);
+  ligneRestante = L.polyline(ll, { color: "#22e5a0", weight: 9, opacity: 0.95, interactive: false }).addTo(coucheNav);
+  ligneParcourue = L.polyline([], { color: "#6b7385", weight: 9, opacity: 0.9, interactive: false }).addTo(coucheNav);
+  for (const a of arrets || []) {
+    L.marker([a.lat, a.lon], { icon: pastille(32, "rgba(79,224,255,.95)", "🔋"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
+  }
+  if (destination) L.marker([destination.lat, destination.lon], { icon: pastille(26, "#ff6b35", "🏁"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
+}
+
+export function majProgressionNavigation(coords, indice, lat, lon) {
+  if (!ligneRestante) return;
+  const actuel = [lat, lon];
+  ligneParcourue.setLatLngs([...coords.slice(0, indice + 1).map(([x, y]) => [y, x]), actuel]);
+  ligneRestante.setLatLngs([actuel, ...coords.slice(indice + 1).map(([x, y]) => [y, x])]);
+}
+
+function iconeVoiture() {
+  return L.divIcon({
+    className: "",
+    iconSize: [56, 56],
+    iconAnchor: [28, 28],
+    html: `<div class="ev-voiture"><svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="26" fill="rgba(61,139,255,0.22)"/><path d="M28 8 L42 44 L28 36 L14 44 Z" fill="#3d8bff" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/></svg></div>`,
+  });
+}
+
+export function majVoiture(lat, lon, cap) {
+  if (!marqueurVoiture) marqueurVoiture = L.marker([lat, lon], { icon: iconeVoiture(), interactive: false, zIndexOffset: 30000 }).addTo(carte);
+  else marqueurVoiture.setLatLng([lat, lon]);
+  const relatif = (cap || 0) - (rotationDispo ? carte.getBearing() : 0);
+  const el = marqueurVoiture.getElement()?.querySelector(".ev-voiture");
+  if (el) el.style.transform = `rotate(${relatif}deg)`;
+}
+
+// Suit la voiture : en mode "sens de marche", la carte tourne pour que la
+// route devant soit en haut ; la voiture est placée vers le bas de l'écran
+// pour voir plus loin devant.
+export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true) {
+  const bearing = rotationDispo && sensDeMarche ? cap || 0 : 0;
+  if (rotationDispo && Math.abs(((carte.getBearing() - bearing + 540) % 360) - 180) > 0.5) carte.setBearing(bearing);
+  const hauteur = carte.getSize().y;
+  const recul = hauteur * 0.2;
+  const angle = (bearing * Math.PI) / 180;
+  const point = carte.project([lat, lon], zoom).add([Math.sin(angle) * recul, -Math.cos(angle) * recul]);
+  carte.setView(carte.unproject(point, zoom), zoom, { animate: anime, duration: 0.9, easeLinearity: 1 });
+}
+
+export function apercuNavigation(coords) {
+  if (rotationDispo) carte.setBearing(0);
+  if (!coords?.length) return;
+  carte.fitBounds(L.latLngBounds(coords.map(([lon, lat]) => [lat, lon])), { paddingTopLeft: [40, 190], paddingBottomRight: [40, 150] });
 }
 
 export function choisirFond(nom) {

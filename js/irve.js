@@ -6,6 +6,7 @@
 
 import { haversineKm } from "./geo.js";
 import { extrairePrixKwh } from "./ocm.js";
+import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
 
 const API = "https://tabular-api.data.gouv.fr/api/resources/eb76d20a-8501-400e-b336-d85724de5435/data/";
 const RAYON_RECHERCHE_M = 150;
@@ -137,23 +138,146 @@ export async function infosOfficiellesBorne(lat, lon, indices = {}) {
   return promesse;
 }
 
+// ── Bornes d'une zone, directement depuis la base officielle ───────────────
+// Complète Open Charge Map (base collaborative, incomplète en France).
+// L'API renvoie une ligne par point de charge, 50 par page : on resserre la
+// zone autour du centre si elle en contient trop, pour garder les plus proches.
+
+function prixDepuisTarifs(tarifs) {
+  for (const tarif of tarifs || []) {
+    const centimes = /(\d+(?:[.,]\d+)?)\s*(?:cts?|centimes?|c€)\s*\/?\s*kwh/i.exec(tarif);
+    const prix = centimes ? parseFloat(centimes[1].replace(",", ".")) / 100 : extrairePrixKwh(tarif);
+    if (prix !== null && prix > 0 && prix < 2) return prix;
+  }
+  return null;
+}
+
+function parametresZone(lat, lon, rayonKm, puissanceMin) {
+  const dLat = rayonKm / 111;
+  const dLon = dLat / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
+  const p = new URLSearchParams({
+    consolidated_latitude__greater: (lat - dLat).toFixed(6),
+    consolidated_latitude__less: (lat + dLat).toFixed(6),
+    consolidated_longitude__greater: (lon - dLon).toFixed(6),
+    consolidated_longitude__less: (lon + dLon).toFixed(6),
+  });
+  if (puissanceMin > 0) p.set("puissance_nominale__greater", String(puissanceMin - 0.1));
+  return p;
+}
+
+async function page(params, numero, taille) {
+  const p = new URLSearchParams(params);
+  p.set("page", String(numero));
+  p.set("page_size", String(taille));
+  const resp = await fetch(`${API}?${p}`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+function borneDepuisStation(o, lat, lon) {
+  const prix = prixDepuisTarifs(o.tarifs);
+  return {
+    nom: o.nom_station || o.enseigne || o.operateur || "Borne de recharge",
+    adresse: o.adresse,
+    lat: o._lat,
+    lon: o._lon,
+    distance_km: Math.round(haversineKm(lat, lon, o._lat, o._lon) * 10) / 10,
+    puissance_max_kw: o.puissance_max_kw,
+    operateur: o.operateur || o.enseigne || null,
+    statut: null,
+    nombre_points: o.nombre_points,
+    connecteurs: o.prises.map((p) => ({ type: p.libelle, puissance_kw: p.puissance_max_kw, quantite: p.nombre, statut: "Déclaré" })),
+    cout_texte: o.tarifs.join(" · ") || null,
+    prix_kwh_eur: prix ?? PRIX_KWH_ESTIME_DEFAUT_EUR,
+    prix_est_estimation: prix === null,
+    prix_source: prix !== null ? "officiel" : undefined,
+    fraicheur: null,
+    type_acces: o.condition_acces || null,
+    paiement_cb_probable: o.puissance_max_kw >= 50,
+    officiel: { ...o, distance_m: 0 },
+    source: "irve",
+  };
+}
+
+export async function stationsOfficiellesZone(lat, lon, rayonKm, { puissanceMin = 0, maxLignes = 400 } = {}) {
+  try {
+    let rayon = rayonKm;
+    let params = parametresZone(lat, lon, rayon, puissanceMin);
+    let total = (await page(params, 1, 1)).meta?.total || 0;
+    let incomplet = false;
+    if (total > maxLignes) {
+      incomplet = true;
+      rayon = Math.max(0.3, rayonKm * Math.sqrt(maxLignes / total) * 0.9);
+      params = parametresZone(lat, lon, rayon, puissanceMin);
+      total = (await page(params, 1, 1)).meta?.total || 0;
+    }
+    const nbPages = Math.min(Math.ceil(Math.min(total, maxLignes) / 50), Math.ceil(maxLignes / 50));
+    const pages = await Promise.all(Array.from({ length: nbPages }, (_, i) => page(params, i + 1, 50)));
+    const lignes = pages.flatMap((p) => p.data || []).filter((l) => l.consolidated_latitude != null && l.consolidated_longitude != null);
+
+    const groupes = new Map();
+    for (const l of lignes) {
+      const id = l.id_station_itinerance || `${Number(l.consolidated_latitude).toFixed(5)},${Number(l.consolidated_longitude).toFixed(5)}`;
+      if (!groupes.has(id)) groupes.set(id, []);
+      groupes.get(id).push(l);
+    }
+    const bornes = [...groupes.values()]
+      .map((g) => {
+        const o = agregerStation(g, 0);
+        o._lat = Number(g[0].consolidated_latitude);
+        o._lon = Number(g[0].consolidated_longitude);
+        return borneDepuisStation(o, lat, lon);
+      })
+      .sort((a, b) => a.distance_km - b.distance_km);
+    return { ok: true, bornes, rayonKm: rayon, incomplet };
+  } catch (e) {
+    console.warn("[IRVE] Recherche de zone indisponible", e);
+    return { ok: false, bornes: [], erreur: String(e) };
+  }
+}
+
+// Fusionne Open Charge Map et la base officielle sans doublons : une station
+// officielle à moins de 80 m d'une borne OCM est la même borne (on lui
+// rattache alors les infos officielles).
+export function fusionnerBornes(bornesOcm, bornesOfficielles) {
+  const resultat = [...bornesOcm];
+  for (const s of bornesOfficielles) {
+    let proche = null;
+    let dMin = 0.08;
+    for (const b of bornesOcm) {
+      const d = haversineKm(b.lat, b.lon, s.lat, s.lon);
+      if (d < dMin) {
+        dMin = d;
+        proche = b;
+      }
+    }
+    if (proche) {
+      if (proche.officiel === undefined || proche.officiel === null) {
+        proche.officiel = { ...s.officiel, distance_m: Math.round(dMin * 1000) };
+        if (proche.prix_est_estimation && !s.prix_est_estimation) {
+          proche.prix_kwh_eur = s.prix_kwh_eur;
+          proche.prix_est_estimation = false;
+          proche.prix_source = "officiel";
+        }
+      }
+    } else {
+      resultat.push(s);
+    }
+  }
+  return resultat.sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0));
+}
+
 // Ajoute `officiel` à chaque borne ; si Open Charge Map n'avait pas de
 // tarif, reprend le tarif officiel déclaré (quand il est en €/kWh).
 export async function enrichirBornes(bornes) {
   await Promise.all(
     bornes.map(async (b) => {
       if (b.officiel === undefined) b.officiel = await infosOfficiellesBorne(b.lat, b.lon, { operateur: b.operateur });
-      if (b.prix_est_estimation && b.officiel?.tarifs?.length) {
-        for (const tarif of b.officiel.tarifs) {
-          const centimes = /(\d+(?:[.,]\d+)?)\s*(?:cts?|centimes?|c€)\s*\/?\s*kwh/i.exec(tarif);
-          const prix = centimes ? parseFloat(centimes[1].replace(",", ".")) / 100 : extrairePrixKwh(tarif);
-          if (prix !== null && prix > 0 && prix < 2) {
-            b.prix_kwh_eur = prix;
-            b.prix_est_estimation = false;
-            b.prix_source = "officiel";
-            break;
-          }
-        }
+      const prix = b.prix_est_estimation ? prixDepuisTarifs(b.officiel?.tarifs) : null;
+      if (prix !== null) {
+        b.prix_kwh_eur = prix;
+        b.prix_est_estimation = false;
+        b.prix_source = "officiel";
       }
     }),
   );

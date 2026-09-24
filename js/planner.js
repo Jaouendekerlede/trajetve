@@ -281,7 +281,16 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       return { ok: false, erreur: "Impossible de localiser un point de recharge sur le tracé.", ...base };
     }
 
-    const recherche = await rechercherBornesProches(ocmApiKey, point.lat, point.lon);
+    let recherche = await rechercherBornesProches(ocmApiKey, point.lat, point.lon);
+    // Bornes rapides de la base officielle (absentes d'Open Charge Map, ou
+    // si Open Charge Map est indisponible).
+    if (options.bornesSupplementaires) {
+      const extra = await options.bornesSupplementaires(point.lat, point.lon);
+      if (extra.length) {
+        const fusion = options.fusionner(recherche.ok ? recherche.bornes : [], extra).slice(0, 15);
+        recherche = { ok: true, bornes: fusion, erreur: null };
+      }
+    }
     if (!recherche.ok) {
       if (recherche.erreur === "cle_manquante") {
         return { ok: false, erreur: "La recherche de bornes nécessite une clé Open Charge Map (gratuite sur openchargemap.org).", ...base };

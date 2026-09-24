@@ -53,6 +53,8 @@ export async function resoudreLieu(nomLieu, adresseDomicile) {
   const brut = (nomLieu || "").trim();
   const cle = brut.toLowerCase();
   if (!brut || MOTS_POSITION.includes(cle)) return positionGps();
+  const coordonnees = /^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/.exec(brut);
+  if (coordonnees) return { lat: parseFloat(coordonnees[1]), lon: parseFloat(coordonnees[2]), nom: "Position actuelle" };
   if (MOTS_DOMICILE.includes(cle)) {
     if (!adresseDomicile) {
       return { erreur: "Adresse du domicile non renseignée. Ajoute-la dans 🚗 Profil véhicule, ou utilise « Ma position »." };

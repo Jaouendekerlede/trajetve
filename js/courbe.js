@@ -3,8 +3,10 @@
 
 let graphique = null;
 
-const TEXTE = "rgba(220, 232, 246, 0.75)";
-const GRILLE = "rgba(255, 255, 255, 0.06)";
+// Couleurs lues dans le thème courant (sombre ou clair) au moment du dessin.
+const couleurTheme = (nom, defaut) => getComputedStyle(document.documentElement).getPropertyValue(nom).trim() || defaut;
+const texte = () => couleurTheme("--texte-att", "rgba(220, 232, 246, 0.75)");
+const grille = () => couleurTheme("--separateur", "rgba(255, 255, 255, 0.06)");
 
 function lisser(valeurs, rayon = 1) {
   return valeurs.map((_, i) => {
@@ -21,9 +23,9 @@ function lisser(valeurs, rayon = 1) {
 function axe(titre, position, options = {}) {
   return {
     position,
-    title: { display: true, text: titre, color: TEXTE, font: { size: 11 } },
-    ticks: { color: TEXTE, font: { size: 10 }, maxTicksLimit: 6 },
-    grid: { color: position === "left" ? GRILLE : "transparent" },
+    title: { display: true, text: titre, color: texte(), font: { size: 11 } },
+    ticks: { color: texte(), font: { size: 10 }, maxTicksLimit: 6 },
+    grid: { color: position === "left" ? grille() : "transparent" },
     ...options,
   };
 }
@@ -117,14 +119,14 @@ export function afficherCourbe(canvas, profilTrajet, arrets, vue, onClicKm) {
           type: "linear",
           min: 0,
           max: kmMax,
-          title: { display: true, text: "km", color: TEXTE, font: { size: 11 } },
-          ticks: { color: TEXTE, font: { size: 10 }, maxTicksLimit: 8 },
-          grid: { color: GRILLE },
+          title: { display: true, text: "km", color: texte(), font: { size: 11 } },
+          ticks: { color: texte(), font: { size: 10 }, maxTicksLimit: 8 },
+          grid: { color: grille() },
         },
         ...scales,
       },
       plugins: {
-        legend: { labels: { color: TEXTE, boxWidth: 12, font: { size: 11 } } },
+        legend: { labels: { color: texte(), boxWidth: 12, font: { size: 11 } } },
         tooltip: {
           callbacks: {
             title: (items) => (items.length ? `km ${Math.round(items[0].parsed.x)}` : ""),

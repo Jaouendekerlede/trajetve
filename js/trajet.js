@@ -8,7 +8,7 @@ import { resoudreLieu, pointADistanceSurTrace } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km } from "./planner.js";
 import { construireProfilEnergie, fonctionsEnergie, fonctionsEnergieConstante } from "./energie.js";
-import { enrichirBornes } from "./irve.js";
+import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { rechercherBornesProches, rechercherBornesZone, borneCompatible } from "./ocm.js";
 
 const arrondi1 = (x) => Math.round(x * 10) / 10;
@@ -151,6 +151,11 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     energie,
     enrichirBornes,
     preferCb: opts.preferer_cb,
+    fusionner: fusionnerBornes,
+    bornesSupplementaires: async (lat, lon) => {
+      const r = await stationsOfficiellesZone(lat, lon, 20, { puissanceMin: Math.max(40, opts.puissance_min_kw || 0), maxLignes: 300 });
+      return r.ok ? r.bornes : [];
+    },
   });
   if (meteoInfo) resultat.meteo_info = meteoInfo;
 
@@ -225,22 +230,35 @@ export async function bornesADistance(trajet, distanceKm) {
   const distanceCibleKm = Math.max(0, Math.min(trajet.distance_km, distanceKm));
   const point = pointADistanceSurTrace(trajet.coords, distanceCibleKm);
   if (!point) return { ok: false, erreur: "Point introuvable sur le trajet." };
-  const recherche = await rechercherBornesProches(getApiKeys().openChargeMap, point.lat, point.lon, 20, 8);
-  if (!recherche.ok) return { ok: false, erreur: messageOcm(recherche.erreur) };
-  return { ok: true, distance_cible_km: arrondi1(distanceCibleKm), lat: point.lat, lon: point.lon, bornes: recherche.bornes };
+  const [recherche, officielles] = await Promise.all([
+    rechercherBornesProches(getApiKeys().openChargeMap, point.lat, point.lon, 20, 8),
+    stationsOfficiellesZone(point.lat, point.lon, 20, { puissanceMin: 22, maxLignes: 200 }),
+  ]);
+  if (!recherche.ok && !officielles.bornes.length) return { ok: false, erreur: messageOcm(recherche.erreur) };
+  const bornes = fusionnerBornes(recherche.ok ? recherche.bornes : [], officielles.bornes).slice(0, 12);
+  return { ok: true, distance_cible_km: arrondi1(distanceCibleKm), lat: point.lat, lon: point.lon, bornes };
 }
 
 export async function rechercherBornesAutour(lieu, filtres = {}) {
   const l = await resoudreLieu(lieu, lireReglages().adresse_domicile);
   if (l.erreur) return { ok: false, erreur: l.erreur };
-  const recherche = await rechercherBornesZone(getApiKeys().openChargeMap, l.lat, l.lon, {
-    rayonKm: filtres.rayon_km ?? 15,
-    filtreOperateur: filtres.operateur || "",
-    filtreTypeAcces: filtres.type_acces || "",
-    maxResultats: 40,
-  });
-  if (!recherche.ok) return { ok: false, erreur: messageOcm(recherche.erreur) };
-  let bornes = recherche.bornes;
+  const rayon = filtres.rayon_km ?? 15;
+  const [recherche, officielles] = await Promise.all([
+    rechercherBornesZone(getApiKeys().openChargeMap, l.lat, l.lon, {
+      rayonKm: rayon,
+      filtreOperateur: filtres.operateur || "",
+      filtreTypeAcces: filtres.type_acces || "",
+      maxResultats: 40,
+    }),
+    stationsOfficiellesZone(l.lat, l.lon, rayon, { maxLignes: 400 }),
+  ]);
+  // Les types d'accès Open Charge Map n'ont pas d'équivalent exact dans la
+  // base officielle : avec ce filtre, on s'en tient à Open Charge Map.
+  let extra = filtres.type_acces ? [] : officielles.bornes;
+  const operateur = (filtres.operateur || "").trim().toLowerCase();
+  if (operateur) extra = extra.filter((b) => `${b.operateur || ""} ${b.nom || ""} ${b.officiel?.enseigne || ""}`.toLowerCase().includes(operateur));
+  if (!recherche.ok && !extra.length) return { ok: false, erreur: messageOcm(recherche.erreur) };
+  let bornes = fusionnerBornes(recherche.ok ? recherche.bornes : [], extra).slice(0, 60);
   if (filtres.carte_bancaire_uniquement) {
     // Déclaration officielle d'abord ; à défaut, règle légale des ≥50 kW.
     await enrichirBornes(bornes);
