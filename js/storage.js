@@ -187,7 +187,8 @@ export function listerJournal() {
 // entree : { lieu, kwh, cout_eur, source: "navigation" | "manuel" }
 export function ajouterAuJournal(entree) {
   const journal = listerJournal();
-  journal.unshift({ id: `recharge_${Date.now()}`, ts: Date.now(), ...entree });
+  // Identifiant unique même pour deux ajouts dans la même milliseconde.
+  journal.unshift({ id: `recharge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, ts: Date.now(), ...entree });
   ecrireJson(STORAGE_KEYS.journal, journal.slice(0, MAX_JOURNAL));
 }
 

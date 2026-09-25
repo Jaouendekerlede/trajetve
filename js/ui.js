@@ -4,76 +4,25 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import {
-  obtenirProfilVehicule,
-  definirProfilVehicule,
-  listerHistoriqueTrajets,
-  supprimerTrajetHistorique,
-  effacerHistoriqueTrajets,
-  listerTrajetsFavoris,
-  ajouterTrajetFavori,
-  retirerTrajetFavori,
-  listerBornesFavorites,
-  estBorneFavorite,
-  basculerFavoriBorne,
-  obtenirNoteBorne,
-  definirNoteBorne,
-  lirePrefs,
-  sauverPrefs,
-  lireReglages,
-  sauverReglages,
-  exporterDonnees,
-  importerDonnees,
-  listerJournal,
-  ajouterAuJournal,
-  retirerDuJournal,
-  consoMesuree,
-  appliquerAbonnements,
-  listerAbonnements,
-  sauverAbonnements,
-} from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
-import { rechercherParkings } from "./parkings.js";
+
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import {
-  initCarte,
-  fondSuivant,
-  choisirFond,
-  rechargerFond,
-  activerCarte3D,
-  carte3DActive,
-  fondCourant,
-  afficherParkings,
-  montrerParkings,
-  limitesVisibles,
-  derniereErreur3D,
-  ICONES_FONDS,
-  definirDecalageBas,
-  centreVisible,
-  rayonVisibleKm,
-  zoomActuel,
-  centrer,
-  classePuissance,
-  puissanceBorne,
-  afficherBornes,
-  rafraichirBorne,
-  selectionnerBorne,
-  montrerBornes,
-  afficherPosition,
-  afficherTrajet,
-  afficherAlternatives,
-  effacerTrajet,
-  placerCurseur,
-} from "./carte.js";
+import { initCarte, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, ICONES_FONDS, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur } from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
+import { $, toast, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur } from "./ui-commun.js";
+import { rendreJournal, cablerJournal } from "./ui-journal.js";
+import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
+import { exporterSauvegarde, importerSauvegarde } from "./ui-sauvegarde.js";
+import { cablerParkings, planifierParkings } from "./ui-parkings.js";
+import { afficherAccueil } from "./ui-accueil.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
 
-const $ = (id) => document.getElementById(id);
 const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
 const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", favoris: "haut", outils: "haut", profil: "haut" };
 const ONGLET_PAR_VUE = { bornes: "bornes", trajet: "trajet", resultat: "trajet", favoris: "favoris", outils: "outils", profil: "profil" };
@@ -111,45 +60,9 @@ const listesAffichees = new Map();
 
 // ── Petits utilitaires ─────────────────────────────────────────────────────
 
-function toast(message) {
-  const el = $("ev-toast");
-  el.textContent = message;
-  el.classList.add("visible");
-  clearTimeout(toast.minuteur);
-  toast.minuteur = setTimeout(() => el.classList.remove("visible"), 2800);
-}
-
-function euros(x) {
-  return `${Number(x).toFixed(2).replace(".", ",")} €`;
-}
-
-function nombre(x, dec = 0) {
-  return Number(x).toFixed(dec).replace(".", ",");
-}
-
-function nomCourt(nom) {
-  const parts = String(nom || "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (!parts.length) return "";
-  if (/^\d/.test(parts[0]) && parts[1]) return `${parts[0]} ${parts[1]}${parts[2] ? `, ${parts[2]}` : ""}`;
-  return parts.slice(0, 2).join(", ");
-}
-
-function nombreOuUndefined(valeur) {
-  const n = parseFloat(valeur);
-  return Number.isFinite(n) ? n : undefined;
-}
-
 function setSlider(prefixe, valeur) {
   $(`${prefixe}-input`).value = String(valeur);
   $(`${prefixe}-value`).textContent = String(valeur);
-}
-
-function hint(texte) {
-  return `<div class="ev-hint">${escapeHtml(texte)}</div>`;
-}
-
-function alerte(texte) {
-  return `<div class="ev-alerte">${escapeHtml(texte)}</div>`;
 }
 
 function dateFr(iso) {
@@ -393,54 +306,6 @@ function pastillesBorne(b) {
   return morceaux.join("");
 }
 
-// ── Pastille de l'opérateur ────────────────────────────────────────────────
-// Sigle aux couleurs des grands réseaux (pas les logos officiels, protégés et
-// hébergés ailleurs) : on reconnaît le réseau d'un coup d'œil.
-
-const RESEAUX = [
-  [/tesla/i, "T", "#e82127"],
-  [/ionity/i, "IO", "#2e2a78"],
-  [/total/i, "TE", "#ed0000"],
-  [/izivia|sodetrel/i, "IZ", "#00a19a"],
-  [/electra/i, "EL", "#12b39a"],
-  [/fastned/i, "FN", "#f5c400", "#1a1a1a"],
-  [/allego/i, "AL", "#3fa535"],
-  [/engie|vianeo/i, "EN", "#00aaff"],
-  [/power\s*dot/i, "PD", "#e6007e"],
-  [/freshmile/i, "FM", "#00a39a"],
-  [/zunder/i, "ZU", "#0bb07b"],
-  [/atlante/i, "AT", "#009ee0"],
-  [/lidl/i, "LI", "#0050aa"],
-  [/leclerc/i, "LC", "#0066b3"],
-  [/carrefour/i, "CA", "#1e5bc6"],
-  [/auchan/i, "AU", "#e2001a"],
-  [/intermarch/i, "IM", "#d2001e"],
-  [/super\s*u|syst[eè]me\s*u/i, "U", "#e2001a"],
-  [/ouest\s*charge/i, "OC", "#0f6db3"],
-  [/chargepoint/i, "CP", "#ff6a13"],
-  [/shell|newmotion/i, "SH", "#fbce07", "#1a1a1a"],
-  [/bp\b|pulse/i, "BP", "#009b3a"],
-  [/mobilize|renault/i, "MO", "#1f2a44"],
-];
-
-function badgeOperateur(nom) {
-  if (!nom) return "";
-  const reseau = RESEAUX.find(([motif]) => motif.test(nom));
-  let sigle;
-  let fond;
-  let texte = "#ffffff";
-  if (reseau) [, sigle, fond, texte = "#ffffff"] = reseau;
-  else {
-    // Réseau inconnu : initiales et couleur stable tirée du nom.
-    const mots = nom.replace(/[^\p{L}\p{N} ]/gu, " ").split(/\s+/).filter((m) => m.length > 1);
-    sigle = (mots.length > 1 ? mots[0][0] + mots[1][0] : (mots[0] || "?").slice(0, 2)).toUpperCase();
-    let h = 0;
-    for (const c of nom) h = (h * 31 + c.charCodeAt(0)) % 360;
-    fond = `hsl(${h}, 45%, 38%)`;
-  }
-  return `<span class="ev-badge-op" style="background:${fond};color:${texte}" title="${escapeHtml(nom)}">${escapeHtml(sigle)}</span>`;
-}
-
 // ── Liste de bornes ────────────────────────────────────────────────────────
 
 function ligneBorneHtml(b, i, suffixeDistance = "") {
@@ -575,68 +440,9 @@ async function chargerBornesZone(force = false) {
   );
 }
 
-// ── Parkings ───────────────────────────────────────────────────────────────
-
-const RAYON_MAX_PARKINGS_KM = 6;
-let parkingsActifs = false;
-let jetonParkings = 0;
-let minuteurParkings = null;
-
-function ficheParkingHtml(p) {
-  const infos = [
-    p.type ? `Parking ${p.type}` : "",
-    p.places != null ? `${p.places} places` : "",
-    p.payant === "oui" ? "💶 Payant" : p.payant === "non" ? "🎁 Gratuit" : "",
-    p.places_recharge ? `⚡ ${p.places_recharge} place${p.places_recharge > 1 ? "s" : ""} avec recharge` : "",
-    p.places_pmr ? `♿ ${p.places_pmr}` : "",
-    p.hauteur_max ? `↕️ Hauteur max ${p.hauteur_max} m` : "",
-    p.clients ? "Réservé aux clients" : "",
-  ].filter(Boolean);
-  return `<div class="ev-fiche-parking">
-    <strong>🅿️ ${escapeHtml(p.nom)}</strong>
-    ${infos.length ? `<div>${infos.map(escapeHtml).join(" · ")}</div>` : ""}
-    ${p.horaires ? `<div>🕐 ${escapeHtml(p.horaires)}</div>` : ""}
-    ${p.operateur ? `<div>${escapeHtml(p.operateur)}</div>` : ""}
-    <a href="${escapeHtml(lienGoogleMaps(p.lat, p.lon))}" target="_blank" rel="noopener">🧭 Y aller</a>
-  </div>`;
-}
-
-async function chargerParkings() {
-  if (!parkingsActifs || navigationActive()) return;
-  if (rayonVisibleKm() > RAYON_MAX_PARKINGS_KM) {
-    afficherParkings([]);
-    return;
-  }
-  const jeton = ++jetonParkings;
-  const r = await rechercherParkings(limitesVisibles());
-  if (jeton !== jetonParkings || !parkingsActifs) return;
-  if (!r.ok) return toast(`🅿️ Parkings indisponibles : ${r.erreur}`);
-  afficherParkings(r.parkings.map((p) => ({ parking: p, html: ficheParkingHtml(p) })));
-}
-
-function cablerParkings() {
-  const chip = $("ev-parkings-chip");
-  const appliquer = (actif) => {
-    parkingsActifs = actif;
-    chip.classList.toggle("actif", actif);
-    montrerParkings(actif);
-  };
-  appliquer(!!lireReglages().parkings);
-  chip.addEventListener("click", () => {
-    appliquer(!parkingsActifs);
-    sauverReglages({ parkings: parkingsActifs });
-    if (!parkingsActifs) return;
-    if (rayonVisibleKm() > RAYON_MAX_PARKINGS_KM) toast("🅿️ Zoome sur la carte pour voir les parkings");
-    chargerParkings();
-  });
-}
-
 function surDeplacementCarte() {
   // Parkings : aussi sur l'écran du trajet (se garer à l'arrivée).
-  if (parkingsActifs) {
-    clearTimeout(minuteurParkings);
-    minuteurParkings = setTimeout(chargerParkings, 800);
-  }
+  planifierParkings();
   const contexteTrajet = vueCourante === "resultat" || (vueCourante === "borne" && vueAvantBorne === "resultat");
   if (rechercheManuelle || contexteTrajet || navigationActive()) return;
   clearTimeout(minuteurDeplacement);
@@ -998,45 +804,6 @@ async function partagerTexte(titre, texte) {
   }
 }
 
-// Sauvegarde : partage du fichier (Drive, Gmail…) si le téléphone le
-// permet, sinon téléchargement.
-async function exporterSauvegarde() {
-  const texte = JSON.stringify(exporterDonnees(), null, 1);
-  const nom = `trajetve-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
-  const fichier = new File([texte], nom, { type: "application/json" });
-  if (navigator.canShare?.({ files: [fichier] })) {
-    try {
-      await navigator.share({ files: [fichier], title: "Sauvegarde Trajet VE" });
-      return;
-    } catch (e) {
-      if (e.name === "AbortError") return;
-    }
-  }
-  telechargerTexte(nom, texte);
-}
-
-async function importerSauvegarde(fichier) {
-  try {
-    const n = importerDonnees(JSON.parse(await fichier.text()));
-    toast(`✅ Sauvegarde restaurée (${n} éléments) : redémarrage…`);
-    setTimeout(() => location.reload(), 1200);
-  } catch (e) {
-    toast(`⚠️ Import impossible : ${e.message}`);
-  }
-}
-
-function telechargerTexte(nomFichier, texte) {
-  const url = URL.createObjectURL(new Blob([texte], { type: "text/plain;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nomFichier;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast("⬇️ Fichier enregistré dans Téléchargements");
-}
-
 // ── Formulaire de trajet ───────────────────────────────────────────────────
 
 const CASES = {
@@ -1289,10 +1056,6 @@ function annoncer(r) {
 }
 
 // ── Résultat ───────────────────────────────────────────────────────────────
-
-function tuile(couleur, valeur, label) {
-  return `<div class="ev-tuile ${couleur}"><span class="t-valeur">${escapeHtml(valeur)}</span><span class="t-label">${escapeHtml(label)}</span></div>`;
-}
 
 function etapesHtml(p) {
   const arrets = p.arrets || [];
@@ -1972,85 +1735,6 @@ function cablerFavoris() {
   });
 }
 
-// ── Journal des recharges ──────────────────────────────────────────────────
-
-const ESSENCE_PAR_DEFAUT = { conso: 6.5, prix: 1.85 };
-
-function moisLisible(cle) {
-  const [a, m] = cle.split("-").map(Number);
-  return new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-}
-
-// Économie : les km parcourus avec ces kWh (consommation du profil), payés
-// en essence, moins ce qu'ont coûté les recharges.
-function bilanRecharges(entrees) {
-  const r = lireReglages();
-  const consoEssence = r.essence_l_100km ?? ESSENCE_PAR_DEFAUT.conso;
-  const prixEssence = r.essence_prix_l ?? ESSENCE_PAR_DEFAUT.prix;
-  const consoVe = obtenirProfilVehicule().consommation_kwh_100km || 15;
-  const kwh = entrees.reduce((s, e) => s + (e.kwh || 0), 0);
-  const cout = entrees.reduce((s, e) => s + (e.cout_eur || 0), 0);
-  const km = (kwh / consoVe) * 100;
-  return { n: entrees.length, kwh, cout, km, economie: (km * consoEssence * prixEssence) / 100 - cout };
-}
-
-function rendreJournal() {
-  const journal = listerJournal();
-  const r = lireReglages();
-  $("ev-journal-conso-essence").value = r.essence_l_100km ?? ESSENCE_PAR_DEFAUT.conso;
-  $("ev-journal-prix-essence").value = r.essence_prix_l ?? ESSENCE_PAR_DEFAUT.prix;
-  if (!journal.length) {
-    $("ev-journal-bilan").innerHTML = hint("Aucune recharge enregistrée pour l'instant.");
-    $("ev-journal-liste").innerHTML = "";
-    return;
-  }
-  const parMois = new Map();
-  for (const e of journal) {
-    const d = new Date(e.ts);
-    const cle = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (!parMois.has(cle)) parMois.set(cle, []);
-    parMois.get(cle).push(e);
-  }
-  const lignes = [...parMois.entries()].slice(0, 6).map(([cle, entrees]) => {
-    const b = bilanRecharges(entrees);
-    return `<div class="ev-journal-mois"><strong>${escapeHtml(moisLisible(cle))}</strong><span>${b.n} recharge${b.n > 1 ? "s" : ""} · ${nombre(b.kwh, 1)} kWh · ${euros(b.cout)} · ~${nombre(b.km)} km</span><span class="${b.economie >= 0 ? "ev-positif" : "ev-negatif"}">${b.economie >= 0 ? "Économie" : "Surcoût"} vs essence : ${euros(Math.abs(b.economie))}</span></div>`;
-  });
-  const total = bilanRecharges(journal);
-  $("ev-journal-bilan").innerHTML = `<div class="ev-tuiles">${tuile("cyan", `${nombre(total.kwh)} kWh`, "Énergie totale")}${tuile("violet", euros(total.cout), "Dépensé")}${tuile(total.economie >= 0 ? "good" : "bad", euros(Math.abs(total.economie)), total.economie >= 0 ? "Économisé" : "Surcoût")}</div>${lignes.join("")}`;
-  $("ev-journal-liste").innerHTML = journal
-    .slice(0, 15)
-    .map(
-      (e) => `<div class="ev-journal-ligne"><span>${new Date(e.ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${escapeHtml(e.lieu || "Recharge")}</span><span>${nombre(e.kwh, 1)} kWh · ${euros(e.cout_eur || 0)}${e.prix_estime ? " (estimé)" : ""}</span><button type="button" class="ev-lien" data-journal="${escapeHtml(e.id)}" title="Supprimer">✕</button></div>`,
-    )
-    .join("");
-  $("ev-journal-liste")
-    .querySelectorAll("[data-journal]")
-    .forEach((btn) =>
-      btn.addEventListener("click", () => {
-        retirerDuJournal(btn.dataset.journal);
-        rendreJournal();
-      }),
-    );
-}
-
-function cablerJournal() {
-  $("ev-journal-ajouter-btn").addEventListener("click", () => {
-    const kwh = nombreOuUndefined($("ev-journal-kwh").value);
-    if (!kwh || kwh <= 0) return toast("Indique l'énergie rechargée (kWh).");
-    ajouterAuJournal({ lieu: $("ev-journal-lieu").value.trim() || "Recharge", kwh, cout_eur: nombreOuUndefined($("ev-journal-cout").value) ?? 0, source: "manuel" });
-    for (const id of ["ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
-    toast("✅ Recharge ajoutée au journal");
-    rendreJournal();
-  });
-  for (const [id, cle] of [["ev-journal-conso-essence", "essence_l_100km"], ["ev-journal-prix-essence", "essence_prix_l"]]) {
-    $(id).addEventListener("change", () => {
-      const v = nombreOuUndefined($(id).value);
-      if (v !== undefined && v >= 0) sauverReglages({ [cle]: v });
-      rendreJournal();
-    });
-  }
-}
-
 // ── Outils : recherche de bornes et calculateur ────────────────────────────
 
 function cablerOutils() {
@@ -2227,38 +1911,6 @@ function rendreReglagesProfil() {
   }
 }
 
-// ── Abonnements de recharge (Profil) ───────────────────────────────────────
-
-function rendreAbonnements() {
-  const liste = listerAbonnements();
-  $("ev-abonnements-liste").innerHTML = liste.length
-    ? liste.map((a, i) => `<div class="ev-journal-ligne"><span>${badgeOperateur(a.reseau)}${escapeHtml(a.reseau)}</span><span>${euros(a.prix)}/kWh</span><button type="button" class="ev-lien" data-abo="${i}" title="Supprimer">✕</button></div>`).join("")
-    : hint("Aucun abonnement : les tarifs publics sont utilisés.");
-  $("ev-abonnements-liste")
-    .querySelectorAll("[data-abo]")
-    .forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const nouvelle = listerAbonnements();
-        nouvelle.splice(Number(btn.dataset.abo), 1);
-        sauverAbonnements(nouvelle);
-        rendreAbonnements();
-      }),
-    );
-}
-
-function cablerAbonnements() {
-  $("ev-abo-ajouter-btn").addEventListener("click", () => {
-    const reseau = $("ev-abo-reseau").value.trim();
-    const prix = nombreOuUndefined($("ev-abo-prix").value);
-    if (!reseau || !prix || prix <= 0) return toast("Indique le réseau et ton prix au kWh.");
-    sauverAbonnements([...listerAbonnements().filter((a) => a.reseau.toLowerCase() !== reseau.toLowerCase()), { reseau, prix }]);
-    $("ev-abo-reseau").value = "";
-    $("ev-abo-prix").value = "";
-    rendreAbonnements();
-    toast(`💳 Abonnement ${reseau} enregistré`);
-  });
-}
-
 // Explique un refus TomTom en clair (les codes seuls ne parlent à personne).
 function expliquerRefusTomTom(r) {
   if (r.ok) return "fonctionne";
@@ -2272,7 +1924,7 @@ function expliquerRefusTomTom(r) {
 
 function cablerProfil() {
   $("ev-export-donnees-btn").addEventListener("click", exporterSauvegarde);
-  $("ev-revoir-accueil-btn").addEventListener("click", afficherAccueil);
+  $("ev-revoir-accueil-btn").addEventListener("click", () => afficherAccueil(afficherVue));
   cablerAbonnements();
   $("ev-import-donnees-btn").addEventListener("click", () => $("ev-import-donnees-fichier").click());
   $("ev-import-donnees-fichier").addEventListener("change", (e) => {
@@ -2360,73 +2012,6 @@ export function initialiserUI() {
   positionDeDepart();
   proposerRepriseNavigation();
   // Nouveaux utilisateurs seulement (aucune clé encore saisie).
-  if (!lireReglages().accueil_vu && !getApiKeys().tomtom && !getApiKeys().openChargeMap) afficherAccueil();
+  if (!lireReglages().accueil_vu && !getApiKeys().tomtom && !getApiKeys().openChargeMap) afficherAccueil(afficherVue);
 }
 
-// ── Accueil du premier lancement ───────────────────────────────────────────
-
-const PAGES_ACCUEIL = [
-  {
-    icone: "⚡",
-    titre: "Bienvenue dans Trajet VE",
-    texte: "Les bornes de recharge autour de toi, et des trajets en voiture électrique avec les arrêts de recharge calculés pour ta voiture : batterie, météo, relief, prix.",
-  },
-  {
-    icone: "🔑",
-    titre: "Deux clés gratuites",
-    texte: "TomTom calcule les itinéraires, Open Charge Map trouve les bornes. Crée-les gratuitement (liens dans l'onglet 🚗 Profil) puis colle-les dans « Clés API ». Elles restent dans ce téléphone.",
-    action: { libelle: "Ouvrir le Profil", vue: "profil" },
-  },
-  {
-    icone: "🚗",
-    titre: "Ta voiture",
-    texte: "Toujours dans 🚗 Profil : capacité de la batterie, consommation, puissances de charge et prises acceptées. Les calculs s'y adaptent.",
-  },
-  {
-    icone: "💡",
-    titre: "Quelques astuces",
-    texte: "• « 3D » : carte inclinée avec les bâtiments.\n• 🌙 / 🗺️ / 🛰️ : fond de carte (nuit et jour automatiques).\n• 🎬 Mode démo : essayer la navigation sans rouler.\n• 💾 Profil > Exporter : sauvegarder tes données pour un autre téléphone.",
-  },
-];
-
-function afficherAccueil() {
-  document.getElementById("ev-accueil")?.remove();
-  const fond = document.createElement("div");
-  fond.id = "ev-accueil";
-  fond.className = "ev-accueil";
-  document.body.appendChild(fond);
-  let page = 0;
-  const fermer = () => {
-    sauverReglages({ accueil_vu: true });
-    fond.remove();
-  };
-  const rendre = () => {
-    const p = PAGES_ACCUEIL[page];
-    const derniere = page === PAGES_ACCUEIL.length - 1;
-    fond.innerHTML = `
-      <div class="ev-accueil-carte" role="dialog" aria-label="Présentation de l'appli">
-        <div class="ev-accueil-icone">${p.icone}</div>
-        <h2>${escapeHtml(p.titre)}</h2>
-        <p>${escapeHtml(p.texte).replace(/\n/g, "<br>")}</p>
-        ${p.action ? `<button type="button" class="ev-btn" data-accueil="action">${escapeHtml(p.action.libelle)}</button>` : ""}
-        <div class="ev-accueil-points">${PAGES_ACCUEIL.map((_, i) => `<span class="${i === page ? "actif" : ""}"></span>`).join("")}</div>
-        <div class="ev-accueil-boutons">
-          <button type="button" class="ev-lien" data-accueil="passer">${derniere ? "" : "Passer"}</button>
-          <button type="button" class="ev-btn-principal" data-accueil="suivant">${derniere ? "C'est parti !" : "Suivant"}</button>
-        </div>
-      </div>`;
-    fond.querySelector('[data-accueil="suivant"]').addEventListener("click", () => {
-      if (derniere) fermer();
-      else {
-        page++;
-        rendre();
-      }
-    });
-    fond.querySelector('[data-accueil="passer"]').addEventListener("click", fermer);
-    fond.querySelector('[data-accueil="action"]')?.addEventListener("click", () => {
-      fermer();
-      afficherVue(p.action.vue);
-    });
-  };
-  rendre();
-}

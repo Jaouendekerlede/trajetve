@@ -1,0 +1,20 @@
+# Tests automatiques à chaque publication : calcul de recharge, données,
+# appels réseau simulés (aucune clé ni quota utilisé).
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Vérification de la syntaxe
+        run: for f in js/*.js service-worker.js; do node --check "$f"; done
+      - name: Tests
+        run: npm test

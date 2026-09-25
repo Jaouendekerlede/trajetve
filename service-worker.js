@@ -3,7 +3,7 @@
 // suite, la copie ne sert que hors connexion. Les API externes (TomTom,
 // Open Charge Map, IRVE, Open-Meteo, cartes) ne passent jamais par ici.
 
-const CACHE_NOM = "trajetve-v15";
+const CACHE_NOM = "trajetve-v16";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -11,6 +11,12 @@ const FICHIERS_COQUILLE = [
   "./manifest.json",
   "./js/main.js",
   "./js/ui.js",
+  "./js/ui-commun.js",
+  "./js/ui-journal.js",
+  "./js/ui-abonnements.js",
+  "./js/ui-sauvegarde.js",
+  "./js/ui-parkings.js",
+  "./js/ui-accueil.js",
   "./js/trajet.js",
   "./js/planner.js",
   "./js/energie.js",
