@@ -27,6 +27,10 @@ import {
   listerJournal,
   ajouterAuJournal,
   retirerDuJournal,
+  consoMesuree,
+  appliquerAbonnements,
+  listerAbonnements,
+  sauverAbonnements,
 } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
@@ -67,7 +71,7 @@ import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
-import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante } from "./navigation.js";
+import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
 
 const $ = (id) => document.getElementById(id);
 const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
@@ -266,6 +270,11 @@ function afficherVue(vue, { etat, historique = true } = {}) {
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
   if (vue === "outils") rendreJournal();
+  // Mesures et abonnements ont pu changer depuis (navigation, autre écran).
+  if (vue === "profil") {
+    majConsoMesuree();
+    rendreAbonnements();
+  }
   const onglet = ONGLET_PAR_VUE[vue];
   if (onglet) document.querySelectorAll(".ev-nav-btn").forEach((b) => b.classList.toggle("actif", b.dataset.vue === onglet));
   $("ev-feuille-corps").scrollTop = 0;
@@ -342,7 +351,14 @@ function prixConnu(b) {
 
 function prixRetenuHtml(b) {
   if (b.prix_kwh_eur == null) return "";
-  const source = b.prix_source === "officiel" ? "tarif officiel déclaré" : b.prix_est_estimation ? "estimation par défaut, tarif réel non communiqué" : "tarif Open Charge Map";
+  const source =
+    b.prix_source === "abonnement"
+      ? `ton abonnement ${b.abonnement}`
+      : b.prix_source === "officiel"
+        ? "tarif officiel déclaré"
+        : b.prix_est_estimation
+          ? "estimation par défaut, tarif réel non communiqué"
+          : "tarif Open Charge Map";
   return `${euros(b.prix_kwh_eur)}/kWh (${source})`;
 }
 
@@ -372,7 +388,7 @@ function pastillesBorne(b) {
   const morceaux = [pastilleEtat(b.etat_dynamique), `<span class="ev-cb-pill ${cb.classe}">${cb.court}</span>`].filter(Boolean);
   const prix = prixConnu(b);
   if (o?.gratuit === "oui") morceaux.push(`<span class="ev-cb-pill ok">🎁 Gratuit</span>`);
-  else if (prix !== null) morceaux.push(`<span class="ev-cb-pill neutre">💶 ${euros(prix)}/kWh</span>`);
+  else if (prix !== null) morceaux.push(`<span class="ev-cb-pill ${b.abonnement ? "ok" : "neutre"}">${b.abonnement ? "💳" : "💶"} ${euros(prix)}/kWh${b.abonnement ? " (abonnement)" : ""}</span>`);
   if (o && /24\s*\/\s*7|24\s*h/i.test(o.horaires)) morceaux.push(`<span class="ev-cb-pill neutre">🕐 24h/24</span>`);
   return morceaux.join("");
 }
@@ -501,7 +517,7 @@ function renderBornes({ carteAussi = true } = {}) {
 async function enrichirProgressivement(bornes, toujoursValide) {
   for (let k = 0; k < bornes.length; k += 6) {
     const groupe = bornes.slice(k, k + 6);
-    await enrichirBornes(groupe);
+    appliquerAbonnements(await enrichirBornes(groupe));
     if (!toujoursValide()) return;
     if (filtres.size) renderBornes();
     else {
@@ -947,7 +963,7 @@ function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer =
   $("ev-station-note-input").value = obtenirNoteBorne(nom, b.lat, b.lon);
 
   if (b.officiel === undefined) {
-    enrichirBornes([b]).then(() => {
+    enrichirBornes([b]).then(appliquerAbonnements).then(() => {
       if (borneOuverte?.b === b) remplirFiche(b, contexteArret);
       rafraichirBorne(b);
     });
@@ -1502,6 +1518,28 @@ function quitterTrajet() {
   chargerBornesZone(true);
 }
 
+// Navigation coupée (appli fermée, téléphone redémarré…) : on propose de la
+// reprendre là où elle en était, avec la dernière batterie estimée.
+function proposerRepriseNavigation() {
+  const s = navigationInterrompue();
+  if (!s) return;
+  const bandeau = document.createElement("div");
+  bandeau.className = "ev-maj";
+  bandeau.innerHTML = `<span>🧭 Navigation interrompue vers ${escapeHtml(nomCourt(s.destination || "ta destination"))}</span><span class="ev-maj-boutons"><button type="button" class="ev-btn" data-reprise="oui">Reprendre</button><button type="button" class="ev-lien" data-reprise="non">✕</button></span>`;
+  document.body.appendChild(bandeau);
+  bandeau.querySelector('[data-reprise="oui"]').addEventListener("click", () => {
+    bandeau.remove();
+    dernierTrajet = s.plan;
+    dernierChargeDepartPct = s.batterie_pct;
+    dernieresOptions = s.options;
+    lancerNavigation(false);
+  });
+  bandeau.querySelector('[data-reprise="non"]').addEventListener("click", () => {
+    bandeau.remove();
+    oublierNavigationInterrompue();
+  });
+}
+
 function lancerNavigation(demo) {
   if (!dernierTrajet || navigationActive()) return;
   const options = dernieresOptions || construireOptions();
@@ -1773,7 +1811,7 @@ function demanderBornesADistance(minutes) {
     placerCurseur(r.lat, r.lon, `km ${r.distance_cible_km}`);
     const bornes = r.bornes || [];
     afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
-    await enrichirBornes(bornes);
+    appliquerAbonnements(await enrichirBornes(bornes));
     if (jeton === jetonFrise) afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
   }, 250);
 }
@@ -2146,18 +2184,37 @@ function rendreProfil() {
   $("ev-profil-ac").value = profil.puissance_ac_kw;
   $("ev-profil-dc").value = profil.puissance_dc_kw;
   $("ev-profil-domicile").value = profil.puissance_domicile_kw ?? "";
+  rendreAbonnements();
+  majConsoMesuree();
   $("ev-profil-connecteurs").value = (profil.connecteurs_acceptes || []).join(", ");
   $("ev-profil-saison").value = profil.saison || "mi_saison";
   $("ev-profil-prix-hc").value = profil.prix_hc_eur_kwh;
   $("ev-profil-prix-hp").value = profil.prix_hp_eur_kwh;
   $("ev-profil-part-hc").value = profil.part_hc_pct;
+  rendreReglagesProfil();
+}
 
+// Consommation mesurée en roulant (corrections de batterie en navigation).
+function majConsoMesuree() {
+  const mesure = consoMesuree();
+  $("ev-conso-mesuree").innerHTML = mesure
+    ? `Mesurée : <strong>${nombre(mesure.kwh_100km, 1)}</strong> sur ${mesure.km} km · <button type="button" class="ev-lien" id="ev-conso-utiliser-btn">Utiliser</button>`
+    : "Se mesure en roulant (batterie indiquée aux bornes)";
+  $("ev-conso-utiliser-btn")?.addEventListener("click", () => {
+    $("ev-profil-conso").value = mesure.kwh_100km;
+    toast("Valeur mesurée reprise : touche « Enregistrer » pour la garder");
+  });
+}
+
+function rendreReglagesProfil() {
+  const profil = obtenirProfilVehicule();
   const reglages = lireReglages();
   $("ev-reglage-domicile").value = reglages.adresse_domicile || "";
   $("ev-reglage-annonce").checked = !!reglages.annonce_vocale;
   $("ev-reglage-carte3d").value = reglages.carte_3d || "libre";
   $("ev-reglage-relief").checked = reglages.relief_3d === true;
   $("ev-reglage-jour-nuit").checked = reglages.jour_nuit_auto !== false;
+  $("ev-reglage-mode-voiture").checked = reglages.mode_voiture === true;
 
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
@@ -2168,6 +2225,38 @@ function rendreProfil() {
     const t = types[option.value];
     if (t) option.textContent = `${t.label} — ${t.puissance_kw} kW`;
   }
+}
+
+// ── Abonnements de recharge (Profil) ───────────────────────────────────────
+
+function rendreAbonnements() {
+  const liste = listerAbonnements();
+  $("ev-abonnements-liste").innerHTML = liste.length
+    ? liste.map((a, i) => `<div class="ev-journal-ligne"><span>${badgeOperateur(a.reseau)}${escapeHtml(a.reseau)}</span><span>${euros(a.prix)}/kWh</span><button type="button" class="ev-lien" data-abo="${i}" title="Supprimer">✕</button></div>`).join("")
+    : hint("Aucun abonnement : les tarifs publics sont utilisés.");
+  $("ev-abonnements-liste")
+    .querySelectorAll("[data-abo]")
+    .forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const nouvelle = listerAbonnements();
+        nouvelle.splice(Number(btn.dataset.abo), 1);
+        sauverAbonnements(nouvelle);
+        rendreAbonnements();
+      }),
+    );
+}
+
+function cablerAbonnements() {
+  $("ev-abo-ajouter-btn").addEventListener("click", () => {
+    const reseau = $("ev-abo-reseau").value.trim();
+    const prix = nombreOuUndefined($("ev-abo-prix").value);
+    if (!reseau || !prix || prix <= 0) return toast("Indique le réseau et ton prix au kWh.");
+    sauverAbonnements([...listerAbonnements().filter((a) => a.reseau.toLowerCase() !== reseau.toLowerCase()), { reseau, prix }]);
+    $("ev-abo-reseau").value = "";
+    $("ev-abo-prix").value = "";
+    rendreAbonnements();
+    toast(`💳 Abonnement ${reseau} enregistré`);
+  });
 }
 
 // Explique un refus TomTom en clair (les codes seuls ne parlent à personne).
@@ -2184,6 +2273,7 @@ function expliquerRefusTomTom(r) {
 function cablerProfil() {
   $("ev-export-donnees-btn").addEventListener("click", exporterSauvegarde);
   $("ev-revoir-accueil-btn").addEventListener("click", afficherAccueil);
+  cablerAbonnements();
   $("ev-import-donnees-btn").addEventListener("click", () => $("ev-import-donnees-fichier").click());
   $("ev-import-donnees-fichier").addEventListener("change", (e) => {
     const fichier = e.target.files?.[0];
@@ -2230,6 +2320,7 @@ function cablerProfil() {
       carte_3d: $("ev-reglage-carte3d").value,
       relief_3d: $("ev-reglage-relief").checked,
       jour_nuit_auto: $("ev-reglage-jour-nuit").checked,
+      mode_voiture: $("ev-reglage-mode-voiture").checked,
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
@@ -2267,6 +2358,7 @@ export function initialiserUI() {
   appliquerTheme();
   afficherVue("bornes", { etat: "bas", historique: false });
   positionDeDepart();
+  proposerRepriseNavigation();
   // Nouveaux utilisateurs seulement (aucune clé encore saisie).
   if (!lireReglages().accueil_vu && !getApiKeys().tomtom && !getApiKeys().openChargeMap) afficherAccueil();
 }

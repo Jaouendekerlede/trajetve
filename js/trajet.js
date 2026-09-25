@@ -3,7 +3,7 @@
 // mais exécuté directement dans le téléphone, sans serveur.
 
 import { getApiKeys, PALIERS_TEMPERATURE, MODES_TRAJET, MULTIPLICATEUR_CHARGE_LOURDE } from "./config.js";
-import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages } from "./storage.js";
+import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements } from "./storage.js";
 import { resoudreLieu, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km } from "./planner.js";
@@ -178,7 +178,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     seuilCoutEur: opts.seuil_cout_eur,
     mode: opts.mode,
     energie,
-    enrichirBornes: (bornes) => enrichirBornes(bornes, { attendreEtats: true }),
+    enrichirBornes: async (bornes) => appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true })),
     preferCb: opts.preferer_cb,
     fusionner: fusionnerBornes,
     bornesSupplementaires: async (lat, lon) => {
@@ -206,7 +206,22 @@ async function planifierSurItineraire(itin, chargePct, opts) {
       batterie: resultat.ok ? courbeBatterie(energie, kmPoints, chargePct, resultat.arrets, profil.capacite_kwh) : null,
     };
   }
+  complet.bouchons = bouchonsDuTrajet(_sections);
   return complet;
+}
+
+// Ralentissements annoncés par TomTom sur le tracé (indices de points),
+// pour les colorer sur la carte : 1-2 = ralentissement, 3-4 = bouchon.
+function bouchonsDuTrajet(sections) {
+  return (sections || [])
+    .filter((s) => String(s.sectionType).toUpperCase() === "TRAFFIC" && s.endPointIndex > s.startPointIndex)
+    .map((s) => ({
+      debut: s.startPointIndex,
+      fin: s.endPointIndex,
+      niveau: Number(s.magnitudeOfDelay) || (s.simpleCategory === "JAM" ? 3 : 1),
+      retard_min: Math.round((s.delayInSeconds || 0) / 60),
+      fermeture: s.simpleCategory === "ROAD_CLOSURE",
+    }));
 }
 
 // Avec opts.avec_alternatives, le résultat porte aussi les autres routes
@@ -299,7 +314,7 @@ export async function rechercherBornesAutour(lieu, filtres = {}) {
   let bornes = fusionnerBornes(recherche.ok ? recherche.bornes : [], extra).slice(0, 60);
   if (filtres.carte_bancaire_uniquement) {
     // Déclaration officielle d'abord ; à défaut, règle légale des ≥50 kW.
-    await enrichirBornes(bornes);
+    appliquerAbonnements(await enrichirBornes(bornes));
     bornes = bornes.filter((b) => (b.officiel && !b.officiel.indisponible ? b.officiel.paiement_cb !== "non" : b.paiement_cb_probable));
   }
   return { ok: true, lieu: l.nom, lat: l.lat, lon: l.lon, bornes };
@@ -315,6 +330,6 @@ export async function bornesUrgence(lieuDeSecours) {
   if (!recherche.ok) return recherche;
   const connecteurs = obtenirProfilVehicule().connecteurs_acceptes;
   const bornes = recherche.bornes.filter((b) => borneCompatible(b, connecteurs)).slice(0, 3);
-  await enrichirBornes(bornes);
+  appliquerAbonnements(await enrichirBornes(bornes));
   return { ...recherche, bornes };
 }

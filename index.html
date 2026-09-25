@@ -346,7 +346,7 @@
         <div class="ev-grille-champs">
           <label class="ev-champ ev-large">Nom<input type="text" id="ev-profil-nom" class="ev-input"></label>
           <label class="ev-champ">Batterie (kWh)<input type="number" step="0.1" id="ev-profil-capacite" class="ev-input" inputmode="decimal"></label>
-          <label class="ev-champ">Conso (kWh/100 km)<input type="number" step="0.1" id="ev-profil-conso" class="ev-input" inputmode="decimal"></label>
+          <label class="ev-champ">Conso (kWh/100 km)<input type="number" step="0.1" id="ev-profil-conso" class="ev-input" inputmode="decimal"><small id="ev-conso-mesuree" class="ev-aide-champ"></small></label>
           <label class="ev-champ">Charge AC max (kW)<input type="number" step="0.1" id="ev-profil-ac" class="ev-input" inputmode="decimal"></label>
           <label class="ev-champ">Charge DC max (kW)<input type="number" step="0.1" id="ev-profil-dc" class="ev-input" inputmode="decimal"><small class="ev-aide-champ">Puissance max réelle (Kona 64 kWh : 77)</small></label>
           <label class="ev-champ">Borne à domicile (kW)<input type="number" step="0.1" id="ev-profil-domicile" class="ev-input" inputmode="decimal"><small class="ev-aide-champ">Borne « 7 kW » = 7,4</small></label>
@@ -382,6 +382,7 @@
       <div class="ev-carte-bloc">
         <h3>Cartes</h3>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-jour-nuit"> 🌗 Carte de nuit / de jour automatique (au coucher et au lever du soleil)</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-mode-voiture"> 🚗 Mode voiture : grands boutons et textes pendant la navigation</label>
         <label class="ev-champ">Fournisseur de la carte 3D
           <select id="ev-reglage-carte3d" class="ev-input">
             <option value="libre">OpenFreeMap — gratuite, sans clé ni limite</option>
@@ -390,6 +391,17 @@
         </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-relief"> ⛰️ Relief du terrain (collines, vallées) — utile en montagne ; en ville, les bâtiments peuvent masquer le tracé, et un peu plus de batterie</label>
         <div class="ev-hint">Si la carte choisie ne répond pas, l'autre prend le relais ; sinon la navigation passe en 2D.</div>
+      </div>
+
+      <div class="ev-carte-bloc">
+        <h3>💳 Mes abonnements de recharge</h3>
+        <div class="ev-hint">Réseau tel qu'il apparaît sur les bornes (ex. Ionity, Tesla, Electra) et ton prix au kWh avec l'abonnement : il remplace le tarif public dans les calculs.</div>
+        <div id="ev-abonnements-liste" class="ev-journal-liste"></div>
+        <div class="ev-grille-2">
+          <input type="text" id="ev-abo-reseau" class="ev-input" placeholder="Réseau (ex. Ionity)">
+          <input type="number" id="ev-abo-prix" class="ev-input" min="0" step="0.01" placeholder="Prix €/kWh" inputmode="decimal">
+        </div>
+        <button id="ev-abo-ajouter-btn" class="ev-btn" type="button">➕ Ajouter l'abonnement</button>
       </div>
 
       <div class="ev-carte-bloc">
@@ -417,7 +429,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 14 du 25/09/2026 : courbe de charge, bornes hors service, parkings</div>
+      <div class="ev-hint ev-lien-centre">Version 15 du 25/09/2026 : bouchons, reprise, abonnements, mode voiture</div>
     </div>
   </div>
 </section>

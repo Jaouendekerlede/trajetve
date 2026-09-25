@@ -153,6 +153,10 @@ button { font-family: inherit; color: inherit; }
   border-radius: 5px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
+/* Étiquette de batterie à côté d'un arrêt de recharge */
+.ev-etiquette-arret { display: inline-block; white-space: nowrap; padding: 2px 7px; border-radius: 8px; background: var(--chip); color: var(--texte); border: 1px solid rgba(79, 224, 255, 0.6); font-size: 11.5px; font-weight: 800; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
+.ev-etiquette-arret-3d { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); }
+
 /* Parkings */
 .ev-parking { position: relative; width: 24px; height: 24px; border-radius: 6px; background: #2d6cdf; color: #fff; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); cursor: pointer; }
 .ev-parking b { position: absolute; top: -8px; right: -8px; font-size: 11px; }
@@ -666,6 +670,31 @@ body.ev-mode-navigation .ev-carte { left: 0; }
   z-index: 2;
 }
 .ev-nav-carte-titre { font-size: 18px; font-weight: 800; color: var(--vert-clair); }
+
+/* Téléphone à l'horizontale (support voiture) : consignes et infos dans une
+   colonne à gauche, la carte et la voiture à droite. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .ev-navigation { --col-nav: min(44vw, 420px); }
+  .ev-nav-haut { right: auto; width: var(--col-nav); }
+  .ev-nav-bas { right: auto; width: var(--col-nav); border-top-right-radius: 16px; }
+  .ev-nav-infos strong { font-size: 16px; }
+  .ev-nav-vitesse-bloc { left: calc(var(--col-nav) + 14px); bottom: calc(12px + var(--securite-bas)); flex-direction: row; }
+  .ev-nav-boutons { bottom: calc(12px + var(--securite-bas)); }
+  .ev-nav-boutons .ev-fab { width: 44px; height: 44px; font-size: 18px; }
+  .ev-nav-recentrer { left: calc(var(--col-nav) + (100vw - var(--col-nav)) / 2); bottom: calc(14px + var(--securite-bas)); }
+  .ev-nav-carte { right: auto; width: var(--col-nav); bottom: calc(76px + var(--securite-bas)); max-height: calc(100vh - 100px); overflow-y: auto; }
+}
+
+/* Mode voiture : tout en plus grand, facile à viser d'un doigt en roulant. */
+body.ev-mode-voiture .ev-nav-distance { font-size: 38px; }
+body.ev-mode-voiture .ev-nav-instruction { font-size: 20px; }
+body.ev-mode-voiture .ev-nav-fleche { font-size: 56px; width: 64px; }
+body.ev-mode-voiture .ev-nav-boutons .ev-fab { width: 60px; height: 60px; font-size: 26px; }
+body.ev-mode-voiture .ev-nav-stop { width: 62px; height: 62px; font-size: 26px; }
+body.ev-mode-voiture .ev-nav-infos strong { font-size: 22px; }
+body.ev-mode-voiture .ev-nav-vitesse { width: 78px; height: 78px; }
+body.ev-mode-voiture .ev-nav-vitesse strong { font-size: 30px; }
+body.ev-mode-voiture .ev-nav-limite { width: 64px; height: 64px; font-size: 24px; }
 .ev-nav-carte-sous { font-size: 12.5px; color: var(--texte-att); }
 
 .ev-nav-bas {
@@ -738,6 +767,7 @@ body.ev-mode-navigation .ev-carte { left: 0; }
 /* Bandeau « nouvelle version disponible » */
 .ev-maj { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + 12px + var(--securite-bas)); z-index: 950; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; background: var(--panneau); border: 1px solid var(--vert); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); font-size: 14px; font-weight: 600; }
 .ev-maj .ev-btn { flex-shrink: 0; padding: 8px 12px; }
+.ev-maj-boutons { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* ── Grand écran (PC, tablette) : panneau à gauche ─────────────────────── */
 @media (min-width: 900px) {

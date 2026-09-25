@@ -8,7 +8,7 @@
 
 import { getApiKeys } from "./config.js";
 import { haversineKm } from "./geo.js";
-import { classePuissance, puissanceBorne, htmlIconeParking } from "./carte.js";
+import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
@@ -393,6 +393,8 @@ async function creerCarte(fournisseur, fond, relief) {
   carte.on("dragstart", (e) => e.originalEvent && surDeplacementManuel?.());
   carte.on("zoomstart", (e) => e.originalEvent && surDeplacementManuel?.());
   surveiller();
+  // Mention des sources repliée (« i ») : dépliée, elle recouvre la carte.
+  conteneur.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
   nomFournisseur = fond === "satellite" ? "satellite Esri" : FOURNISSEURS[fournisseur];
   if (vueAvant) carte.jumpTo(vueAvant);
   if (enNavigation) {
@@ -468,7 +470,7 @@ async function preparerMaintenant({ sombre = true, fond = sombre ? "sombre" : "p
 const INCLINAISON_EXPLO = 50;
 const SANS_MARGE = { top: 0, left: 0, right: 0, bottom: 0 };
 const VIDE = { type: "FeatureCollection", features: [] };
-const COUCHES_EXPLO = ["alt-ligne", "alt-zone", "plan-halo", "plan-aller", "plan-retour"];
+const COUCHES_EXPLO = ["alt-ligne", "alt-zone", "plan-halo", "plan-aller", "plan-retour", "plan-bouchons"];
 
 const explo = {
   actif: false,
@@ -507,6 +509,8 @@ function ajouterCouchesExplo() {
   carte.addLayer({ id: "plan-halo", type: "line", source: "plan", filter: filtre("aller"), layout: rond, paint: { "line-color": "#04221a", "line-width": 11, "line-opacity": 0.35 } }, dessous);
   carte.addLayer({ id: "plan-aller", type: "line", source: "plan", filter: filtre("aller"), layout: rond, paint: { "line-color": "#22e5a0", "line-width": 6, "line-opacity": 0.95 } }, dessous);
   carte.addLayer({ id: "plan-retour", type: "line", source: "plan", filter: filtre("retour"), paint: { "line-color": "#ffb400", "line-width": 4, "line-opacity": 0.85, "line-dasharray": [2, 2] } }, dessous);
+  // Ralentissements et bouchons par-dessus le tracé (couleur calculée par carte.js).
+  carte.addLayer({ id: "plan-bouchons", type: "line", source: "plan", filter: filtre("bouchon"), layout: rond, paint: { "line-color": ["get", "couleur"], "line-width": 6, "line-opacity": 0.95 } }, dessous);
   carte.on("click", "alt-zone", (e) => explo.alternatives[e.features?.[0]?.properties?.i]?.onClic?.());
   carte.on("moveend", () => {
     if (!explo.actif || enNavigation) return;
@@ -635,6 +639,12 @@ function rendreAlternatives() {
 function marqueurArret(arret, taille, couleur, titre) {
   const el = pastille(taille, couleur, "🔋");
   el.title = titre;
+  const batterie = texteBatterieArret(arret);
+  if (batterie) {
+    el.style.position = "relative";
+    el.insertAdjacentHTML("beforeend", `<span class="ev-etiquette-arret ev-etiquette-arret-3d"></span>`);
+    el.lastElementChild.textContent = batterie;
+  }
   el.style.cursor = "pointer";
   el.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -653,6 +663,10 @@ function rendreTrajet(recadrer) {
     return;
   }
   const features = [{ type: "Feature", properties: { type: "aller" }, geometry: { type: "LineString", coordinates: d.coords } }];
+  for (const b of d.bouchons || []) {
+    const morceau = d.coords.slice(b.debut, b.fin + 1);
+    if (morceau.length >= 2) features.push({ type: "Feature", properties: { type: "bouchon", couleur: couleurBouchon(b) }, geometry: { type: "LineString", coordinates: morceau } });
+  }
   const limites = d.coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(d.coords[0], d.coords[0]));
   const m = [];
   if (d.retour?.ok && d.retour.coords?.length) {
@@ -940,7 +954,8 @@ export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true
     zoom: zoom + ECART_ZOOM,
     bearing: sensDeMarche ? cap || 0 : 0,
     pitch: INCLINAISON,
-    padding: { top: hauteur * 0.42, bottom: 0, left: 0, right: 0 },
+    // En paysage, la colonne de gauche est retirée de la zone utile.
+    padding: { top: hauteur * 0.42, bottom: 0, left: decalageNavGauche(), right: 0 },
   };
   if (anime) carte.easeTo({ ...vue, duration: 600 });
   else carte.jumpTo(vue);

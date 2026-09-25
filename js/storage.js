@@ -195,6 +195,61 @@ export function retirerDuJournal(id) {
   ecrireJson(STORAGE_KEYS.journal, listerJournal().filter((e) => e.id !== id));
 }
 
+// ── Abonnements de recharge ────────────────────────────────────────────────
+// { reseau: "Ionity", prix: 0.39 } : sur les bornes de ce réseau, le prix
+// de l'abonnement remplace le tarif public (et les estimations).
+
+export function listerAbonnements() {
+  return (lireReglages().abonnements || []).filter((a) => a.reseau && a.prix > 0);
+}
+
+export function sauverAbonnements(abonnements) {
+  sauverReglages({ abonnements });
+}
+
+export function appliquerAbonnements(bornes) {
+  const abonnements = listerAbonnements();
+  if (!abonnements.length) return bornes;
+  for (const b of bornes) {
+    const noms = [b.operateur, b.officiel?.operateur, b.officiel?.enseigne, b.nom, b.nom_borne].filter(Boolean).join(" ").toLowerCase();
+    const abo = abonnements.find((a) => noms.includes(a.reseau.trim().toLowerCase()));
+    if (!abo) continue;
+    b.prix_kwh_eur = abo.prix;
+    b.prix_est_estimation = false;
+    b.prix_source = "abonnement";
+    b.abonnement = abo.reseau;
+  }
+  return bornes;
+}
+
+// ── Consommation mesurée en roulant ────────────────────────────────────────
+// Chaque correction de batterie en navigation donne une mesure réelle :
+// kWh consommés sur une distance connue.
+
+const CLE_CONSO = "trajetve_conso_mesures";
+const MAX_MESURES = 60;
+const KM_MIN_MESURE = 20;
+const KM_MIN_TOTAL = 50;
+
+export function enregistrerMesureConso(km, kwh) {
+  const kwh100 = (kwh / km) * 100;
+  // Mesure trop courte ou invraisemblable (erreur de saisie) : ignorée.
+  if (km < KM_MIN_MESURE || kwh100 < 6 || kwh100 > 45) return false;
+  const mesures = lireJson(CLE_CONSO, []);
+  mesures.unshift({ ts: Date.now(), km: Math.round(km * 10) / 10, kwh: Math.round(kwh * 100) / 100 });
+  ecrireJson(CLE_CONSO, mesures.slice(0, MAX_MESURES));
+  return true;
+}
+
+// Moyenne pondérée par la distance, ou null s'il n'y a pas assez de km.
+export function consoMesuree() {
+  const mesures = lireJson(CLE_CONSO, []);
+  const km = mesures.reduce((s, m) => s + m.km, 0);
+  if (km < KM_MIN_TOTAL) return null;
+  const kwh = mesures.reduce((s, m) => s + m.kwh, 0);
+  return { kwh_100km: Math.round((kwh / km) * 1000) / 10, km: Math.round(km), nb: mesures.length };
+}
+
 // ── Sauvegarde complète (changement de téléphone) ──────────────────────────
 // Toutes les données de l'appli sont dans le localStorage sous des clés
 // « trajetve_… » : on les exporte telles quelles dans un fichier.

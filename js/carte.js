@@ -213,6 +213,14 @@ export function majVoiture(lat, lon, cap) {
 // Suit la voiture : en mode "sens de marche", la carte tourne pour que la
 // route devant soit en haut ; la voiture est placée vers le bas de l'écran
 // pour voir plus loin devant.
+// Largeur de la colonne de consignes quand le téléphone est à l'horizontale
+// (0 en portrait) : lue sur l'écran, partagée avec la carte 3D.
+export function decalageNavGauche() {
+  if (!matchMedia("(orientation: landscape) and (max-height: 560px)").matches) return 0;
+  const colonne = document.querySelector(".ev-nav-haut");
+  return colonne ? colonne.getBoundingClientRect().right : 0;
+}
+
 export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true) {
   // Mesuré : setBearing(90) met l'est en BAS de l'écran (rotation horaire).
   // Pour avoir le cap en haut, il faut donc tourner de -cap.
@@ -220,9 +228,14 @@ export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true
   if (rotationDispo && Math.abs(((carte.getBearing() - bearing + 540) % 360) - 180) > 0.5) carte.setBearing(bearing);
   const hauteur = carte.getSize().y;
   const recul = hauteur * 0.2;
-  // Le haut de l'écran, exprimé dans le plan non tourné de la carte.
+  // Le haut et la droite de l'écran, exprimés dans le plan non tourné de la
+  // carte. En paysage, la colonne de gauche cache une partie de la carte :
+  // la voiture se place au milieu de ce qui reste visible.
   const angle = (-bearing * Math.PI) / 180;
-  const point = carte.project([lat, lon], zoom).add([Math.sin(angle) * recul, -Math.cos(angle) * recul]);
+  const decalage = decalageNavGauche() / 2;
+  const point = carte
+    .project([lat, lon], zoom)
+    .add([Math.sin(angle) * recul - Math.cos(angle) * decalage, -Math.cos(angle) * recul - Math.sin(angle) * decalage]);
   carte.setView(carte.unproject(point, zoom), zoom, { animate: anime, duration: 0.9, easeLinearity: 1 });
 }
 
@@ -469,6 +482,20 @@ function pastille(taille, couleur, contenu = "") {
   });
 }
 
+export function couleurBouchon(b) {
+  return b.fermeture ? "#8b0000" : b.niveau >= 3 ? "#ff3b30" : "#ffb400";
+}
+
+export function texteBouchon(b) {
+  const nature = b.fermeture ? "Route fermée" : b.niveau >= 3 ? "Bouchon" : "Ralentissement";
+  return b.retard_min ? `${nature} : +${b.retard_min} min` : nature;
+}
+
+// Étiquette de batterie d'un arrêt : « 12 → 85 % ».
+export function texteBatterieArret(a) {
+  return a.pct_arrivee_borne != null && a.pct_depart_borne != null ? `🔋 ${Math.round(a.pct_arrivee_borne)} → ${Math.round(a.pct_depart_borne)} %` : "";
+}
+
 function ajouterArrets(arrets, icone, prefixe, onClicArret) {
   (arrets || []).forEach((arret, i) => {
     if (arret.lat === undefined || arret.lon === undefined) return;
@@ -476,6 +503,14 @@ function ajouterArrets(arrets, icone, prefixe, onClicArret) {
       .bindTooltip(`${escapeHtml(prefixe(i))} : ${escapeHtml(arret.nom_borne || "Borne")}`)
       .on("click", () => onClicArret(arret))
       .addTo(coucheTrajet);
+    const batterie = texteBatterieArret(arret);
+    if (batterie) {
+      L.marker([arret.lat, arret.lon], {
+        icon: L.divIcon({ className: "", iconSize: [0, 0], iconAnchor: [-18, 10], html: `<span class="ev-etiquette-arret">${escapeHtml(batterie)}</span>` }),
+        interactive: false,
+        zIndexOffset: 4900,
+      }).addTo(coucheTrajet);
+    }
   });
 }
 
@@ -504,6 +539,14 @@ function afficherTrajet2D(data, onClicArret) {
   if (!data?.coords?.length) return;
 
   const aller = L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#22e5a0", weight: 6, opacity: 0.9 }).addTo(coucheTrajet);
+  // Ralentissements et bouchons par-dessus le tracé.
+  for (const b of data.bouchons || []) {
+    const morceau = data.coords.slice(b.debut, b.fin + 1).map(([lon, lat]) => [lat, lon]);
+    if (morceau.length < 2) continue;
+    L.polyline(morceau, { color: couleurBouchon(b), weight: 6, opacity: 0.95, interactive: true })
+      .bindTooltip(texteBouchon(b), { sticky: true })
+      .addTo(coucheTrajet);
+  }
   L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#04221a", weight: 10, opacity: 0.35 }).addTo(coucheTrajet).bringToBack();
   let limites = aller.getBounds();
 

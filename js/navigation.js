@@ -5,7 +5,7 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { haversineKm } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
@@ -230,6 +230,14 @@ function secondesRestantesJusqua(offsetCible) {
     s += (t.duree * (fin - debut)) / longueur;
   }
   return s;
+}
+
+// La voiture indique pctReel : consommation réelle depuis le dernier repère
+// de batterie (départ, borne ou correction précédente).
+function mesurerConso(pctReel) {
+  const km = (etat.odometre - etat.batterie.refOdometre) / 1000;
+  const kwh = ((etat.batterie.refPct - pctReel) / 100) * etat.capacite;
+  if (kwh > 0) enregistrerMesureConso(km, kwh);
 }
 
 function batterieEstimee() {
@@ -473,17 +481,24 @@ function arriveeBorne(arret) {
     <div class="ev-nav-carte-titre">🔌 ${escapeHtml(arret.nom_borne)}</div>
     <div>Recharge conseillée : <strong>${arret.pct_arrivee_borne} % → ${arret.pct_depart_borne} %</strong> · environ <strong>${arret.temps_charge_min} min</strong> à ${arret.puissance_kw} kW</div>
     <div class="ev-nav-carte-sous">${escapeHtml(arret.adresse || "")}</div>
+    <label class="ev-champ">Batterie affichée par la voiture à l'arrivée : <span id="ev-nav-arrivee-val" class="ev-valeur">${Math.round(batterieEstimee())}</span> %
+      <input type="range" min="0" max="100" value="${Math.round(batterieEstimee())}" id="ev-nav-arrivee-input" class="ev-curseur">
+    </label>
     <label class="ev-champ">Batterie en repartant : <span id="ev-nav-reprise-val" class="ev-valeur">${arret.pct_depart_borne}</span> %
       <input type="range" min="5" max="100" value="${arret.pct_depart_borne}" id="ev-nav-reprise-input" class="ev-curseur">
     </label>
     <button type="button" id="ev-nav-reprendre-btn" class="ev-btn-principal">▶ Reprendre la route</button>`;
   carteBorne.classList.remove("hidden");
   $("ev-nav-reprise-input").addEventListener("input", (e) => ($("ev-nav-reprise-val").textContent = e.target.value));
-  const pctArrivee = batterieEstimee();
+  $("ev-nav-arrivee-input").addEventListener("input", (e) => ($("ev-nav-arrivee-val").textContent = e.target.value));
+  const pctEstime = batterieEstimee();
   $("ev-nav-reprendre-btn").addEventListener("click", () => {
     const pctRepart = Number($("ev-nav-reprise-input").value);
+    const pctArrivee = Number($("ev-nav-arrivee-input").value);
+    // Batterie réelle indiquée : mesure de la consommation depuis le dernier repère.
+    if (!etat.demo && Math.abs(pctArrivee - pctEstime) >= 1) mesurerConso(pctArrivee);
     // Journal des recharges (pas en démo) : kWh réellement ajoutés d'après
-    // la batterie estimée à l'arrivée et celle indiquée au départ.
+    // la batterie à l'arrivée et celle indiquée au départ.
     const kwh = Math.round(((pctRepart - pctArrivee) * etat.capacite) / 10) / 10;
     if (!etat.demo && kwh >= 0.5) {
       ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation" });
@@ -878,12 +893,14 @@ function cablerBoutons() {
   });
   $("ev-nav-batt-input").addEventListener("input", (e) => ($("ev-nav-batt-val").textContent = e.target.value));
   $("ev-nav-batt-ok").addEventListener("click", () => {
+    if (!etat.demo) mesurerConso(Number($("ev-nav-batt-input").value));
     etat.batterie = { refPct: Number($("ev-nav-batt-input").value), refOdometre: etat.odometre };
     etat.alerteBatterieAffichee = false;
     $("ev-nav-batterie-panneau").classList.add("hidden");
     majEcran();
   });
   $("ev-nav-replan-btn").addEventListener("click", () => {
+    if (!etat.demo) mesurerConso(Number($("ev-nav-batt-input").value));
     etat.batterie = { refPct: Number($("ev-nav-batt-input").value), refOdometre: etat.odometre };
     $("ev-nav-batterie-panneau").classList.add("hidden");
     replanifier();
@@ -1019,6 +1036,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   };
 
   document.body.classList.add("ev-mode-navigation");
+  document.body.classList.toggle("ev-mode-voiture", lireReglages().mode_voiture === true);
   $("ev-navigation").classList.remove("hidden");
   $("ev-nav-etape-borne").classList.add("hidden");
   $("ev-nav-batterie-panneau").classList.add("hidden");
@@ -1068,12 +1086,54 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   const premiere = route.instructions.find((i) => i.type !== "LOCATION_DEPARTURE");
   parler(`C'est parti. ${premiere ? premiere.message : ""}`, true);
   if (demo) demarrerDemo();
-  else demarrerGps();
+  else {
+    demarrerGps();
+    etat.minuteurSauvegarde = setInterval(sauverNavigation, INTERVALLE_SAUVEGARDE_MS);
+    window.addEventListener("pagehide", sauverNavigation);
+  }
   surPosition({ ...depart, t: Date.now() });
+}
+
+// ── Reprise après coupure ───────────────────────────────────────────────────
+// Appel, écran verrouillé, appli fermée par Android : la navigation en cours
+// est gardée (hors clé « trajetve_ » : pas dans les sauvegardes), et proposée
+// à la réouverture pendant un moment.
+
+const CLE_NAVIGATION = "tve_navigation_en_cours";
+const INTERVALLE_SAUVEGARDE_MS = 15000;
+const DUREE_REPRISE_MS = 45 * 60 * 1000;
+
+function sauverNavigation() {
+  if (!etat || etat.demo || etat.arrive) return;
+  try {
+    const arretsFaits = (etat.plan.arrets || []).length - etat.arretsRestants.length;
+    localStorage.setItem(CLE_NAVIGATION, JSON.stringify({ ts: Date.now(), plan: etat.plan, options: etat.options, arrets_faits: Math.max(0, arretsFaits), batterie_pct: Math.round(batterieEstimee()) }));
+  } catch {
+    // Stockage plein : la reprise ne sera simplement pas proposée.
+  }
+}
+
+export function oublierNavigationInterrompue() {
+  localStorage.removeItem(CLE_NAVIGATION);
+}
+
+// { plan, options, batterie_pct, destination } si une navigation a été
+// interrompue récemment, sinon null.
+export function navigationInterrompue() {
+  try {
+    const s = JSON.parse(localStorage.getItem(CLE_NAVIGATION));
+    if (!s || Date.now() - s.ts > DUREE_REPRISE_MS) return null;
+    return { plan: { ...s.plan, arrets: (s.plan.arrets || []).slice(s.arrets_faits) }, options: s.options, batterie_pct: s.batterie_pct, destination: s.plan.to_name };
+  } catch {
+    return null;
+  }
 }
 
 export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
+  clearInterval(etat.minuteurSauvegarde);
+  window.removeEventListener("pagehide", sauverNavigation);
+  oublierNavigationInterrompue();
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
   if (etat.demoTimer) clearInterval(etat.demoTimer);
   if (etat.raf) cancelAnimationFrame(etat.raf);
@@ -1088,7 +1148,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   etat = null;
   vue.montrerBornes(false);
   vue.quitterNavigation();
-  document.body.classList.remove("ev-mode-navigation");
+  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture");
   $("ev-navigation").classList.add("hidden");
   if (!depuisRetour && history.state?.navigation) {
     retourEnCours = true;
