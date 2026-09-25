@@ -352,18 +352,31 @@
       </div>
 
       <div class="ev-carte-bloc">
+        <h3>Carte de navigation 3D</h3>
+        <label class="ev-champ">Fournisseur de la carte
+          <select id="ev-reglage-carte3d" class="ev-input">
+            <option value="libre">OpenFreeMap — gratuite, sans clé ni limite</option>
+            <option value="tomtom">TomTom — utilise ta clé TomTom</option>
+          </select>
+        </label>
+        <div class="ev-hint">Si la carte choisie ne répond pas, l'autre prend le relais ; sinon la navigation passe en 2D.</div>
+      </div>
+
+      <div class="ev-carte-bloc">
         <h3>Clés API</h3>
         <div class="ev-hint">Gratuites. Elles restent uniquement dans ce téléphone.</div>
         <label class="ev-champ">Clé TomTom (itinéraires) — <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">créer</a>
           <input type="text" id="ev-cle-tomtom" class="ev-input" autocomplete="off" spellcheck="false">
         </label>
+        <button id="ev-tester-tomtom-btn" class="ev-btn" type="button">🔍 Tester ma clé TomTom</button>
+        <div id="ev-tester-tomtom-resultat" class="ev-diagnostic hidden"></div>
         <label class="ev-champ">Clé Open Charge Map (bornes) — <a href="https://openchargemap.org/site/signup" target="_blank" rel="noopener">créer</a>
           <input type="text" id="ev-cle-ocm" class="ev-input" autocomplete="off" spellcheck="false">
         </label>
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
-      <div class="ev-hint ev-lien-centre">Version 10 du 25/09/2026 : 3D plus fiable, plus d'écran noir</div>
+      <div class="ev-hint ev-lien-centre">Version 11 du 25/09/2026 : carte 3D OpenFreeMap, test de la clé TomTom</div>
     </div>
   </div>
 </section>

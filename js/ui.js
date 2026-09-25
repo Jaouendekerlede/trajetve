@@ -24,6 +24,7 @@ import {
   sauverReglages,
 } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
+import { diagnostiquerCleTomTom } from "./tomtom.js";
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
 import {
   initCarte,
@@ -1851,6 +1852,7 @@ function rendreProfil() {
   const reglages = lireReglages();
   $("ev-reglage-domicile").value = reglages.adresse_domicile || "";
   $("ev-reglage-annonce").checked = !!reglages.annonce_vocale;
+  $("ev-reglage-carte3d").value = reglages.carte_3d || "libre";
 
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
@@ -1863,7 +1865,36 @@ function rendreProfil() {
   }
 }
 
+// Explique un refus TomTom en clair (les codes seuls ne parlent à personne).
+function expliquerRefusTomTom(r) {
+  if (r.ok) return "fonctionne";
+  const m = (r.message || "").toLowerCase();
+  if (r.statut === 401) return "clé inconnue : vérifie qu'elle est bien recopiée";
+  if (/qps|rate|limit|quota|over/.test(m)) return `quota TomTom dépassé (« ${r.message} ») : réessaie plus tard`;
+  if (r.statut === 403) return `refusé par TomTom (« ${r.message || "accès interdit"} ») : sur developer.tomtom.com, vérifie que ce service est coché pour ta clé`;
+  if (r.statut === 0) return r.message;
+  return `erreur HTTP ${r.statut}${r.message ? ` (« ${r.message} »)` : ""}`;
+}
+
 function cablerProfil() {
+  $("ev-tester-tomtom-btn").addEventListener("click", async () => {
+    const cle = $("ev-cle-tomtom").value.trim() || getApiKeys().tomtom;
+    const zone = $("ev-tester-tomtom-resultat");
+    zone.classList.remove("hidden");
+    if (!cle) {
+      zone.textContent = "Saisis d'abord ta clé TomTom.";
+      return;
+    }
+    const bouton = $("ev-tester-tomtom-btn");
+    bouton.disabled = true;
+    zone.textContent = "⏳ Test en cours…";
+    try {
+      const resultats = await diagnostiquerCleTomTom(cle);
+      zone.innerHTML = resultats.map((r) => `<div>${r.ok ? "✅" : "❌"} <strong>${escapeHtml(r.service)}</strong> : ${escapeHtml(expliquerRefusTomTom(r))}</div>`).join("");
+    } finally {
+      bouton.disabled = false;
+    }
+  });
   $("ev-profil-save-btn").addEventListener("click", () => {
     const avaitCleOcm = !!getApiKeys().openChargeMap;
     const connecteurs = $("ev-profil-connecteurs").value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -1879,7 +1910,11 @@ function cablerProfil() {
       connecteurs_acceptes: connecteurs.length ? connecteurs : undefined,
       saison: $("ev-profil-saison").value,
     });
-    sauverReglages({ adresse_domicile: $("ev-reglage-domicile").value.trim(), annonce_vocale: $("ev-reglage-annonce").checked });
+    sauverReglages({
+      adresse_domicile: $("ev-reglage-domicile").value.trim(),
+      annonce_vocale: $("ev-reglage-annonce").checked,
+      carte_3d: $("ev-reglage-carte3d").value,
+    });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
     if (getApiKeys().tomtom !== ancienneCleTomTom) rechargerFond();

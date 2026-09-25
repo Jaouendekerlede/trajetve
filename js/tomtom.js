@@ -65,6 +65,43 @@ function lireRoute(route) {
   };
 }
 
+// Texte d'explication d'un refus TomTom (JSON detailedError, ou page HTML
+// du type « Developer Over Qps » pour un dépassement de quota).
+export async function lireRefusTomTom(reponse) {
+  try {
+    const texte = await reponse.text();
+    try {
+      const j = JSON.parse(texte);
+      return j.detailedError?.message || j.error?.description || j.errorText || texte.slice(0, 120);
+    } catch {
+      return texte.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+    }
+  } catch {
+    return "";
+  }
+}
+
+// Vérifie, l'un après l'autre, chaque service TomTom utilisé par l'appli.
+export async function diagnostiquerCleTomTom(cle) {
+  const k = encodeURIComponent(cle);
+  const services = [
+    ["Itinéraires", `https://api.tomtom.com/routing/1/calculateRoute/48.1110,-1.6800:48.1200,-1.6600/json?key=${k}`],
+    ["Cartes 2D", `https://api.tomtom.com/map/1/tile/basic/night/10/505/355.png?key=${k}&tileSize=512`],
+    ["Style de la carte 3D", `https://api.tomtom.com/style/1/style/*?map=2/basic_street-dark&key=${k}`],
+    ["Cartes 3D", `https://api.tomtom.com/map/2/tile/basic/10/505/355.pbf?key=${k}`],
+  ];
+  const resultats = [];
+  for (const [service, url] of services) {
+    try {
+      const r = await fetch(url);
+      resultats.push({ service, ok: r.ok, statut: r.status, message: r.ok ? "" : await lireRefusTomTom(r) });
+    } catch (e) {
+      resultats.push({ service, ok: false, statut: 0, message: `réseau : ${e.message}` });
+    }
+  }
+  return resultats;
+}
+
 // options.traceImposee ([lon, lat][]) : TomTom reconstruit cette route au
 // lieu de choisir la plus rapide. Incompatible avec des étapes (refus de
 // l'API), donc ignorée s'il y en a.

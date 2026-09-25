@@ -31,9 +31,14 @@ const ATTRIBUTION_OSM = '© <a href="https://www.openstreetmap.org/copyright">Op
 const osmSombre = () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" });
 const osmPlan = () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM });
 
+// Après un refus (quota, clé), on ne réessaie TomTom qu'au bout d'un moment,
+// sinon chaque changement de fond repasse par un écran noir.
+const PAUSE_APRES_REFUS_MS = 10 * 60 * 1000;
+let tomtomRefuseJusqua = 0;
+
 function fondTomTom(style, repli) {
   const cle = getApiKeys().tomtom;
-  if (!cle) return repli();
+  if (!cle || Date.now() < tomtomRefuseJusqua) return repli();
   // Une tuile TomTom 512 px couvre la même zone qu'une tuile 256 px : on
   // l'affiche en 256 px CSS, soit deux pixels d'image par pixel d'écran.
   const couche = L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/${style}/{z}/{x}/{y}.png?key=${encodeURIComponent(cle)}&tileSize=512&language=fr-FR`, {
@@ -48,6 +53,7 @@ function fondTomTom(style, repli) {
     // isolée (réseau instable) ne suffit pas.
     if (++erreursDeSuite >= 6 && fond === couche) {
       console.warn("[CARTE] Tuiles TomTom refusées, retour sur OpenStreetMap");
+      tomtomRefuseJusqua = Date.now() + PAUSE_APRES_REFUS_MS;
       carte.removeLayer(couche);
       fond = repli().addTo(carte);
       fond.bringToBack();

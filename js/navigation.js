@@ -22,7 +22,9 @@ let vue = carte2D;
 const $ = (id) => document.getElementById(id);
 const DELAI_TRAFIC_MS = 5 * 60 * 1000;
 const DELAI_MIN_RECALCUL_MS = 20 * 1000;
-const ACCELERATION_DEMO = 4;
+// 2× la vitesse réelle : assez rapide pour la démo sans réclamer trop de
+// cartes par seconde aux serveurs (TomTom limite le débit).
+const ACCELERATION_DEMO = 2;
 const DELAI_BORNES_MS = 90 * 1000;
 const RAYON_BORNES_KM = 12;
 const DISTANCE_MIN_RAFRAICHIR_BORNES_KM = RAYON_BORNES_KM * 0.4;
@@ -823,6 +825,21 @@ function cablerBoutons() {
   document.addEventListener("visibilitychange", surVisibilite);
 }
 
+function optionsCarte3D() {
+  return { sombre: themeSombre(), fournisseur: lireReglages().carte_3d || "libre" };
+}
+
+// Fournisseur choisi refusé, l'autre a pris le relais : on le dit sans insister.
+function signalerRemplacementCarte() {
+  const texte = carte3D.dernierAvertissement();
+  if (!texte) return;
+  const message = `ℹ️ ${texte}.`;
+  afficherAlerte(message);
+  setTimeout(() => {
+    if (etat && $("ev-nav-alerte").textContent === message) afficherAlerte(null);
+  }, 12000);
+}
+
 function themeSombre() {
   return document.documentElement.dataset.theme !== "clair";
 }
@@ -869,8 +886,10 @@ async function basculerVue() {
   let nouvelle = carte2D;
   if (vers3D) {
     $("ev-nav-3d-btn").textContent = "…";
-    if (await carte3D.preparer({ sombre: themeSombre() })) nouvelle = carte3D;
-    else afficherAlerte(`⚠️ Vue 3D indisponible : ${carte3D.derniereErreur() || "raison inconnue"}. On reste en 2D.`);
+    if (await carte3D.preparer(optionsCarte3D())) {
+      nouvelle = carte3D;
+      signalerRemplacementCarte();
+    } else afficherAlerte(`⚠️ Vue 3D indisponible : ${carte3D.derniereErreur() || "raison inconnue"}. On reste en 2D.`);
   }
   if (!etat) return;
   etat.basculeEnCours = false;
@@ -947,10 +966,11 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   history.pushState({ navigation: true }, "");
   const veut3D = lireReglages().vue_3d !== false;
   if (veut3D) $("ev-nav-instruction").textContent = "Préparation de la vue 3D…";
-  vue = veut3D && (await carte3D.preparer({ sombre: themeSombre() })) ? carte3D : carte2D;
+  vue = veut3D && (await carte3D.preparer(optionsCarte3D())) ? carte3D : carte2D;
   if (!etat) return;
   majBouton3D();
   if (veut3D && vue === carte2D) afficherAlerte(`⚠️ Vue 3D indisponible : ${carte3D.derniereErreur() || "raison inconnue"}. Navigation en 2D.`);
+  else if (vue === carte3D) signalerRemplacementCarte();
   $("ev-nav-instruction").textContent = "Calcul du guidage…";
   vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
   garderEcranAllume();

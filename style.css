@@ -233,6 +233,7 @@ button { font-family: inherit; color: inherit; }
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
+.ev-diagnostic { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; background: var(--voile); border: 1px solid var(--bordure); }
 .ev-fab-texte { font-size: 15px; font-weight: 900; color: var(--texte); }
 /* MapLibre impose position: relative à .maplibregl-map : on garde le plein écran. */
 .ev-carte-3d, .ev-carte-3d.maplibregl-map { position: fixed; inset: 0; z-index: 1; background: #0b1017; }
