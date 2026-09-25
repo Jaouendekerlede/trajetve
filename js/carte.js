@@ -174,6 +174,7 @@ export function quitterNavigation() {
 
 export function dessinerRouteNavigation(coords, arrets, destination) {
   coucheNav.clearLayers();
+  coucheFleche = null;
   const ll = coords.map(([lon, lat]) => [lat, lon]);
   L.polyline(ll, { color: "#062a1e", weight: 14, opacity: 0.55, interactive: false }).addTo(coucheNav);
   ligneRestante = L.polyline(ll, { color: "#22e5a0", weight: 9, opacity: 0.95, interactive: false }).addTo(coucheNav);
@@ -182,6 +183,20 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
     L.marker([a.lat, a.lon], { icon: pastille(32, "rgba(79,224,255,.95)", "🔋"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
   }
   if (destination) L.marker([destination.lat, destination.lon], { icon: pastille(26, "#ff6b35", "🏁"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
+}
+
+// Flèche blanche du prochain virage sur le tracé (null : l'effacer).
+let coucheFleche = null;
+export function dessinerFlecheManoeuvre(fleche) {
+  coucheFleche?.remove();
+  coucheFleche = null;
+  if (!fleche || !coucheNav) return;
+  const ll = (pts) => pts.map(([lon, lat]) => [lat, lon]);
+  coucheFleche = L.layerGroup([
+    L.polyline(ll(fleche.ligne), { color: "#0a2a5c", weight: 15, lineCap: "butt", lineJoin: "round", interactive: false }),
+    L.polyline(ll(fleche.ligne), { color: "#ffffff", weight: 10, lineCap: "butt", lineJoin: "round", interactive: false }),
+    L.polygon(ll(fleche.pointe), { color: "#0a2a5c", weight: 2, fillColor: "#ffffff", fillOpacity: 1, interactive: false }),
+  ]).addTo(coucheNav);
 }
 
 export function majProgressionNavigation(coords, indice, lat, lon) {

@@ -135,3 +135,71 @@ export function traceTraverseCarres(coords, carres) {
   }
   return false;
 }
+
+// Flèche de manœuvre dessinée sur la route (comme les GPS) : le tracé de
+// `avantM` avant à `apresM` après le point de la manœuvre (offset, m), et
+// une pointe triangulaire au bout. Renvoie { ligne, pointe } en [lon, lat].
+export function flecheManoeuvre(coords, cum, offset, { avantM = 35, apresM = 28, pointeM = 10, demiLargeurM = 7 } = {}) {
+  const total = cum[cum.length - 1];
+  if (coords.length < 2 || !(total > 0)) return null;
+  const debut = Math.max(0, offset - avantM);
+  const fin = Math.min(total, offset + apresM);
+  if (fin - debut < 5) return null;
+  const point = (d) => {
+    let i = 0;
+    while (i < cum.length - 2 && cum[i + 1] < d) i++;
+    const t = cum[i + 1] > cum[i] ? Math.max(0, Math.min(1, (d - cum[i]) / (cum[i + 1] - cum[i]))) : 0;
+    return [coords[i][0] + t * (coords[i + 1][0] - coords[i][0]), coords[i][1] + t * (coords[i + 1][1] - coords[i][1])];
+  };
+  const ligne = [point(debut)];
+  for (let i = 0; i < cum.length; i++) if (cum[i] > debut && cum[i] < fin) ligne.push(coords[i]);
+  ligne.push(point(fin));
+  // Direction du dernier morceau (au moins 3 m, pour un sens fiable).
+  const [lonF, latF] = ligne[ligne.length - 1];
+  const [lonP, latP] = point(Math.max(debut, fin - 3));
+  const kx = 111320 * Math.cos((latF * Math.PI) / 180);
+  const ky = 110540;
+  let dx = (lonF - lonP) * kx;
+  let dy = (latF - latP) * ky;
+  const n = Math.hypot(dx, dy) || 1;
+  dx /= n;
+  dy /= n;
+  const versLonLat = (x, y) => [lonF + x / kx, latF + y / ky];
+  const pointe = [versLonLat(-dy * demiLargeurM, dx * demiLargeurM), versLonLat(dx * pointeM, dy * pointeM), versLonLat(dy * demiLargeurM, -dx * demiLargeurM)];
+  return { ligne, pointe };
+}
+
+// Sortie réelle d'un rond-point, d'après le tracé : dans l'anneau on tourne
+// à gauche (sens giratoire), et on en sort en tournant à droite. Renvoie
+// { offset, angle } (angle de sortie en degrés par rapport à l'arrivée,
+// positif à droite), ou null (mini rond-point, tracé trop court).
+export function sortieRondPoint(coords, cum, offsetEntree) {
+  const total = cum[cum.length - 1];
+  if (coords.length < 2 || !(total > 0)) return null;
+  const point = (d) => {
+    d = Math.max(0, Math.min(total, d));
+    let i = 0;
+    while (i < cum.length - 2 && cum[i + 1] < d) i++;
+    const t = cum[i + 1] > cum[i] ? (d - cum[i]) / (cum[i + 1] - cum[i]) : 0;
+    return [coords[i][0] + t * (coords[i + 1][0] - coords[i][0]), coords[i][1] + t * (coords[i + 1][1] - coords[i][1])];
+  };
+  const cap = (d1, d2) => {
+    const [lon1, lat1] = point(d1);
+    const [lon2, lat2] = point(d2);
+    return (Math.atan2((lon2 - lon1) * Math.cos((lat1 * Math.PI) / 180), lat2 - lat1) * 180) / Math.PI;
+  };
+  const ecart = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
+  const capArrivee = cap(offsetEntree - 25, offsetEntree - 5);
+  let gauche = 0;
+  let precedent = cap(offsetEntree, offsetEntree + 6);
+  for (let d = offsetEntree + 3; d < offsetEntree + 250 && d < total - 12; d += 3) {
+    const c = cap(d, d + 6);
+    const t = ecart(c - precedent);
+    precedent = c;
+    if (t < 0) gauche -= t;
+    else if (gauche > 25 && ecart(cap(d + 3, d + 12) - cap(d - 9, d)) > 15) {
+      return { offset: d, angle: ecart(cap(d + 8, d + 28) - capArrivee) };
+    }
+  }
+  return null;
+}

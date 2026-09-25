@@ -627,10 +627,24 @@ body.ev-mode-navigation .ev-carte { left: 0; }
   color: #fff;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
 }
-.ev-nav-fleche { font-size: 46px; line-height: 1; flex-shrink: 0; width: 56px; text-align: center; }
-.ev-nav-manoeuvre-texte { min-width: 0; }
-.ev-nav-distance { font-size: 30px; font-weight: 900; line-height: 1.1; }
-.ev-nav-instruction { font-size: 17px; font-weight: 600; line-height: 1.25; opacity: 0.95; }
+/* Grand bandeau : flèche dessinée et distance à gauche, rue en gros à droite. */
+.ev-nav-manoeuvre-gauche { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; min-width: 96px; }
+.ev-nav-fleche { line-height: 1; text-align: center; }
+.ev-nav-fleche svg { display: block; width: 88px; height: 88px; }
+.ev-nav-fleche-emoji { display: block; font-size: 64px; line-height: 88px; }
+.ev-nav-manoeuvre-texte { min-width: 0; flex: 1; }
+.ev-nav-distance { font-size: 40px; font-weight: 900; line-height: 1; white-space: nowrap; }
+.ev-nav-rue { font-size: 30px; font-weight: 800; line-height: 1.12; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ev-nav-instruction { font-size: 16px; font-weight: 600; line-height: 1.25; opacity: 0.92; margin-top: 4px; }
+.ev-nav-rue.hidden + .ev-nav-instruction { font-size: 24px; font-weight: 800; opacity: 1; margin-top: 0; }
+.ev-nav-ensuite-fleche svg { width: 22px; height: 22px; vertical-align: -5px; }
+/* Bandeau compact (réglage) */
+body.ev-bandeau-compact .ev-nav-manoeuvre-gauche { min-width: 64px; }
+body.ev-bandeau-compact .ev-nav-fleche svg { width: 54px; height: 54px; }
+body.ev-bandeau-compact .ev-nav-fleche-emoji { font-size: 40px; line-height: 54px; }
+body.ev-bandeau-compact .ev-nav-distance { font-size: 26px; }
+body.ev-bandeau-compact .ev-nav-rue { font-size: 20px; }
+body.ev-bandeau-compact .ev-nav-rue.hidden + .ev-nav-instruction { font-size: 17px; }
 .ev-nav-voies { align-self: center; display: flex; gap: 0; padding: 6px 8px; border-radius: 14px; background: #0b4a35; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 .ev-nav-voie { min-width: 46px; height: 46px; padding: 0 6px; display: flex; align-items: center; justify-content: center; gap: 1px; font-size: 30px; font-weight: 900; line-height: 1; color: rgba(255, 255, 255, 0.3); border-left: 2px dashed rgba(255, 255, 255, 0.35); }
 .ev-nav-voie:first-child { border-left: none; }
@@ -686,9 +700,10 @@ body.ev-mode-navigation .ev-carte { left: 0; }
 }
 
 /* Mode voiture : tout en plus grand, facile à viser d'un doigt en roulant. */
-body.ev-mode-voiture .ev-nav-distance { font-size: 38px; }
-body.ev-mode-voiture .ev-nav-instruction { font-size: 20px; }
-body.ev-mode-voiture .ev-nav-fleche { font-size: 56px; width: 64px; }
+body.ev-mode-voiture .ev-nav-distance { font-size: 46px; }
+body.ev-mode-voiture .ev-nav-rue { font-size: 34px; }
+body.ev-mode-voiture .ev-nav-instruction { font-size: 18px; }
+body.ev-mode-voiture .ev-nav-fleche svg { width: 104px; height: 104px; }
 body.ev-mode-voiture .ev-nav-boutons .ev-fab { width: 60px; height: 60px; font-size: 26px; }
 body.ev-mode-voiture .ev-nav-stop { width: 62px; height: 62px; font-size: 26px; }
 body.ev-mode-voiture .ev-nav-infos strong { font-size: 22px; }

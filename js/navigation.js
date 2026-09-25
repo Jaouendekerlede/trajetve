@@ -9,7 +9,8 @@ import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
-import { haversineKm, carresSurTrace, traceTraverseCarres } from "./geo.js";
+import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
+import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
@@ -92,6 +93,75 @@ function fleche(manoeuvre) {
   return "⬆️";
 }
 
+// Flèches dessinées du bandeau (comme les GPS) : angle de sortie en degrés,
+// dans le sens des aiguilles d'une montre depuis « tout droit ».
+const ANGLES_FLECHE = [
+  [/SHARP_RIGHT/, 135],
+  [/SHARP_LEFT/, -135],
+  [/TURN_RIGHT/, 90],
+  [/TURN_LEFT/, -90],
+  [/BEAR_RIGHT|KEEP_RIGHT|EXIT_RIGHT|TAKE_EXIT|ENTER_|ENTRANCE_RAMP/, 40],
+  [/BEAR_LEFT|KEEP_LEFT|EXIT_LEFT/, -40],
+];
+const ANGLES_ROND_POINT = { ROUNDABOUT_CROSS: 0, ROUNDABOUT_RIGHT: 90, ROUNDABOUT_LEFT: -90, ROUNDABOUT_BACK: -160 };
+
+function pointeSvg(x, y, angle, longueur = 15, demi = 14) {
+  const r = (angle * Math.PI) / 180;
+  const [dx, dy] = [Math.sin(r), -Math.cos(r)];
+  const pts = [
+    [x + dx * longueur, y + dy * longueur],
+    [x - dy * demi, y + dx * demi],
+    [x + dy * demi, y - dx * demi],
+  ];
+  return `<polygon points="${pts.map((p) => p.map((v) => v.toFixed(1)).join(",")).join(" ")}" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>`;
+}
+
+function svgFleche(instr) {
+  const m = instr?.manoeuvre || "";
+  if (/ARRIVE|WAYPOINT|FERRY/.test(m)) return `<span class="ev-nav-fleche-emoji">${fleche(m)}</span>`;
+  const trait = `fill="none" stroke="#fff" stroke-width="13" stroke-linejoin="round" stroke-linecap="butt"`;
+  let dessin;
+  if (/ROUNDABOUT/.test(m) && m in ANGLES_ROND_POINT) {
+    const a = Math.max(-165, Math.min(165, instr.angleSortie ?? ANGLES_ROND_POINT[m]));
+    const r = (a * Math.PI) / 180;
+    const [sx, sy] = [50 + 18 * Math.sin(r), 42 - 18 * Math.cos(r)];
+    const [ex, ey] = [50 + 34 * Math.sin(r), 42 - 34 * Math.cos(r)];
+    const numero = instr.sortieRondPoint ? `<text x="50" y="49" text-anchor="middle" font-size="20" font-weight="900" fill="#fff" font-family="sans-serif">${instr.sortieRondPoint}</text>` : "";
+    dessin = `<circle cx="50" cy="42" r="18" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="8"/><path d="M50 96 V60" ${trait}/><path d="M${sx.toFixed(1)} ${sy.toFixed(1)} L${ex.toFixed(1)} ${ey.toFixed(1)}" ${trait}/>${pointeSvg(ex, ey, a)}${numero}`;
+  } else if (/U_?TURN/.test(m)) {
+    dessin = `<path d="M64 96 V46 A17 17 0 0 0 30 46 V62" ${trait}/>${pointeSvg(30, 62, 180)}`;
+  } else {
+    const a = ANGLES_FLECHE.find(([motif]) => motif.test(m))?.[1] ?? 0;
+    const r = (a * Math.PI) / 180;
+    const [dx, dy] = [Math.sin(r), -Math.cos(r)];
+    const [ex, ey] = [50 + 30 * dx, 50 + 30 * dy];
+    dessin = `<path d="M50 96 L50 62 Q50 50 ${(50 + 12 * dx).toFixed(1)} ${(50 + 12 * dy).toFixed(1)} L${ex.toFixed(1)} ${ey.toFixed(1)}" ${trait}/>${pointeSvg(ex, ey, a)}`;
+  }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">${dessin}</svg>`;
+}
+
+// Bandeau : la rue en gros, l'action (« Tournez à droite ») en petit.
+function textesManoeuvre(instr) {
+  const message = instr.message || "Continuez tout droit";
+  const vers = instr.direction && !message.includes(instr.direction) ? ` · vers ${instr.direction}` : "";
+  if (!instr.rue) return { rue: "", action: message };
+  const i = message.indexOf(instr.rue);
+  const action = i > 0 ? message.slice(0, i).replace(/[\s,]*(sur|à|au|dans|vers|par)?\s*$/i, "").trim() : message;
+  return { rue: instr.rue, action: (action || message) + vers };
+}
+
+// Flèche blanche sur la carte, à l'approche du virage.
+const DISTANCE_FLECHE_CARTE_M = 700;
+
+function majFlecheCarte(instr, distance) {
+  const cible = instr && distance < DISTANCE_FLECHE_CARTE_M && !etat.aLaBorne && !etat.arrive && !/WAYPOINT|ARRIVE/.test(instr.manoeuvre) ? instr : null;
+  if (cible === etat.flecheCarte) return;
+  etat.flecheCarte = cible;
+  // Rond-point : la flèche fait le tour jusqu'à la bonne sortie.
+  const apresM = cible?.offsetSortie ? cible.offsetSortie - cible.offset + 35 : 40;
+  vue.dessinerFlecheManoeuvre(cible ? flecheManoeuvre(etat.route.coords, etat.route.cum, cible.offset, { apresM }) : null);
+}
+
 function parler(texte, prioritaire = false) {
   if (!etat?.voix || !texte || !("speechSynthesis" in window)) return;
   if (prioritaire) speechSynthesis.cancel();
@@ -115,6 +185,11 @@ function construireRoute(r) {
       message: i.message || "",
       manoeuvre: i.maneuver || "",
       type: i.instructionType || "",
+      jonction: i.junctionType || "",
+      // Pour le bandeau : nom de la rue (ou numéro de route) en gros.
+      rue: i.street || (i.roadNumbers || []).join("/") || "",
+      direction: i.signpostText || "",
+      sortieRondPoint: i.roundaboutExitNumber || null,
       annonces: new Set(),
     }))
     .sort((a, b) => a.offset - b.offset);
@@ -124,6 +199,26 @@ function construireRoute(r) {
     const type = String(s.sectionType || "").toUpperCase().replace(/_/g, "");
     if (type !== "SPEEDLIMIT" || !s.maxSpeedLimitInKmh) continue;
     for (let i = Math.max(0, s.startPointIndex ?? 0); i <= Math.min(dernier, s.endPointIndex ?? 0); i++) limites[i] = s.maxSpeedLimitInKmh;
+  }
+
+  // Ronds-points : vraie sortie d'après le tracé (angle du pictogramme,
+  // flèche sur la carte jusqu'à elle), et « Sortez ici » juste avant.
+  for (const instr of [...instructions]) {
+    if (!/ROUNDABOUT_/.test(instr.manoeuvre)) continue;
+    const s = sortieRondPoint(coords, cum, instr.offset);
+    if (!s) continue;
+    instr.angleSortie = s.angle;
+    instr.offsetSortie = s.offset;
+    if (instructions.some((i) => i !== instr && Math.abs(i.offset - s.offset) < 40)) continue;
+    instructions.push({ offset: s.offset, message: `Sortez ici${instr.rue ? ` sur ${instr.rue}` : ""}`, manoeuvre: "EXIT_RIGHT", type: "TURN", jonction: "ROUNDABOUT", rue: instr.rue, direction: "", sortieRondPoint: null, annonces: new Set([1, 2]) });
+  }
+  instructions.sort((a, b) => a.offset - b.offset);
+
+  // Limitations avant/après chaque manœuvre : repèrent les bretelles (zoom).
+  for (const instr of instructions) {
+    const v = vitessesAutour(instr.offset, cum, limites);
+    instr.vitesseAvant = v.avant;
+    instr.vitesseApres = v.apres;
   }
 
   // Étapes (bornes) = fins des tronçons TomTom ; durées par tronçon pour l'heure d'arrivée.
@@ -215,6 +310,7 @@ function installerRoute(route) {
   etat.annoncesBornes = new Set();
   // Le mode démo repart de la position actuelle sur le nouveau tracé.
   etat.demoOffset = null;
+  etat.flecheCarte = undefined;
   vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   if (etat.pos) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
@@ -338,29 +434,40 @@ function majEcran() {
   const instr = prochaines[0];
   const ensuite = $("ev-nav-ensuite");
   ensuite.classList.add("hidden");
+  const rue = $("ev-nav-rue");
+  const flecheBandeau = (contenu) => {
+    if (etat.flecheBandeau === contenu) return;
+    etat.flecheBandeau = contenu;
+    $("ev-nav-fleche").innerHTML = contenu;
+  };
+  rue.classList.add("hidden");
   if (etat.arrive) {
-    $("ev-nav-fleche").textContent = "🏁";
+    flecheBandeau(svgFleche({ manoeuvre: "ARRIVE" }));
     $("ev-nav-distance").textContent = "Arrivé";
     $("ev-nav-instruction").textContent = etat.destination.nom || "Destination";
   } else if (etat.aLaBorne) {
-    $("ev-nav-fleche").textContent = "🔌";
+    flecheBandeau(`<span class="ev-nav-fleche-emoji">🔌</span>`);
     $("ev-nav-distance").textContent = "Recharge";
     $("ev-nav-instruction").textContent = etat.aLaBorne.nom_borne;
   } else if (instr) {
     const d = instr.offset - etat.offset;
-    $("ev-nav-fleche").textContent = fleche(instr.manoeuvre);
+    flecheBandeau(svgFleche(instr));
     $("ev-nav-distance").textContent = distanceAffichee(d);
-    $("ev-nav-instruction").textContent = instr.message || "Continuez tout droit";
+    const t = textesManoeuvre(instr);
+    rue.textContent = t.rue;
+    rue.classList.toggle("hidden", !t.rue);
+    $("ev-nav-instruction").textContent = t.action;
     const suivante = prochaines[1];
     if (suivante && suivante.offset - instr.offset < 400) {
-      ensuite.textContent = `Puis ${fleche(suivante.manoeuvre)} ${minusculeInitiale(suivante.message)}`;
+      ensuite.innerHTML = `Puis <span class="ev-nav-ensuite-fleche">${svgFleche(suivante)}</span> ${escapeHtml(minusculeInitiale(suivante.message))}`;
       ensuite.classList.remove("hidden");
     }
   } else {
-    $("ev-nav-fleche").textContent = "⬆️";
+    flecheBandeau(svgFleche({ manoeuvre: "STRAIGHT" }));
     $("ev-nav-distance").textContent = distanceAffichee(route.total - etat.offset);
     $("ev-nav-instruction").textContent = "Continuez jusqu'à la destination";
   }
+  majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
 
   afficherVoies(instr);
 
@@ -410,6 +517,7 @@ const NOMBRES = ["", "la", "les deux", "les trois", "les quatre"];
 // « Prenez les deux voies de droite » : d'après les voies à suivre pour
 // cette manœuvre. Rien si toutes les voies conviennent.
 function phraseVoies(instr) {
+  if (!etat.prefs.voixVoies) return "";
   const section = etat.route.voies.find((v) => Math.abs(v.offset - instr.offset) < 40);
   if (!section) return "";
   const suivies = section.lanes.map((l, i) => (l.follow ? i : -1)).filter((i) => i >= 0);
@@ -461,7 +569,7 @@ function surveillerVitesse(kmh, limite) {
   etat.excesDepuis ??= Date.now();
   if (!etat.bipFait && Date.now() - etat.excesDepuis >= DUREE_AVANT_BIP_MS) {
     etat.bipFait = true;
-    bip();
+    if (etat.prefs.bip) bip();
   }
 }
 
@@ -494,7 +602,7 @@ function annonces() {
     etat.annoncesTravaux.add(travaux.cle);
     const d = travaux.offset - etat.offset;
     const retard = travaux.retard_min >= 1 ? `, environ ${travaux.retard_min} minute${travaux.retard_min > 1 ? "s" : ""} de retard` : "";
-    parler(travaux.fermeture ? `Attention, route signalée fermée dans ${distanceParlee(d)}.` : `Travaux dans ${distanceParlee(d)}${retard}.`);
+    if (etat.prefs.voixTravaux) parler(travaux.fermeture ? `Attention, route signalée fermée dans ${distanceParlee(d)}.` : `Travaux dans ${distanceParlee(d)}${retard}.`);
     const texte = travaux.fermeture ? `⛔ Route signalée fermée dans ${distanceAffichee(d)}` : `🚧 Travaux dans ${distanceAffichee(d)}${travaux.retard_min >= 1 ? ` (+${travaux.retard_min} min)` : ""}`;
     if ($("ev-nav-alerte").classList.contains("hidden")) {
       afficherAlerte(texte, travaux.fermeture ? { libelle: "🚧 Éviter", action: routeBarree } : null);
@@ -510,7 +618,7 @@ function annonces() {
     for (const seuil of [20000, 2000]) {
       if (reste <= seuil && reste > seuil / 4 && !etat.annoncesBornes.has(seuil)) {
         etat.annoncesBornes.add(seuil);
-        parler(`Borne de recharge ${arret.nom_borne} dans ${distanceParlee(reste)}.`);
+        if (etat.prefs.voixBornes) parler(`Borne de recharge ${arret.nom_borne} dans ${distanceParlee(reste)}.`);
       }
     }
   }
@@ -766,7 +874,11 @@ function surPosition(p) {
   }
   if (!arret && (etat.offset >= etat.route.total - 30 || haversineKm(p.lat, p.lon, etat.destination.lat, etat.destination.lon) < 0.04)) arriveeDestination();
 
-  etat.zoom = zoomNavigation((p.vitesse || 0) * 3.6, etat.zoom);
+  const zoom = zoomNavigation({ kmh: (p.vitesse || 0) * 3.6, offset: etat.offset, instructions: etat.route.instructions, voies: etat.route.voies, zoomActuel: etat.zoom, enManoeuvre: !!etat.zoomManoeuvre, renforce: etat.prefs.zoomRenforce });
+  etat.zoom = zoom.zoom;
+  etat.zoomManoeuvre = zoom.manoeuvre;
+  // Rond-point, carrefour serré : vue 3D presque de dessus, plus lisible.
+  vue.inclinaisonNavigation?.(zoom.manoeuvre === "rondpoint" || zoom.manoeuvre === "carrefour" ? "plat" : "normal");
   programmerAnimation(p, m);
   annonces();
   majEcran();
@@ -854,32 +966,6 @@ function boucleAnimation(t) {
     return;
   }
   etat.raf = requestAnimationFrame(boucleAnimation);
-}
-
-// Comme un GPS : large sur autoroute, rapproché en ville et à l'approche
-// d'une manœuvre (rond-point, sortie…). Les seuils de vitesse ont 5 km/h
-// d'hystérésis pour que la carte ne « pompe » pas autour de 50 km/h.
-const PALIERS_ZOOM = [
-  { min: 90, zoom: 15 },
-  { min: 50, zoom: 16 },
-  { min: 30, zoom: 17 },
-  { min: -1, zoom: 18 },
-];
-const ZOOM_MANOEUVRE = 18;
-
-function zoomNavigation(kmh, zoomActuel) {
-  const instr = etat.route.instructions.find((i) => i.offset > etat.offset + 8 && i.type !== "LOCATION_DEPARTURE" && !/WAYPOINT|ARRIVE/.test(i.manoeuvre || ""));
-  const distanceManoeuvre = instr ? instr.offset - etat.offset : Infinity;
-  // ~12 s de trajet, au moins 150 m et au plus 350 m avant la manœuvre
-  const apresManoeuvre = etat.zoomManoeuvre;
-  etat.zoomManoeuvre = distanceManoeuvre < Math.min(350, Math.max(150, (kmh / 3.6) * 12));
-  if (etat.zoomManoeuvre) return ZOOM_MANOEUVRE;
-
-  const cible = PALIERS_ZOOM.find((p) => kmh > p.min).zoom;
-  if (!Number.isFinite(zoomActuel) || apresManoeuvre || Math.abs(cible - zoomActuel) > 1) return cible;
-  // Palier voisin : on ne change que si la vitesse a franchi le seuil de 5 km/h.
-  const seuil = PALIERS_ZOOM.find((p) => p.zoom === Math.min(cible, zoomActuel)).min;
-  return Math.abs(kmh - seuil) >= 5 ? cible : zoomActuel;
 }
 
 // ── Source de position : GPS réel ───────────────────────────────────────────
@@ -1071,6 +1157,7 @@ function changerVue(nouvelle) {
   vue.quitterNavigation();
   vue = nouvelle;
   vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
+  etat.flecheCarte = undefined;
   if (etat.route) vue.dessinerRouteNavigation(etat.route.coords, etat.arretsRestants, etat.destination);
   etat.posBornes = null;
   rafraichirBornesProches();
@@ -1129,6 +1216,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     return;
   }
   cablerBoutons();
+  const reglages = lireReglages();
   etat = {
     plan,
     options,
@@ -1156,20 +1244,29 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     consoKwhKm: (plan.energie_totale_necessaire_kwh || 13) / Math.max(1, plan.distance_km),
     margePct: options.marge_pct ?? plan.arrets?.[0]?.pct_arrivee_borne ?? 12,
     batterie: { refPct: chargeDepartPct ?? 80, refOdometre: 0 },
-    voix: true,
+    voix: reglages.voix_guidage !== false,
+    prefs: {
+      voixVoies: reglages.voix_voies !== false,
+      voixTravaux: reglages.voix_travaux !== false,
+      voixBornes: reglages.voix_bornes !== false,
+      bip: reglages.bip_vitesse !== false,
+      zoomRenforce: reglages.zoom_renforce !== false,
+    },
     sensDeMarche: true,
     suivi: true,
   };
 
   document.body.classList.add("ev-mode-navigation");
-  document.body.classList.toggle("ev-mode-voiture", lireReglages().mode_voiture === true);
+  document.body.classList.toggle("ev-mode-voiture", reglages.mode_voiture === true);
+  document.body.classList.toggle("ev-bandeau-compact", reglages.grand_bandeau === false);
   $("ev-navigation").classList.remove("hidden");
   $("ev-nav-etape-borne").classList.add("hidden");
   $("ev-nav-batterie-panneau").classList.add("hidden");
   $("ev-nav-recentrer-btn").classList.add("hidden");
-  $("ev-nav-voix-btn").textContent = "🔊";
+  $("ev-nav-voix-btn").textContent = etat.voix ? "🔊" : "🔇";
   $("ev-nav-orientation-btn").textContent = "🧭";
   $("ev-nav-fleche").textContent = "⏳";
+  $("ev-nav-rue").classList.add("hidden");
   $("ev-nav-distance").textContent = "";
   $("ev-nav-instruction").textContent = "Calcul du guidage…";
   afficherAlerte(null);
@@ -1274,7 +1371,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   etat = null;
   vue.montrerBornes(false);
   vue.quitterNavigation();
-  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture");
+  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact");
   $("ev-navigation").classList.add("hidden");
   if (!depuisRetour && history.state?.navigation) {
     retourEnCours = true;

@@ -1,12 +1,12 @@
-// Garde une copie de l'appli (HTML/CSS/JS/icônes) pour qu'elle démarre même
-// sans réseau. Réseau d'abord : une mise à jour publiée est prise tout de
+// Garde une copie de l'appli (HTML/CSS/JS/icÃ´nes) pour qu'elle dÃ©marre mÃªme
+// sans rÃ©seau. RÃ©seau d'abord : une mise Ã  jour publiÃ©e est prise tout de
 // suite, la copie ne sert que hors connexion.
-// Garde aussi, pour rouler sans réseau, la carte OpenFreeMap (tuiles
-// vectorielles, polices, icônes) et les bibliothèques de carte déjà vues ou
-// préparées. Les autres services (TomTom, bornes, météo) ne passent pas ici :
-// TomTom interdit de stocker ses cartes, et les autres doivent être frais.
+// Garde aussi, pour rouler sans rÃ©seau, la carte OpenFreeMap (tuiles
+// vectorielles, polices, icÃ´nes) et les bibliothÃ¨ques de carte dÃ©jÃ  vues ou
+// prÃ©parÃ©es. Les autres services (TomTom, bornes, mÃ©tÃ©o) ne passent pas ici :
+// TomTom interdit de stocker ses cartes, et les autres doivent Ãªtre frais.
 
-const CACHE_NOM = "trajetve-v18";
+const CACHE_NOM = "trajetve-v19";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -31,6 +31,7 @@ const FICHIERS_COQUILLE = [
   "./js/parkings.js",
   "./js/hors-ligne.js",
   "./js/navigation.js",
+  "./js/zoom-nav.js",
   "./js/irve.js",
   "./js/ocm.js",
   "./js/tomtom.js",
@@ -55,23 +56,23 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      // Seulement les anciennes copies de l'appli (pas les données gardées
-      // par l'appli elle-même, comme l'état des bornes).
+      // Seulement les anciennes copies de l'appli (pas les donnÃ©es gardÃ©es
+      // par l'appli elle-mÃªme, comme l'Ã©tat des bornes).
       .then((noms) => Promise.all(noms.filter((n) => n.startsWith("trajetve-v") && n !== CACHE_NOM).map((n) => caches.delete(n))))
       .then(() => self.clients.claim()),
   );
 });
 
-// ── Carte et bibliothèques pour le hors ligne ───────────────────────────────
+// â”€â”€ Carte et bibliothÃ¨ques pour le hors ligne â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const CACHE_CARTES = "trajetve-cartes";
 const HOTES_CARTES = ["tiles.openfreemap.org", "cdn.jsdelivr.net", "unpkg.com"];
 const MAX_ELEMENTS_CARTES = 6000;
 let ajoutsDepuisMenage = 0;
 
-// Adresses versionnées (tuiles, polices, icônes, bibliothèques) : elles ne
-// changent jamais, la copie gardée suffit. Le style (non versionné) passe
-// d'abord par le réseau pour rester à jour.
+// Adresses versionnÃ©es (tuiles, polices, icÃ´nes, bibliothÃ¨ques) : elles ne
+// changent jamais, la copie gardÃ©e suffit. Le style (non versionnÃ©) passe
+// d'abord par le rÃ©seau pour rester Ã  jour.
 function immuable(url) {
   return url.pathname.endsWith(".pbf") || url.pathname.includes("/sprites/") || url.pathname.includes("/natural_earth/") || url.hostname !== "tiles.openfreemap.org";
 }
@@ -92,8 +93,8 @@ async function carteOuReseau(requete) {
   }
   try {
     const reponse = await fetch(requete);
-    // « opaque » : bibliothèques chargées par <script> (Leaflet…), sans quoi
-    // l'appli ne démarrerait pas hors connexion.
+    // Â« opaque Â» : bibliothÃ¨ques chargÃ©es par <script> (Leafletâ€¦), sans quoi
+    // l'appli ne dÃ©marrerait pas hors connexion.
     if (reponse.ok || reponse.type === "opaque") {
       await cache.put(requete, reponse.clone());
       if (++ajoutsDepuisMenage >= 200) {
@@ -119,8 +120,8 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // "no-cache" : GitHub Pages autorise 10 min de cache navigateur, pendant
-  // lesquelles une version publiée n'arrivait pas. On revalide à chaque fois
-  // (réponse 304 légère si rien n'a changé).
+  // lesquelles une version publiÃ©e n'arrivait pas. On revalide Ã  chaque fois
+  // (rÃ©ponse 304 lÃ©gÃ¨re si rien n'a changÃ©).
   event.respondWith(
     fetch(event.request.url, { cache: "no-cache" })
       .then((reponse) => {

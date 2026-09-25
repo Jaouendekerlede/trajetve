@@ -39,6 +39,7 @@ let cumRoute = null;
 // Dernier tracé de navigation : à redessiner si la carte est recréée en
 // route (changement de fond au coucher du soleil, par exemple).
 let traceNav = null;
+let flecheNav = null;
 let surDeplacementManuel = null;
 let coucheBatiments = null;
 let nomFournisseur = "";
@@ -282,6 +283,38 @@ function ajouterCouchesTrajet() {
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 17, 14], "line-gradient": DEGRADE_RESTANT },
   }, dessous);
+  // Flèche blanche du prochain virage, posée sur le tracé (largeur en
+  // mètres, comme sa pointe, pour garder les proportions à tout zoom).
+  carte.addSource("nav-fleche", { type: "geojson", data: VIDE });
+  const trait = ["==", ["geometry-type"], "LineString"];
+  const pointe = ["==", ["geometry-type"], "Polygon"];
+  carte.addLayer({ id: "nav-fleche-contour", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#0a2a5c", "line-width": largeurMetres(6.5) } }, dessous);
+  carte.addLayer({ id: "nav-fleche-trait", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": largeurMetres(4.2) } }, dessous);
+  carte.addLayer({ id: "nav-fleche-pointe", type: "fill", source: "nav-fleche", filter: pointe, paint: { "fill-color": "#ffffff", "fill-outline-color": "#0a2a5c" } }, dessous);
+}
+
+// Largeur de ligne correspondant à `m` mètres au sol (vers 46° de latitude).
+function largeurMetres(m) {
+  const pixelsParMetreZoom0 = 512 / (40075016 * Math.cos((46 * Math.PI) / 180));
+  return ["interpolate", ["exponential", 2], ["zoom"], 10, m * pixelsParMetreZoom0 * 2 ** 10, 22, m * pixelsParMetreZoom0 * 2 ** 22];
+}
+
+// fleche : { ligne, pointe } ([lon, lat]) ou null pour l'effacer.
+export function dessinerFlecheManoeuvre(fleche) {
+  flecheNav = fleche;
+  const source = carte?.getSource("nav-fleche");
+  if (!source) return;
+  source.setData(
+    fleche
+      ? {
+          type: "FeatureCollection",
+          features: [
+            { type: "Feature", geometry: { type: "LineString", coordinates: fleche.ligne }, properties: {} },
+            { type: "Feature", geometry: { type: "Polygon", coordinates: [[...fleche.pointe, fleche.pointe[0]]] }, properties: {} },
+          ],
+        }
+      : VIDE,
+  );
 }
 
 // Raison du dernier échec, affichée à l'utilisateur pour le diagnostic.
@@ -399,6 +432,7 @@ async function creerCarte(fournisseur, fond, relief) {
   if (vueAvant) carte.jumpTo(vueAvant);
   if (enNavigation) {
     if (traceNav) dessinerRouteNavigation(...traceNav);
+    if (flecheNav) dessinerFlecheManoeuvre(flecheNav);
     voiture?.addTo(carte);
     if (bornesVisibles) for (const m of marqueursBornes) m.addTo(carte);
   }
@@ -901,8 +935,10 @@ export function quitterNavigation() {
   voiture?.remove();
   voiture = null;
   traceNav = null;
+  flecheNav = null;
   if (!carte) return;
   carte.getSource("trajet")?.setData(VIDE);
+  carte.getSource("nav-fleche")?.setData(VIDE);
   if (explo.actif) {
     // Retour à la carte des bornes, telle qu'elle était.
     montrerElementsExplo(true);
@@ -947,13 +983,23 @@ export function majVoiture(lat, lon, cap) {
 
 // Voiture vers le bas de l'écran pour voir loin devant ; en « nord en
 // haut », la carte reste inclinée mais ne tourne plus.
+// Inclinaison de la vue en navigation : réduite près des ronds-points et
+// carrefours serrés (on distingue mieux les routes), en douceur.
+const INCLINAISON_PLATE = 22;
+let inclinaisonCible = INCLINAISON;
+let inclinaisonActuelle = INCLINAISON;
+export function inclinaisonNavigation(mode) {
+  inclinaisonCible = mode === "plat" ? INCLINAISON_PLATE : INCLINAISON;
+}
+
 export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true) {
   const hauteur = carte.getContainer().clientHeight;
+  inclinaisonActuelle += (inclinaisonCible - inclinaisonActuelle) * 0.04;
   const vue = {
     center: [lon, lat],
     zoom: zoom + ECART_ZOOM,
     bearing: sensDeMarche ? cap || 0 : 0,
-    pitch: INCLINAISON,
+    pitch: inclinaisonActuelle,
     // En paysage, la colonne de gauche est retirée de la zone utile.
     padding: { top: hauteur * 0.42, bottom: 0, left: decalageNavGauche(), right: 0 },
   };

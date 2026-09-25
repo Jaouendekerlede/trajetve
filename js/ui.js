@@ -1921,6 +1921,13 @@ function rendreReglagesProfil() {
   $("ev-reglage-relief").checked = reglages.relief_3d === true;
   $("ev-reglage-jour-nuit").checked = reglages.jour_nuit_auto !== false;
   $("ev-reglage-mode-voiture").checked = reglages.mode_voiture === true;
+  $("ev-reglage-grand-bandeau").checked = reglages.grand_bandeau !== false;
+  $("ev-reglage-zoom-renforce").checked = reglages.zoom_renforce !== false;
+  $("ev-reglage-voix").checked = reglages.voix_guidage !== false;
+  $("ev-reglage-voix-voies").checked = reglages.voix_voies !== false;
+  $("ev-reglage-voix-travaux").checked = reglages.voix_travaux !== false;
+  $("ev-reglage-voix-bornes").checked = reglages.voix_bornes !== false;
+  $("ev-reglage-bip").checked = reglages.bip_vitesse !== false;
 
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
@@ -1999,6 +2006,13 @@ function cablerProfil() {
       relief_3d: $("ev-reglage-relief").checked,
       jour_nuit_auto: $("ev-reglage-jour-nuit").checked,
       mode_voiture: $("ev-reglage-mode-voiture").checked,
+      grand_bandeau: $("ev-reglage-grand-bandeau").checked,
+      zoom_renforce: $("ev-reglage-zoom-renforce").checked,
+      voix_guidage: $("ev-reglage-voix").checked,
+      voix_voies: $("ev-reglage-voix-voies").checked,
+      voix_travaux: $("ev-reglage-voix-travaux").checked,
+      voix_bornes: $("ev-reglage-voix-bornes").checked,
+      bip_vitesse: $("ev-reglage-bip").checked,
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
