@@ -8,6 +8,7 @@ import {
   SEUIL_PUISSANCE_DC_KW,
   MARGE_SECURITE_PCT_DEFAUT,
   CIBLE_RECHARGE_PCT_DEFAUT,
+  RESERVE_DERNIER_ARRET_PCT,
   MAX_ARRETS,
   PRIX_KWH_ESTIME_DEFAUT_EUR,
   MULTIPLICATEUR_CHARGE_LOURDE,
@@ -337,7 +338,12 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     }));
 
     const chargeALaBornePct = Math.round(margeSecuritePct * 10) / 10;
-    const kwhACharger = (profil.capacite_kwh * (cibleRechargePct - chargeALaBornePct)) / 100;
+    // Dernier arrêt (la cible suffit pour finir) : charger jusqu'à la cible
+    // ferait arriver très chargé après une longue attente, souvent sur une
+    // borne lente près de l'arrivée.
+    const besoinFinPct = Math.ceil(margeSecuritePct + pctConsomme(pointRechargeKm, distanceKm) + RESERVE_DERNIER_ARRET_PCT);
+    const departBornePct = atteignable(pointRechargeKm, cibleRechargePct) >= distanceKm ? Math.min(cibleRechargePct, Math.max(chargeALaBornePct + 1, besoinFinPct)) : cibleRechargePct;
+    const kwhACharger = (profil.capacite_kwh * (departBornePct - chargeALaBornePct)) / 100;
     const puissanceKw = borne.puissance_max_kw ? Math.min(borne.puissance_max_kw, profil.puissance_dc_kw) : profil.puissance_dc_kw;
     const tempsChargeMin = calculerTempsCharge(kwhACharger, puissanceKw);
     const coutEstimeEur = Math.round(kwhACharger * borne.prix_kwh_eur * 100) / 100;
@@ -354,7 +360,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       puissance_kw: Math.round(puissanceKw),
       temps_charge_min: Math.round(tempsChargeMin),
       pct_arrivee_borne: chargeALaBornePct,
-      pct_depart_borne: cibleRechargePct,
+      pct_depart_borne: departBornePct,
       operateur: borne.operateur,
       statut: borne.statut,
       nombre_points: borne.nombre_points,
@@ -375,7 +381,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       alternatives,
     });
     distanceParcourue = pointRechargeKm;
-    chargePct = cibleRechargePct;
+    chargePct = departBornePct;
   }
 
   const pctArrivee = chargePct - pctConsomme(distanceParcourue, distanceKm);

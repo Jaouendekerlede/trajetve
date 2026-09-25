@@ -5,12 +5,16 @@
 // centrer et cadrer dans la partie réellement visible.
 
 import { escapeHtml } from "./util.js";
+import { getApiKeys } from "./config.js";
 
 let carte = null;
 let fond = null;
 let nomFond = "sombre";
 let coucheBornes = null;
 let coucheTrajet = null;
+// Itinéraires proposés mais non choisis : dans coucheTrajet pour être
+// masqués avec lui pendant la navigation.
+let coucheAlternatives = null;
 let curseur = null;
 let marqueurPosition = null;
 let selection = null;
@@ -20,11 +24,40 @@ const marqueurs = new Map();
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
 const OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ATTRIBUTION_OSM = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-// Fond sombre = tuiles OpenStreetMap standard inversées par un filtre CSS
-// (aucune clé requise, contrairement aux fonds sombres CARTO/Stadia).
+// Fonds TomTom (clé déjà utilisée pour les itinéraires) : tuiles en double
+// densité, donc nettes sur les écrans de téléphone, là où les tuiles OSM
+// sont agrandies et floues. Sans clé, ou si TomTom refuse les tuiles, on
+// retombe sur OSM (le fond sombre est alors OSM inversé par un filtre CSS).
+const osmSombre = () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" });
+const osmPlan = () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM });
+
+function fondTomTom(style, repli) {
+  const cle = getApiKeys().tomtom;
+  if (!cle) return repli();
+  // Une tuile TomTom 512 px couvre la même zone qu'une tuile 256 px : on
+  // l'affiche en 256 px CSS, soit deux pixels d'image par pixel d'écran.
+  const couche = L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/${style}/{z}/{x}/{y}.png?key=${encodeURIComponent(cle)}&tileSize=512&language=fr-FR`, {
+    maxZoom: 20,
+    attribution: '© <a href="https://www.tomtom.com/">TomTom</a>',
+  });
+  let chargees = 0;
+  let erreurs = 0;
+  couche.on("tileload", () => chargees++);
+  couche.on("tileerror", () => {
+    // Clé refusée ou quota épuisé : toutes les tuiles échouent.
+    if (++erreurs >= 4 && !chargees && fond === couche) {
+      console.warn("[CARTE] Tuiles TomTom refusées, retour sur OpenStreetMap");
+      carte.removeLayer(couche);
+      fond = repli().addTo(carte);
+      fond.bringToBack();
+    }
+  });
+  return couche;
+}
+
 const FONDS = {
-  sombre: () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" }),
-  plan: () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM }),
+  sombre: () => fondTomTom("night", osmSombre),
+  plan: () => fondTomTom("main", osmPlan),
   satellite: () =>
     L.layerGroup([
       L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, attribution: "Imagerie © Esri" }),
@@ -59,6 +92,7 @@ export function initCarte(idElement, { fondInitial = "sombre", onDeplacement } =
   choisirFond(fondInitial);
   coucheBornes = L.layerGroup().addTo(carte);
   coucheTrajet = L.layerGroup().addTo(carte);
+  coucheAlternatives = L.layerGroup();
   carte.on("moveend", () => onDeplacement?.());
   carte.on("dragstart zoomstart", (e) => {
     if (e.type === "dragstart" || e.originalEvent) surDeplacementManuel?.();
@@ -161,6 +195,11 @@ export function choisirFond(nom) {
   if (fond.bringToBack) fond.bringToBack();
   nomFond = nom;
   return nom;
+}
+
+// Après un changement de clé TomTom : passer aux tuiles nettes (ou en revenir).
+export function rechargerFond() {
+  return choisirFond(nomFond);
 }
 
 export function fondSuivant() {
@@ -280,8 +319,27 @@ function ajouterArrets(arrets, icone, prefixe, onClicArret) {
   });
 }
 
+// liste : [{ coords, libelle, onClic }] -- sans recadrer la carte, car
+// elle est rafraîchie au fil des calculs pendant que l'utilisateur regarde.
+export function afficherAlternatives(liste) {
+  coucheAlternatives.clearLayers();
+  for (const { coords, libelle, onClic } of liste) {
+    if (!coords?.length) continue;
+    const latlngs = coords.map(([lon, lat]) => [lat, lon]);
+    const trace = L.polyline(latlngs, { color: "#7d8797", weight: 5, opacity: 0.75 }).addTo(coucheAlternatives);
+    // Zone de toucher plus large que le trait visible (doigt sur téléphone).
+    const zone = L.polyline(latlngs, { color: "#000", weight: 22, opacity: 0 }).addTo(coucheAlternatives);
+    for (const l of [trace, zone]) {
+      l.bindTooltip(escapeHtml(libelle), { sticky: true }).on("click", onClic);
+      l.bringToBack();
+    }
+  }
+}
+
 export function afficherTrajet(data, onClicArret) {
   coucheTrajet.clearLayers();
+  coucheAlternatives.clearLayers();
+  coucheAlternatives.addTo(coucheTrajet);
   placerCurseur(undefined, undefined);
   if (!data?.coords?.length) return;
 

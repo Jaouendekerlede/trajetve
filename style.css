@@ -535,6 +535,19 @@ textarea.ev-input { resize: vertical; }
 .ev-frise-curseur { position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); width: 24px; height: 24px; border-radius: 50%; background: var(--cyan); border: 3px solid #fff; box-shadow: 0 0 14px rgba(0, 229, 255, 0.9); pointer-events: none; z-index: 3; }
 .ev-frise-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--texte-faible); }
 
+/* ── Itinéraires alternatifs ───────────────────────────────────────────── */
+.ev-itineraires { gap: 8px; }
+.ev-itineraires h3 { margin: 0; }
+.ev-itin-aide { font-size: 12px; color: var(--texte-att); }
+.ev-itineraire { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; font: inherit; color: var(--texte); background: var(--voile); border: 1px solid var(--bordure); border-radius: 14px; padding: 10px 12px; cursor: pointer; }
+.ev-itineraire.choisi { border-color: var(--vert); background: rgba(34, 229, 160, 0.08); cursor: default; }
+.ev-itineraire.attente { cursor: default; opacity: 0.75; }
+.ev-itin-tete { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
+.ev-itin-coche { font-size: 12px; font-weight: 700; color: var(--vert-vif); }
+.ev-itin-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.ev-itin-ligne { font-size: 13px; line-height: 1.4; }
+.ev-itin-sous { font-size: 12px; color: var(--texte-att); line-height: 1.4; }
+
 /* ── Scénarios ─────────────────────────────────────────────────────────── */
 .ev-scenarios { display: flex; flex-direction: column; gap: 10px; }
 .ev-scenarios-grille { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

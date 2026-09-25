@@ -23,12 +23,13 @@ import {
   lireReglages,
   sauverReglages,
 } from "./storage.js";
-import { planifierTrajet, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
+import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
 import {
   initCarte,
   fondSuivant,
   choisirFond,
+  rechargerFond,
   ICONES_FONDS,
   definirDecalageBas,
   centreVisible,
@@ -43,6 +44,7 @@ import {
   montrerBornes,
   afficherPosition,
   afficherTrajet,
+  afficherAlternatives,
   effacerTrajet,
   placerCurseur,
 } from "./carte.js";
@@ -51,7 +53,7 @@ import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze } from "./util.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
-import { demarrerNavigation, navigationActive, retourNavigationEnCours } from "./navigation.js";
+import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante } from "./navigation.js";
 
 const $ = (id) => document.getElementById(id);
 const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
@@ -72,6 +74,11 @@ let dernierTrajet = null;
 let trajetAffiche = false;
 let dernierChargeDepartPct = 80;
 let dernierScenarios = null;
+// Routes proposées pour le dernier trajet : plans[0] = la plus rapide,
+// les suivantes = alternatives TomTom dont le plan de recharge est calculé
+// en arrière-plan (null en attendant). routes[i] (tracé, distance, durée)
+// permet de les montrer avant la fin de ce calcul.
+let itineraires = { jeton: 0, plans: [], routes: [] };
 let dernieresOptions = null;
 let borneOuverte = null;
 let calculEnCours = false;
@@ -967,17 +974,46 @@ async function lancerTrajet() {
   if (!exigerDestination(options)) return;
   await avecVerrou("ev-trajet-run-btn", "⏳ Calcul en cours…", async () => {
     sauverPrefsDepuis(options);
-    const resultat = await planifierTrajet(options.depart, options.destination, options);
+    oublierItineraires();
+    const resultat = await planifierTrajet(options.depart, options.destination, { ...options, avec_alternatives: true });
+    const bruts = resultat.itineraires_alternatifs || [];
+    delete resultat.itineraires_alternatifs;
     if (!resultat.ok) return montrerErreurTrajet(resultat.erreur || "Calcul impossible.");
+    itineraires.plans = [resultat, ...bruts.map(() => null)];
+    itineraires.routes = [resultat, ...bruts];
     afficherResultat(resultat);
     annoncer(resultat);
+    // Sans attendre : le résultat principal reste utilisable pendant ce temps.
+    planifierItinerairesAlternatifs(bruts, options, itineraires.jeton);
   });
+}
+
+function oublierItineraires() {
+  itineraires = { jeton: itineraires.jeton + 1, plans: [], routes: [] };
+}
+
+async function planifierItinerairesAlternatifs(bruts, options, jeton) {
+  for (let i = 0; i < bruts.length; i++) {
+    let plan;
+    try {
+      // En arrière-plan, on peut attendre que le quota Open-Meteo se libère
+      // pour que chaque route ait relief et météo, comme la principale.
+      plan = await planifierAlternative(bruts[i], { ...options, patience_open_meteo_ms: 70000 });
+    } catch (e) {
+      console.error(e);
+      plan = { ok: false, erreur: `Erreur inattendue : ${e?.message || e}` };
+    }
+    if (jeton !== itineraires.jeton) return;
+    itineraires.plans[i + 1] = plan;
+    if (trajetAffiche && !navigationActive() && itineraires.plans.includes(dernierTrajet)) afficherItineraires(dernierTrajet);
+  }
 }
 
 async function lancerAllerRetour() {
   const options = construireOptions();
   if (!exigerDestination(options)) return;
   await avecVerrou("ev-aller-retour-btn", "⏳ Aller + retour…", async () => {
+    oublierItineraires();
     sauverPrefsDepuis(options);
     const { aller, retour } = await planifierAllerRetour(options.depart, options.destination, options);
     if (!aller.ok) return montrerErreurTrajet(aller.erreur || "Calcul impossible.");
@@ -1148,8 +1184,92 @@ function afficherResultat(p) {
 
   afficherVue("resultat");
   afficherTrajet(p, (arret) => ouvrirBorne(arret, { contexteArret: arret }));
+  afficherItineraires(p);
   renderProfilTrajet(p);
   preparerFrise(p);
+}
+
+// ── Itinéraires alternatifs ────────────────────────────────────────────────
+
+// Indice du meilleur plan selon `cle`, ou null si tous se valent (un badge
+// « le moins cher » n'a pas de sens quand tout coûte 0 €).
+function meilleurPlan(plans, cle) {
+  const valides = plans.map((p, i) => ({ v: p?.ok ? p[cle] : null, i })).filter((x) => Number.isFinite(x.v));
+  if (valides.length < 2) return null;
+  const min = Math.min(...valides.map((x) => x.v));
+  const max = Math.max(...valides.map((x) => x.v));
+  return min < max ? valides.find((x) => x.v === min).i : null;
+}
+
+function badgesItineraires(plans) {
+  const badges = plans.map(() => []);
+  const ajouter = (i, texte) => i !== null && badges[i].push(texte);
+  ajouter(meilleurPlan(plans, "duree_totale_min"), "⚡ Le plus rapide");
+  ajouter(meilleurPlan(plans, "cout_total_eur"), "💶 Le moins cher");
+  ajouter(meilleurPlan(plans, "distance_km"), "📏 Le plus court");
+  if (plans.some((p) => p?.ok && p.km_peage > 0)) plans.forEach((p, i) => p?.ok && p.km_peage === 0 && badges[i].push("🚫 Sans péage"));
+  return badges;
+}
+
+function ecartMinutes(min) {
+  if (Math.abs(min) < 1) return "même durée";
+  return `${min > 0 ? "+" : "−"}${formaterMinutes(Math.abs(min))}`;
+}
+
+function carteItineraire(i, plan, route, badges, affiche) {
+  const choisi = plan === affiche;
+  const titre = `<div class="ev-itin-tete"><strong>Itinéraire ${i + 1}</strong>${choisi ? `<span class="ev-itin-coche">✓ affiché</span>` : ""}</div>`;
+  const pastilles = badges.length ? `<div class="ev-itin-badges">${badges.map((b) => `<span class="ev-cb-pill ok">${b}</span>`).join("")}</div>` : "";
+  const routeTxt = `${nombre(route.distance_km)} km · ${route.duree_text} de route`;
+  if (!plan) {
+    return `<div class="ev-itineraire attente">${titre}<div class="ev-itin-ligne">${routeTxt}</div><div class="ev-itin-sous">⏳ Calcul des recharges…</div></div>`;
+  }
+  if (!plan.ok) {
+    return `<div class="ev-itineraire attente">${titre}<div class="ev-itin-ligne">${routeTxt}</div><div class="ev-itin-sous">⚠️ ${escapeHtml(plan.erreur || "Plan de recharge impossible.")}</div></div>`;
+  }
+  const arrets = plan.nb_arrets ? `${plan.nb_arrets} arrêt${plan.nb_arrets > 1 ? "s" : ""}` : "sans arrêt";
+  const ligne = `🏁 <strong>${formaterMinutes(plan.duree_totale_min ?? plan.duree_min)}</strong> au total · ${routeTxt} · ${arrets} · ${plan.cout_total_eur ? euros(plan.cout_total_eur) : "0 €"} · 🔋 ${nombre(plan.pct_batterie_arrivee)} %`;
+  const details = [];
+  if (plan.km_autoroute) details.push(`🛣️ ${nombre(plan.km_autoroute)} km d'autoroute`);
+  details.push(plan.km_peage ? `péage sur ${nombre(plan.km_peage)} km` : "sans péage");
+  if (plan.retard_trafic_min >= 5) details.push(`🚦 ${formaterMinutes(plan.retard_trafic_min)} de bouchons`);
+  if (!choisi && affiche?.ok) details.push(`${ecartMinutes((plan.duree_totale_min ?? 0) - (affiche.duree_totale_min ?? 0))} par rapport à l'affiché`);
+  return `<button type="button" class="ev-itineraire${choisi ? " choisi" : ""}" data-itin="${i}">${titre}${pastilles}<div class="ev-itin-ligne">${ligne}</div><div class="ev-itin-sous">${details.join(" · ")}</div></button>`;
+}
+
+function choisirItineraire(i) {
+  const plan = itineraires.plans[i];
+  if (!plan) return toast("Plan de recharge de cet itinéraire encore en calcul…");
+  if (!plan.ok) return toast(plan.erreur || "Plan de recharge impossible pour cet itinéraire.");
+  if (plan !== dernierTrajet) afficherResultat(plan);
+}
+
+function afficherItineraires(p) {
+  const zone = $("ev-itineraires");
+  const index = itineraires.plans.indexOf(p);
+  if (index < 0 || itineraires.routes.length < 2) {
+    zone.classList.add("hidden");
+    zone.innerHTML = "";
+    afficherAlternatives([]);
+    return;
+  }
+  const badges = badgesItineraires(itineraires.plans);
+  const cartes = itineraires.routes.map((route, i) => carteItineraire(i, itineraires.plans[i], route, badges[i], p)).join("");
+  zone.innerHTML = `<h3>🛣️ ${itineraires.routes.length} itinéraires proposés</h3>
+    <div class="ev-itin-aide">Touche une route, ici ou sur la carte (en gris), pour voir son plan de recharge.</div>${cartes}`;
+  zone.classList.remove("hidden");
+  zone.querySelectorAll("[data-itin]").forEach((el) => el.addEventListener("click", () => choisirItineraire(Number(el.dataset.itin))));
+
+  afficherAlternatives(
+    itineraires.routes
+      .map((route, i) => ({ route, i }))
+      .filter(({ i }) => i !== index)
+      .map(({ route, i }) => {
+        const plan = itineraires.plans[i];
+        const duree = plan?.ok ? `${formaterMinutes(plan.duree_totale_min ?? plan.duree_min)} au total` : `${route.duree_text} de route`;
+        return { coords: route.coords, libelle: `Itinéraire ${i + 1} · ${duree}`, onClic: () => choisirItineraire(i) };
+      }),
+  );
 }
 
 function quitterTrajet() {
@@ -1160,15 +1280,21 @@ function quitterTrajet() {
   chargerBornesZone(true);
 }
 
-function lancerNavigation() {
+function lancerNavigation(demo) {
   if (!dernierTrajet || navigationActive()) return;
   const options = dernieresOptions || construireOptions();
   demarrerNavigation(dernierTrajet, {
     options,
+    demo,
     chargeDepartPct: dernierChargeDepartPct,
     // Recalcul des recharges en route, depuis la position actuelle de la voiture.
     onReplanifier: async (departCoordonnees, chargePct) => {
       const o = { ...options, charge_pct: chargePct, depart_prevu: null };
+      // Itinéraire choisi parmi les alternatives : on reste dessus.
+      if (dernierTrajet.suivre_trace) {
+        const [lat, lon] = departCoordonnees.split(",").map(Number);
+        o.trace_imposee = [[lon, lat], ...traceRestante(dernierTrajet.coords, lat, lon).coords];
+      }
       const plan = await planifierTrajet(departCoordonnees, o.destination, o, false);
       if (plan.ok) {
         dernierTrajet = plan;
@@ -1183,7 +1309,8 @@ function lancerNavigation() {
 }
 
 function cablerResultat() {
-  $("ev-nav-demarrer-btn").addEventListener("click", () => lancerNavigation());
+  $("ev-nav-demarrer-btn").addEventListener("click", () => lancerNavigation(false));
+  $("ev-nav-demo-btn").addEventListener("click", () => lancerNavigation(true));
   $("ev-modifier-btn").addEventListener("click", () => afficherVue("trajet"));
   $("ev-quitter-trajet-btn").addEventListener("click", quitterTrajet);
   $("ev-export-btn").addEventListener("click", () => {
@@ -1753,7 +1880,9 @@ function cablerProfil() {
       saison: $("ev-profil-saison").value,
     });
     sauverReglages({ adresse_domicile: $("ev-reglage-domicile").value.trim(), annonce_vocale: $("ev-reglage-annonce").checked });
+    const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
+    if (getApiKeys().tomtom !== ancienneCleTomTom) rechargerFond();
     rendreProfil();
     majBandeauCles();
     toast("✅ Profil et réglages enregistrés");

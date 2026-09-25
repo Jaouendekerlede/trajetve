@@ -102,9 +102,24 @@ function echantillonner(coords, cumKm, cumSec) {
   return points;
 }
 
+// Open-Meteo gratuit : ~600 points par minute, et un trajet en consomme
+// ~260. Avec patienceMs, un refus 429 est retenté après une pause au lieu
+// de dégrader le calcul (utile pour les itinéraires alternatifs, calculés
+// en arrière-plan juste après le principal).
+async function fetchOpenMeteo(url, patienceMs = 0) {
+  const PAUSE_MS = 20000;
+  let attendu = 0;
+  for (;;) {
+    const resp = await fetch(url);
+    if (resp.status !== 429 || attendu + PAUSE_MS > patienceMs) return resp;
+    await new Promise((r) => setTimeout(r, PAUSE_MS));
+    attendu += PAUSE_MS;
+  }
+}
+
 // ── Altitudes (Open-Meteo, gratuit, sans clé, 100 points par requête) ──────
 
-async function altitudes(points) {
+async function altitudes(points, patienceMs) {
   const lots = [];
   for (let k = 0; k < points.length; k += 100) lots.push(points.slice(k, k + 100));
   try {
@@ -114,7 +129,7 @@ async function altitudes(points) {
           latitude: lot.map((p) => p.lat.toFixed(5)).join(","),
           longitude: lot.map((p) => p.lon.toFixed(5)).join(","),
         });
-        const resp = await fetch(`https://api.open-meteo.com/v1/elevation?${params}`);
+        const resp = await fetchOpenMeteo(`https://api.open-meteo.com/v1/elevation?${params}`, patienceMs);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (!Array.isArray(data.elevation) || data.elevation.length !== lot.length) throw new Error("réponse incomplète");
@@ -153,7 +168,7 @@ function corrigerAltitudes(alt, points, tunnel) {
 
 // ── Météo à l'heure de passage (Open-Meteo, gratuit, sans clé) ─────────────
 
-async function meteoLeLongDuTrajet(points, departMs) {
+async function meteoLeLongDuTrajet(points, departMs, patienceMs) {
   const indices = [];
   for (let k = 0; k < NB_POINTS_METEO; k++) indices.push(Math.round((k * (points.length - 1)) / (NB_POINTS_METEO - 1)));
   const lieux = [...new Set(indices)].map((idx) => points[idx]);
@@ -171,7 +186,7 @@ async function meteoLeLongDuTrajet(points, departMs) {
       timeformat: "unixtime",
       forecast_days: String(Math.max(1, jours)),
     });
-    const resp = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    const resp = await fetchOpenMeteo(`https://api.open-meteo.com/v1/forecast?${params}`, patienceMs);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     let data = await resp.json();
     if (!Array.isArray(data)) data = [data];
@@ -290,8 +305,8 @@ export async function construireProfilEnergie(itin, profil, options) {
   const points = echantillonner(coords, cumKm, cumSec);
 
   const [altBrutes, stations] = await Promise.all([
-    altitudes(points),
-    options.ajuster_meteo ? meteoLeLongDuTrajet(points, options.depart_ms) : Promise.resolve(null),
+    altitudes(points, options.patience_ms),
+    options.ajuster_meteo ? meteoLeLongDuTrajet(points, options.depart_ms, options.patience_ms) : Promise.resolve(null),
   ]);
   const reliefOk = !!altBrutes;
   const alt = reliefOk ? corrigerAltitudes(altBrutes.slice(), points, tunnel) : points.map(() => 0);

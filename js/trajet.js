@@ -4,7 +4,7 @@
 
 import { getApiKeys, PALIERS_TEMPERATURE, MODES_TRAJET, MULTIPLICATEUR_CHARGE_LOURDE } from "./config.js";
 import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages } from "./storage.js";
-import { resoudreLieu, pointADistanceSurTrace } from "./geo.js";
+import { resoudreLieu, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km } from "./planner.js";
 import { construireProfilEnergie, fonctionsEnergie, fonctionsEnergieConstante } from "./energie.js";
@@ -62,14 +62,38 @@ async function calculerItineraire(depart, destination, opts) {
     eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
     // TomTom prévoit alors le trafic à cette heure-là
     departAt: departMs > Date.now() + 5 * 60000 ? new Date(departMs).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
+    maxAlternatives: opts.avec_alternatives && !opts.trace_imposee ? MAX_ALTERNATIVES : 0,
+    traceImposee: opts.trace_imposee,
   });
   if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
 
-  const dureeMin = Math.floor(it.summary.travelTimeInSeconds / 60);
+  const itin = itineraireDepuisRoute(it, a, b, departMs, !!opts.trace_imposee && it.traceSuivie);
+  itin._alternatives = it.alternatives.map((r) => itineraireDepuisRoute(r, a, b, departMs, true));
+  return itin;
+}
+
+const MAX_ALTERNATIVES = 2;
+
+function kmSurSections(coords, sections, type) {
+  let km = 0;
+  for (const s of sections) {
+    if (String(s.sectionType || "").toUpperCase().replace(/_/g, "") !== type) continue;
+    const fin = Math.min(coords.length - 1, s.endPointIndex ?? 0);
+    for (let i = Math.max(0, s.startPointIndex ?? 0); i < fin; i++) {
+      km += haversineKm(coords[i][1], coords[i][0], coords[i + 1][1], coords[i + 1][0]);
+    }
+  }
+  return Math.round(km);
+}
+
+// suivreTrace : en navigation, TomTom devra reconstruire ce tracé précis
+// plutôt que de reprendre l'itinéraire le plus rapide.
+function itineraireDepuisRoute(route, a, b, departMs, suivreTrace) {
+  const dureeMin = Math.floor(route.summary.travelTimeInSeconds / 60);
   return {
     ok: true,
-    _sections: it.sections,
-    _summary: it.summary,
+    _sections: route.sections,
+    _summary: route.summary,
     depart_ms: departMs,
     from_name: a.nom,
     to_name: b.nom,
@@ -77,10 +101,14 @@ async function calculerItineraire(depart, destination, opts) {
     from_lon: a.lon,
     to_lat: b.lat,
     to_lon: b.lon,
-    distance_km: arrondi1(it.summary.lengthInMeters / 1000),
+    distance_km: arrondi1(route.summary.lengthInMeters / 1000),
     duree_min: dureeMin,
     duree_text: formaterMinutes(dureeMin),
-    coords: it.coords,
+    retard_trafic_min: Math.round((route.summary.trafficDelayInSeconds || 0) / 60),
+    km_autoroute: kmSurSections(route.coords, route.sections, "MOTORWAY"),
+    km_peage: kmSurSections(route.coords, route.sections, "TOLLROAD"),
+    suivre_trace: suivreTrace,
+    coords: route.coords,
   };
 }
 
@@ -95,6 +123,7 @@ async function profilEnergiePour(itin, opts) {
       ajuster_meteo: opts.ajuster_meteo,
       charge_lourde: opts.charge_lourde,
       depart_ms: itin.depart_ms,
+      patience_ms: opts.patience_open_meteo_ms,
     });
   } catch (e) {
     console.warn("[ENERGIE] Profil détaillé impossible, consommation constante utilisée", e);
@@ -159,7 +188,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
   });
   if (meteoInfo) resultat.meteo_info = meteoInfo;
 
-  const { _sections, _summary, ...itinPublic } = itin;
+  const { _sections, _summary, _alternatives, ...itinPublic } = itin;
   const dureeTotaleMin = resultat.ok ? itin.duree_min + (resultat.temps_charge_total_min || 0) : null;
   const complet = { ...itinPublic, duree_totale_min: dureeTotaleMin, ...resultat, modele: detaille ? "detaille" : "constant" };
 
@@ -180,10 +209,15 @@ async function planifierSurItineraire(itin, chargePct, opts) {
   return complet;
 }
 
+// Avec opts.avec_alternatives, le résultat porte aussi les autres routes
+// proposées par TomTom (itineraires_alternatifs), dont le plan de recharge
+// reste à faire avec planifierAlternative : l'énergie, donc les arrêts,
+// dépendent de chaque route.
 export async function planifierTrajet(depart, destination, opts, sauvegarder = true) {
   const itin = await calculerItineraire(depart, destination, opts);
   if (!itin.ok) return itin;
   const resultat = await planifierSurItineraire(itin, opts.charge_pct, opts);
+  resultat.itineraires_alternatifs = itin._alternatives;
   if (resultat.ok && sauvegarder) {
     enregistrerHistoriqueTrajet(depart, destination, resultat, {
       mode: opts.mode,
@@ -195,6 +229,10 @@ export async function planifierTrajet(depart, destination, opts, sauvegarder = t
     });
   }
   return resultat;
+}
+
+export async function planifierAlternative(itin, opts) {
+  return planifierSurItineraire(itin, opts.charge_pct, opts);
 }
 
 // Retour : on suppose une recharge jusqu'à l'objectif à destination avant

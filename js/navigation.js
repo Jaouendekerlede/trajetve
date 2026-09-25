@@ -27,6 +27,7 @@ import {
 const $ = (id) => document.getElementById(id);
 const DELAI_TRAFIC_MS = 5 * 60 * 1000;
 const DELAI_MIN_RECALCUL_MS = 20 * 1000;
+const ACCELERATION_DEMO = 4;
 const DELAI_BORNES_MS = 90 * 1000;
 const RAYON_BORNES_KM = 12;
 const DISTANCE_MIN_RAFRAICHIR_BORNES_KM = RAYON_BORNES_KM * 0.4;
@@ -130,11 +131,36 @@ function construireRoute(r) {
   return { coords, cum, total: cum[dernier], instructions, limites, troncons };
 }
 
+// Partie du tracé choisi encore devant la voiture. La recherche repart du
+// dernier point atteint pour ne pas s'accrocher à un passage antérieur
+// (route qui repasse près d'elle-même).
+export function traceRestante(coords, lat, lon, depuis = 0) {
+  let meilleur = depuis;
+  let dMin = Infinity;
+  for (let i = depuis; i < coords.length; i++) {
+    const d = haversineKm(lat, lon, coords[i][1], coords[i][0]);
+    if (d < dMin) {
+      dMin = d;
+      meilleur = i;
+    }
+  }
+  return { indice: meilleur, coords: coords.slice(meilleur) };
+}
+
 async function calculerRouteNav(pos, cap) {
   const cle = getApiKeys().tomtom;
   const o = etat.options || {};
+  let traceImposee = null;
+  // TomTom refuse tracé imposé + étapes : tant qu'il reste des bornes (qui
+  // sont sur la route choisie), le guidage passe simplement par elles.
+  if (etat.plan.suivre_trace && !etat.arretsRestants.length && etat.plan.coords?.length) {
+    const reste = traceRestante(etat.plan.coords, pos.lat, pos.lon, etat.indiceTrace);
+    etat.indiceTrace = reste.indice;
+    if (reste.coords.length >= 2) traceImposee = [[pos.lon, pos.lat], ...reste.coords];
+  }
   const r = await calculerItineraireTomTom(cle, pos.lat, pos.lon, etat.destination.lat, etat.destination.lon, {
     etapes: etat.arretsRestants.map((a) => ({ lat: a.lat, lon: a.lon })),
+    traceImposee,
     instructions: true,
     cap,
     eviterPeages: o.eviter_peages,
@@ -354,6 +380,8 @@ function arriveeBorne(arret) {
     carteBorne.classList.add("hidden");
     parler("C'est reparti.", true);
     majEcran();
+    // Dernière borne quittée : on reprend le tracé choisi sans attendre.
+    if (etat.plan.suivre_trace && !etat.arretsRestants.length) recalculer("reprise");
   });
   majEcran();
 }
@@ -401,7 +429,7 @@ async function rafraichirBornesProches() {
 // ── Recalculs ───────────────────────────────────────────────────────────────
 
 async function recalculer(raison) {
-  if (!etat || etat.recalculEnCours) return;
+  if (!etat || etat.recalculEnCours || etat.demo) return;
   etat.recalculEnCours = true;
   etat.dernierRecalcul = Date.now();
   if (raison === "hors_route") {
@@ -438,6 +466,7 @@ async function replanifier() {
     return;
   }
   etat.plan = nouveauPlan;
+  etat.indiceTrace = 0;
   etat.arretsRestants = [...(nouveauPlan.arrets || [])];
   etat.batterie = { refPct: pct, refOdometre: etat.odometre };
   etat.alerteBatterieAffichee = false;
@@ -476,7 +505,7 @@ function surPosition(p) {
   const seuil = Math.max(40, (p.precision || 20) * 1.5);
   etat.horsRoute = m.d > seuil && (p.vitesse || 0) > 2 ? etat.horsRoute + 1 : 0;
   if (etat.horsRoute >= 3 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
-  else if (Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
+  else if (!etat.demo && Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
 
   // Arrivée à une borne ou à destination
   const arret = etat.arretsRestants[0];
@@ -490,13 +519,38 @@ function surPosition(p) {
   majVoiture(affichee.lat, affichee.lon, p.cap);
   majProgressionNavigation(etat.route.coords, etat.idx, affichee.lat, affichee.lon);
   if (etat.suivi) {
-    const kmh = (p.vitesse || 0) * 3.6;
-    const zoom = kmh > 90 ? 15 : kmh > 50 ? 16 : 17;
-    cameraNavigation(affichee.lat, affichee.lon, p.cap, zoom, etat.sensDeMarche);
+    etat.zoom = zoomNavigation((p.vitesse || 0) * 3.6, etat.zoom);
+    cameraNavigation(affichee.lat, affichee.lon, p.cap, etat.zoom, etat.sensDeMarche);
   }
   annonces();
   majEcran();
   rafraichirBornesProches();
+}
+
+// Comme un GPS : large sur autoroute, rapproché en ville et à l'approche
+// d'une manœuvre (rond-point, sortie…). Les seuils de vitesse ont 5 km/h
+// d'hystérésis pour que la carte ne « pompe » pas autour de 50 km/h.
+const PALIERS_ZOOM = [
+  { min: 90, zoom: 15 },
+  { min: 50, zoom: 16 },
+  { min: 30, zoom: 17 },
+  { min: -1, zoom: 18 },
+];
+const ZOOM_MANOEUVRE = 18;
+
+function zoomNavigation(kmh, zoomActuel) {
+  const instr = etat.route.instructions.find((i) => i.offset > etat.offset + 8 && i.type !== "LOCATION_DEPARTURE" && !/WAYPOINT|ARRIVE/.test(i.manoeuvre || ""));
+  const distanceManoeuvre = instr ? instr.offset - etat.offset : Infinity;
+  // ~12 s de trajet, au moins 150 m et au plus 350 m avant la manœuvre
+  const apresManoeuvre = etat.zoomManoeuvre;
+  etat.zoomManoeuvre = distanceManoeuvre < Math.min(350, Math.max(150, (kmh / 3.6) * 12));
+  if (etat.zoomManoeuvre) return ZOOM_MANOEUVRE;
+
+  const cible = PALIERS_ZOOM.find((p) => kmh > p.min).zoom;
+  if (!Number.isFinite(zoomActuel) || apresManoeuvre || Math.abs(cible - zoomActuel) > 1) return cible;
+  // Palier voisin : on ne change que si la vitesse a franchi le seuil de 5 km/h.
+  const seuil = PALIERS_ZOOM.find((p) => p.zoom === Math.min(cible, zoomActuel)).min;
+  return Math.abs(kmh - seuil) >= 5 ? cible : zoomActuel;
 }
 
 // ── Source de position : GPS réel ───────────────────────────────────────────
@@ -524,6 +578,43 @@ function demarrerGps() {
     },
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
   );
+}
+
+// ── Source de position : mode démo (trajet simulé) ──────────────────────────
+
+function pointSurRoute(offset) {
+  const { coords, cum } = etat.route;
+  let i = 0;
+  while (i < cum.length - 2 && cum[i + 1] < offset) i++;
+  const t = cum[i + 1] > cum[i] ? Math.max(0, Math.min(1, (offset - cum[i]) / (cum[i + 1] - cum[i]))) : 0;
+  const [lonA, latA] = coords[i];
+  const [lonB, latB] = coords[i + 1];
+  return { lat: latA + t * (latB - latA), lon: lonA + t * (lonB - lonA), cap: capEntre(latA, lonA, latB, lonB), i };
+}
+
+// La voiture simulée roule un peu sous la limitation et ralentit avant
+// chaque manœuvre (rond-point, sortie…), comme un vrai conducteur.
+function vitesseDemoKmh(offset, i) {
+  let kmh = etat.route.limites[i] ? etat.route.limites[i] * 0.93 : 85;
+  const instr = etat.route.instructions.find((x) => x.offset > offset && x.type !== "LOCATION_DEPARTURE");
+  const d = instr ? instr.offset - offset : Infinity;
+  if (d < 60) kmh = Math.min(kmh, 30);
+  else if (d < 250) kmh = Math.min(kmh, 30 + (d - 60) * 0.25);
+  return kmh;
+}
+
+function demarrerDemo() {
+  let offset = etat.offset;
+  const acceleration = window.TRAJETVE_ACCELERATION_DEMO || ACCELERATION_DEMO;
+  etat.demoTimer = setInterval(() => {
+    if (!etat || etat.aLaBorne || etat.arrive) return;
+    const p0 = pointSurRoute(offset);
+    const kmh = vitesseDemoKmh(offset, p0.i);
+    offset = Math.max(offset, etat.offset) + (kmh / 3.6) * acceleration;
+    if (offset > etat.route.total) offset = etat.route.total;
+    const p = pointSurRoute(offset);
+    surPosition({ lat: p.lat, lon: p.lon, vitesse: kmh / 3.6, cap: p.cap, precision: 5, t: Date.now() });
+  }, 1000);
 }
 
 async function garderEcranAllume() {
@@ -606,7 +697,7 @@ export function navigationActive() {
 
 // plan : résultat du planificateur ; options : réglages du trajet ;
 // onReplanifier(depart, chargePct) -> nouveau plan ; onFin() à l'arrêt.
-export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, onReplanifier, onFin } = {}) {
+export async function demarrerNavigation(plan, { options = {}, demo = false, chargeDepartPct, onReplanifier, onFin } = {}) {
   if (etat) return;
   if (!getApiKeys().tomtom) {
     alert("Clé TomTom manquante : ajoute-la dans l'onglet 🚗 Profil.");
@@ -616,6 +707,7 @@ export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, 
   etat = {
     plan,
     options,
+    demo,
     onReplanifier,
     onFin,
     destination: { lat: plan.to_lat, lon: plan.to_lon, nom: plan.to_name },
@@ -629,6 +721,7 @@ export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, 
     dernierRecalcul: 0,
     dernierTrafic: Date.now(),
     dernierFetchBornes: 0,
+    indiceTrace: 0,
     posBornes: null,
     jetonBornes: 0,
     annoncesBornes: new Set(),
@@ -662,16 +755,18 @@ export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, 
   });
   garderEcranAllume();
 
-  // Position de départ : GPS réel
-  const depart = await new Promise((resolve) =>
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, vitesse: p.coords.speed ?? NaN, cap: p.coords.heading ?? NaN, precision: p.coords.accuracy, t: p.timestamp }),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
-    ),
-  );
+  // Position de départ : GPS réel, ou début du trajet en démo
+  const depart = demo
+    ? { lat: plan.from_lat, lon: plan.from_lon, vitesse: 0, cap: NaN, precision: 5, t: Date.now() }
+    : await new Promise((resolve) =>
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, vitesse: p.coords.speed ?? NaN, cap: p.coords.heading ?? NaN, precision: p.coords.accuracy, t: p.timestamp }),
+          () => resolve(null),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
+        ),
+      );
   if (!depart) {
-    afficherAlerte("⚠️ Position GPS introuvable. Autorise la localisation.");
+    afficherAlerte("⚠️ Position GPS introuvable. Autorise la localisation, ou essaie le mode démo.");
     $("ev-nav-instruction").textContent = "En attente du GPS…";
     return;
   }
@@ -686,13 +781,15 @@ export async function demarrerNavigation(plan, { options = {}, chargeDepartPct, 
   installerRoute(route);
   const premiere = route.instructions.find((i) => i.type !== "LOCATION_DEPARTURE");
   parler(`C'est parti. ${premiere ? premiere.message : ""}`, true);
-  demarrerGps();
+  if (demo) demarrerDemo();
+  else demarrerGps();
   surPosition({ ...depart, t: Date.now() });
 }
 
 export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
+  if (etat.demoTimer) clearInterval(etat.demoTimer);
   try {
     etat.wakeLock?.release();
   } catch {

@@ -80,6 +80,9 @@ export const FACTEUR_RALENTISSEMENT_DC = 1.5;
 export const SEUIL_PUISSANCE_DC_KW = 40.0;
 export const MARGE_SECURITE_PCT_DEFAUT = 10.0;
 export const CIBLE_RECHARGE_PCT_DEFAUT = 80.0;
+// Au dernier arrêt, on ne charge que pour arriver avec la marge de sécurité
+// plus cette réserve (écart possible entre estimation et conduite réelle).
+export const RESERVE_DERNIER_ARRET_PCT = 5.0;
 export const MAX_ARRETS = 6;
 export const PRIX_KWH_ESTIME_DEFAUT_EUR = 0.45;
 export const SEUIL_PUISSANCE_CB_KW = 50.0;
