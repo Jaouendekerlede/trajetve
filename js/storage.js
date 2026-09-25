@@ -280,3 +280,32 @@ export function importerDonnees(sauvegarde) {
   for (const [cle, valeur] of entrees) localStorage.setItem(cle, valeur);
   return entrees.length;
 }
+// ── Routes coupées à éviter (marquées sur la carte avant le départ) ─────────
+
+const MAX_ZONES_EVITEES = 5;
+const DEMI_COTE_ZONE_EVITEE_M = 120;
+
+export function listerZonesEvitees() {
+  return lireJson(STORAGE_KEYS.zonesEvitees, []);
+}
+
+export function ajouterZoneEvitee(lat, lon) {
+  const zones = [{ id: `zone_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, lat, lon, date: Date.now() }, ...listerZonesEvitees()].slice(0, MAX_ZONES_EVITEES);
+  ecrireJson(STORAGE_KEYS.zonesEvitees, zones);
+  return zones;
+}
+
+export function retirerZoneEvitee(id) {
+  const zones = listerZonesEvitees().filter((z) => z.id !== id);
+  ecrireJson(STORAGE_KEYS.zonesEvitees, zones);
+  return zones;
+}
+
+// Carrés de 240 m de côté, au format « avoidAreas » de TomTom.
+export function rectanglesZonesEvitees() {
+  return listerZonesEvitees().map(({ lat, lon }) => {
+    const dLat = DEMI_COTE_ZONE_EVITEE_M / 111320;
+    const dLon = DEMI_COTE_ZONE_EVITEE_M / (111320 * Math.cos((lat * Math.PI) / 180));
+    return { southWestCorner: { latitude: lat - dLat, longitude: lon - dLon }, northEastCorner: { latitude: lat + dLat, longitude: lon + dLon } };
+  });
+}

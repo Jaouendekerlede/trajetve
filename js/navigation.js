@@ -6,10 +6,12 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
+import { radarsLeLongDu, feuxLeLongDe } from "./osm-route.js";
+import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
@@ -311,12 +313,15 @@ function installerRoute(route) {
   // Le mode démo repart de la position actuelle sur le nouveau tracé.
   etat.demoOffset = null;
   etat.flecheCarte = undefined;
+  route.zonesDanger = etat.radars ? zonesDeDanger(etat.radars, route.coords, route.cum, route.limites) : [];
+  appliquerFeux(route);
   vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   if (etat.pos) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
     etat.idx = m.i;
     etat.offset = m.offset;
   }
+  chercherFeux(route);
 }
 
 // Projette la position sur l'itinéraire (recherche autour du dernier point connu).
@@ -395,9 +400,21 @@ const DISTANCE_MAX_VOIES_M = 800;
 // TomTom connaît les voies à cet endroit.
 function afficherVoies(instr) {
   const zone = $("ev-nav-voies");
+  const fenetre = $("ev-nav-vue-voies");
   const reste = instr ? instr.offset - etat.offset : Infinity;
   const section = instr && !etat.aLaBorne && !etat.arrive && reste < DISTANCE_MAX_VOIES_M ? etat.route.voies.find((v) => Math.abs(v.offset - instr.offset) < 40) : null;
-  if (!section) {
+  // Fenêtre en perspective quand il faut choisir sa file (pas si toutes
+  // les voies conviennent) ; sinon le petit bandeau.
+  const enFenetre = !!section && etat.prefs.fenetreVoies && section.lanes.some((l) => !l.follow);
+  fenetre.classList.toggle("hidden", !enFenetre);
+  if (enFenetre) {
+    $("ev-nav-vue-voies-distance").textContent = distanceAffichee(reste);
+    if (fenetre.dataset.cle !== String(section.offset)) {
+      fenetre.dataset.cle = String(section.offset);
+      $("ev-nav-vue-voies-dessin").innerHTML = dessinVoies(section.lanes);
+    }
+  } else fenetre.dataset.cle = "";
+  if (!section || enFenetre) {
     zone.classList.add("hidden");
     zone.dataset.cle = "";
     return;
@@ -468,6 +485,7 @@ function majEcran() {
     $("ev-nav-instruction").textContent = "Continuez jusqu'à la destination";
   }
   majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
+  majZoneDanger();
 
   afficherVoies(instr);
 
@@ -508,6 +526,108 @@ function majEcran() {
   const pct = Math.max(0, Math.round(pctMaintenant));
   $("ev-nav-batt").textContent = `${pct} %`;
   $("ev-nav-batt").className = pct >= 50 ? "good" : pct >= 20 ? "warn" : "bad";
+}
+
+// Route vue en perspective : les voies à prendre en bleu, avec leurs flèches.
+export function dessinVoies(lanes) {
+  const n = lanes.length;
+  const [haut, bas] = [18, 196];
+  const xb = (i) => 8 + (154 * i) / n;
+  const xh = (i) => 62 + (46 * i) / n;
+  const taille = n <= 3 ? 42 : n <= 5 ? 32 : 22;
+  let svg = "";
+  lanes.forEach((l, i) => {
+    svg += `<polygon points="${xh(i)},${haut} ${xh(i + 1)},${haut} ${xb(i + 1)},${bas} ${xb(i)},${bas}" fill="${l.follow ? "#2f80ff" : "#454d5e"}"/>`;
+    const d = l.follow || (l.directions || ["STRAIGHT"])[0];
+    svg += `<text x="${(xb(i) + xb(i + 1)) / 2}" y="${bas - 22}" text-anchor="middle" font-size="${taille}" font-weight="900" fill="${l.follow ? "#fff" : "rgba(255,255,255,0.45)"}">${FLECHES_VOIE[d] || "↑"}</text>`;
+  });
+  for (let i = 1; i < n; i++) svg += `<line x1="${xh(i)}" y1="${haut}" x2="${xb(i)}" y2="${bas}" stroke="#fff" stroke-width="2.5" stroke-dasharray="14 10"/>`;
+  svg += `<line x1="${xh(0)}" y1="${haut}" x2="${xb(0)}" y2="${bas}" stroke="#fff" stroke-width="3"/><line x1="${xh(n)}" y1="${haut}" x2="${xb(n)}" y2="${bas}" stroke="#fff" stroke-width="3"/>`;
+  return `<svg viewBox="0 0 170 200" aria-hidden="true">${svg}</svg>`;
+}
+
+// ── Zones de danger et feux (OpenStreetMap) ────────────────────────────────
+
+// Radars fixes du trajet, une fois (et après un nouveau plan) : on n'en
+// montre que les « zones de danger » permises par la loi.
+async function chercherRadars() {
+  if (!etat?.prefs.dangers || !etat.route) return;
+  const r = await radarsLeLongDu(etat.route.coords);
+  if (!etat?.route || !r.ok) return;
+  etat.radars = r.radars;
+  etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+}
+
+function majZoneDanger() {
+  const zone = etat.prefs.dangers && !etat.aLaBorne ? (etat.route.zonesDanger || []).find((z) => etat.offset >= z.debut && etat.offset <= z.fin) : null;
+  const el = $("ev-nav-danger");
+  el.classList.toggle("hidden", !zone);
+  if (!zone) {
+    etat.dansZoneDanger = false;
+    return;
+  }
+  el.textContent = `⚠️ Zone de danger${zone.limite ? ` · ${zone.limite} km/h` : ""}`;
+  if (!etat.dansZoneDanger) {
+    etat.dansZoneDanger = true;
+    parler(`Zone de danger${zone.limite ? `, limitée à ${zone.limite}` : ""}.`);
+    if (etat.prefs.bip) bip();
+  }
+}
+
+// Manœuvres en ville (≤ 70 km/h, hors ronds-points et bornes), avec la
+// position de la manœuvre précédente : « au feu », « au deuxième feu »…
+const VITESSE_MAX_FEUX = 70;
+const DISTANCE_RECHERCHE_FEUX_M = 400;
+
+function manoeuvresAFeux(route) {
+  const liste = [];
+  let depuis = 0;
+  for (const instr of route.instructions) {
+    const utile = instr.type !== "LOCATION_DEPARTURE" && !/WAYPOINT|ARRIVE|ROUNDABOUT/.test(instr.manoeuvre) && instr.jonction !== "ROUNDABOUT" && (instr.vitesseAvant || 50) <= VITESSE_MAX_FEUX;
+    if (utile) liste.push({ instr, depuis });
+    depuis = instr.offset;
+  }
+  return liste;
+}
+
+function appliquerFeux(route) {
+  if (!etat.prefs.feux || !etat.feuxConnus.size) return;
+  const positions = positionsSurTrace([...etat.feuxConnus.values()], route.coords, route.cum, 20);
+  for (const { instr, depuis } of manoeuvresAFeux(route)) {
+    instr.messageOrigine ??= instr.message;
+    instr.message = messageAvecFeu(instr.messageOrigine, compterFeux(positions, instr.offset, depuis));
+  }
+}
+
+// Feux autour des manœuvres pas encore vues (les recalculs reprennent
+// surtout les mêmes : pas de nouvelle requête pour elles).
+async function chercherFeux(route) {
+  if (!etat?.prefs.feux) return;
+  const a = manoeuvresAFeux(route).filter(({ instr }) => {
+    const p = pointSurRoute(instr.offset);
+    instr.cleFeux = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`;
+    return !etat.manoeuvresFeux.has(instr.cleFeux);
+  });
+  if (!a.length) return;
+  for (const { instr } of a) etat.manoeuvresFeux.add(instr.cleFeux);
+  const morceaux = a.map(({ instr, depuis }) => {
+    const debut = Math.max(depuis, instr.offset - DISTANCE_RECHERCHE_FEUX_M);
+    const fin = instr.offset + 10;
+    const pts = route.coords.filter((_, i) => route.cum[i] > debut && route.cum[i] < fin);
+    const [a1, a2] = [pointSurRoute(debut), pointSurRoute(Math.min(fin, route.total))];
+    return [[a1.lon, a1.lat], ...pts, [a2.lon, a2.lat]];
+  });
+  const r = await feuxLeLongDe(morceaux);
+  if (!etat) return;
+  if (!r.ok) {
+    for (const { instr } of a) etat.manoeuvresFeux.delete(instr.cleFeux);
+    return;
+  }
+  for (const f of r.feux) etat.feuxConnus.set(`${f.lat},${f.lon}`, f);
+  if (etat.route === route) {
+    appliquerFeux(route);
+    majEcran();
+  }
 }
 
 // ── Annonces vocales ────────────────────────────────────────────────────────
@@ -759,7 +879,10 @@ async function replanifier() {
   etat.batterie = { refPct: pct, refOdometre: etat.odometre };
   etat.alerteBatterieAffichee = false;
   const route = await calculerRouteNav(etat.pos, etat.pos.cap);
-  if (route) installerRoute(route);
+  if (route) {
+    installerRoute(route);
+    chercherRadars();
+  }
   afficherAlerte(null);
   parler(
     nouveauPlan.nb_arrets ? `Nouveau plan : ${nouveauPlan.nb_arrets} arrêt${nouveauPlan.nb_arrets > 1 ? "s" : ""}, le prochain à ${nouveauPlan.arrets[0].nom_borne}.` : "Nouveau plan : plus besoin de recharger.",
@@ -1239,7 +1362,11 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     jetonBornes: 0,
     annoncesBornes: new Set(),
     annoncesTravaux: new Set(),
-    zonesEvitees: [],
+    // Routes coupées marquées avant le départ, puis celles signalées avec 🚧.
+    zonesEvitees: rectanglesZonesEvitees(),
+    radars: null,
+    feuxConnus: new Map(),
+    manoeuvresFeux: new Set(),
     capacite: obtenirProfilVehicule().capacite_kwh,
     consoKwhKm: (plan.energie_totale_necessaire_kwh || 13) / Math.max(1, plan.distance_km),
     margePct: options.marge_pct ?? plan.arrets?.[0]?.pct_arrivee_borne ?? 12,
@@ -1251,6 +1378,9 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       voixBornes: reglages.voix_bornes !== false,
       bip: reglages.bip_vitesse !== false,
       zoomRenforce: reglages.zoom_renforce !== false,
+      dangers: reglages.zones_danger !== false,
+      feux: reglages.feux !== false,
+      fenetreVoies: reglages.fenetre_voies !== false,
     },
     sensDeMarche: true,
     suivi: true,
@@ -1267,6 +1397,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-orientation-btn").textContent = "🧭";
   $("ev-nav-fleche").textContent = "⏳";
   $("ev-nav-rue").classList.add("hidden");
+  $("ev-nav-danger").classList.add("hidden");
+  $("ev-nav-vue-voies").classList.add("hidden");
   $("ev-nav-distance").textContent = "";
   $("ev-nav-instruction").textContent = "Calcul du guidage…";
   afficherAlerte(null);
@@ -1306,6 +1438,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     return;
   }
   installerRoute(route);
+  chercherRadars();
   const premiere = route.instructions.find((i) => i.type !== "LOCATION_DEPARTURE");
   parler(`C'est parti. ${premiere ? premiere.message : ""}`, true);
   if (demo) demarrerDemo();

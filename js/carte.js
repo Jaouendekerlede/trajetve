@@ -685,3 +685,10 @@ export function montrerParkings(visible) {
 export function limitesVisibles() {
   return explo3D ? c3d.exploLimitesVisibles() : limitesVisibles2D();
 }
+// Position à l'écran (px) du centre de la partie visible de la carte : là où
+// placer une croix de visée qui correspond à centreVisible().
+export function pixelCentreVisible() {
+  const el = document.getElementById(explo3D ? "ev-carte-3d" : "ev-carte");
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + Math.max(1, (r.height - decalageBas) / 2) };
+}

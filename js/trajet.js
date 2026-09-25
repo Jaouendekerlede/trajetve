@@ -3,7 +3,7 @@
 // mais exécuté directement dans le téléphone, sans serveur.
 
 import { getApiKeys, PALIERS_TEMPERATURE, MODES_TRAJET, MULTIPLICATEUR_CHARGE_LOURDE } from "./config.js";
-import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements } from "./storage.js";
+import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements, rectanglesZonesEvitees } from "./storage.js";
 import { resoudreLieu, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km } from "./planner.js";
@@ -64,6 +64,7 @@ async function calculerItineraire(depart, destination, opts) {
     departAt: departMs > Date.now() + 5 * 60000 ? new Date(departMs).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
     maxAlternatives: opts.avec_alternatives && !opts.trace_imposee ? MAX_ALTERNATIVES : 0,
     traceImposee: opts.trace_imposee,
+    zonesEvitees: rectanglesZonesEvitees(),
   });
   if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
 

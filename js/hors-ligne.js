@@ -3,6 +3,7 @@
 // faut pour l'afficher en 3D (style, polices, icônes, moteur), et le guidage
 // TomTom (instructions, voies), rangé à part pour la navigation.
 
+import { rectanglesZonesEvitees } from "./storage.js";
 import { getApiKeys } from "./config.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { haversineKm } from "./geo.js";
@@ -83,7 +84,7 @@ async function telecharger(urls, onProgres, depart = 0, total = urls.length) {
 // recalculer la navigation sans réseau.
 async function preparerGuidage(plan) {
   const arrets = (plan.arrets || []).map((a) => ({ lat: a.lat, lon: a.lon }));
-  const r = await calculerItineraireTomTom(getApiKeys().tomtom, plan.from_lat, plan.from_lon, plan.to_lat, plan.to_lon, { etapes: arrets, instructions: true });
+  const r = await calculerItineraireTomTom(getApiKeys().tomtom, plan.from_lat, plan.from_lon, plan.to_lat, plan.to_lon, { etapes: arrets, instructions: true, zonesEvitees: rectanglesZonesEvitees() });
   if (r.erreur) return false;
   localStorage.setItem(CLE_GUIDAGE, JSON.stringify({ ts: Date.now(), to_lat: plan.to_lat, to_lon: plan.to_lon, nb_arrets: arrets.length, route: r }));
   return true;

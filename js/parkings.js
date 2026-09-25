@@ -54,6 +54,25 @@ function parkingDepuisOsm(e) {
   };
 }
 
+// Requête Overpass sur le serveur principal, puis le secours. Renvoie
+// { ok, elements } ou { ok: false, erreur }.
+export async function interrogerOverpass(requete) {
+  let erreur = "";
+  for (const { url, delaiMs } of SERVEURS) {
+    try {
+      const resp = await fetch(url, { method: "POST", body: new URLSearchParams({ data: requete }), signal: AbortSignal.timeout(delaiMs) });
+      if (!resp.ok) {
+        erreur = resp.status === 429 ? "service OpenStreetMap surchargé, réessaie dans une minute" : `HTTP ${resp.status}`;
+        continue;
+      }
+      return { ok: true, elements: (await resp.json()).elements || [] };
+    } catch (e) {
+      erreur = e.name === "TimeoutError" ? "service OpenStreetMap trop lent" : `réseau (${e.message})`;
+    }
+  }
+  return { ok: false, erreur };
+}
+
 // Zone : { sud, ouest, nord, est } en degrés. Renvoie { ok, parkings } ou
 // { ok: false, erreur }.
 export async function rechercherParkings(zone) {
@@ -61,21 +80,8 @@ export async function rechercherParkings(zone) {
   const cle = `parkings|${r(zone.sud)}|${r(zone.ouest)}|${r(zone.nord)}|${r(zone.est)}`;
   return avecMemoire(cle, DUREE_MEMOIRE_MS, async () => {
     const requete = `[out:json][timeout:20];nwr["amenity"="parking"](${zone.sud},${zone.ouest},${zone.nord},${zone.est});out center tags ${MAX_RESULTATS * 3};`;
-    let erreur = "";
-    for (const { url, delaiMs } of SERVEURS) {
-      try {
-        const resp = await fetch(url, { method: "POST", body: new URLSearchParams({ data: requete }), signal: AbortSignal.timeout(delaiMs) });
-        if (!resp.ok) {
-          erreur = resp.status === 429 ? "service des parkings surchargé, réessaie dans une minute" : `HTTP ${resp.status}`;
-          continue;
-        }
-        const donnees = await resp.json();
-        const parkings = (donnees.elements || []).map(parkingDepuisOsm).filter(Boolean).slice(0, MAX_RESULTATS);
-        return { ok: true, parkings };
-      } catch (e) {
-        erreur = e.name === "TimeoutError" ? "service des parkings trop lent" : `réseau (${e.message})`;
-      }
-    }
-    return { ok: false, erreur };
+    const res = await interrogerOverpass(requete);
+    if (!res.ok) return { ok: false, erreur: res.erreur.replace("OpenStreetMap", "des parkings") };
+    return { ok: true, parkings: res.elements.map(parkingDepuisOsm).filter(Boolean).slice(0, MAX_RESULTATS) };
   });
 }

@@ -799,3 +799,21 @@ body.ev-mode-voiture .ev-nav-limite { width: 64px; height: 64px; font-size: 24px
 }
 .ev-btn-plein { width: 100%; margin-top: 8px; }
 body.ev-mode-navigation .ev-maj { display: none; }
+
+/* Zone de danger (radars) : bandeau orange sous la manœuvre. */
+.ev-nav-danger { align-self: flex-start; padding: 8px 14px; border-radius: 12px; background: #e8590c; color: #fff; font-size: 17px; font-weight: 800; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
+/* Fenêtre des voies (comme Sygic), à droite sous le bandeau. */
+.ev-nav-vue-voies { align-self: flex-end; width: 150px; padding: 6px; border-radius: 16px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
+.ev-nav-vue-voies svg { display: block; width: 100%; height: auto; }
+.ev-nav-vue-voies-distance { color: #fff; font-size: 20px; font-weight: 900; text-align: center; margin-bottom: 2px; }
+body.ev-mode-voiture .ev-nav-vue-voies { width: 180px; }
+/* Routes coupées à éviter (Trajet > options) et visée sur la carte */
+.ev-zones-evitees { display: flex; flex-direction: column; gap: 6px; }
+.ev-zone-evitee { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--chip); font-size: 14px; }
+.ev-zone-evitee button { background: none; border: none; color: var(--texte); font-size: 16px; cursor: pointer; }
+.ev-visee { position: fixed; z-index: 900; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: none; border: 3px solid #ff3b3b; border-radius: 50%; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8); }
+.ev-visee::before, .ev-visee::after { content: ""; position: absolute; background: #ff3b3b; }
+.ev-visee::before { left: 50%; top: -12px; bottom: -12px; width: 3px; margin-left: -1.5px; }
+.ev-visee::after { top: 50%; left: -12px; right: -12px; height: 3px; margin-top: -1.5px; }
+.ev-visee-barre { position: fixed; z-index: 950; left: 12px; right: 12px; top: calc(12px + var(--securite-haut)); display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--panneau); border: 1px solid #ff3b3b; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); font-size: 14px; font-weight: 600; }
+.ev-visee-barre div { display: flex; gap: 8px; justify-content: flex-end; }

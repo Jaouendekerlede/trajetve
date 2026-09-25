@@ -19,6 +19,7 @@ import { rendreJournal, cablerJournal } from "./ui-journal.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
 import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
+import { cablerZonesEvitees } from "./ui-zones.js";
 import { cablerParkings, planifierParkings } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
@@ -1928,6 +1929,9 @@ function rendreReglagesProfil() {
   $("ev-reglage-voix-travaux").checked = reglages.voix_travaux !== false;
   $("ev-reglage-voix-bornes").checked = reglages.voix_bornes !== false;
   $("ev-reglage-bip").checked = reglages.bip_vitesse !== false;
+  $("ev-reglage-fenetre-voies").checked = reglages.fenetre_voies !== false;
+  $("ev-reglage-feux").checked = reglages.feux !== false;
+  $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
@@ -1952,6 +1956,7 @@ function expliquerRefusTomTom(r) {
 }
 
 function cablerProfil() {
+  cablerZonesEvitees(afficherVue);
   $("ev-export-donnees-btn").addEventListener("click", exporterSauvegarde);
   $("ev-lien-sauvegarde-btn").addEventListener("click", envoyerLienRestauration);
   $("ev-installer-btn").addEventListener("click", installerAppli);
@@ -2013,6 +2018,9 @@ function cablerProfil() {
       voix_travaux: $("ev-reglage-voix-travaux").checked,
       voix_bornes: $("ev-reglage-voix-bornes").checked,
       bip_vitesse: $("ev-reglage-bip").checked,
+      fenetre_voies: $("ev-reglage-fenetre-voies").checked,
+      feux: $("ev-reglage-feux").checked,
+      zones_danger: $("ev-reglage-zones-danger").checked,
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });

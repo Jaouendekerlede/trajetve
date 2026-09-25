@@ -129,6 +129,11 @@
           <label class="ev-check"><input type="checkbox" id="ev-preferer-cb-checkbox" checked> 💳 Privilégier les bornes qui acceptent la carte bancaire</label>
           <label class="ev-check"><input type="checkbox" id="ev-modele-detaille-checkbox" checked> 📈 Calcul détaillé : vitesse réelle et relief (décoché : conso constante, comme JARVIS)</label>
           <label class="ev-check"><input type="checkbox" id="ev-ajuster-meteo-checkbox"> 🌦️ Météo réelle sur le trajet : froid, chaleur, pluie, vent</label>
+          <div class="ev-zones-evitees">
+            <div class="ev-hint">🚧 Routes coupées à éviter (travaux connus avant de partir) :</div>
+            <div id="ev-zones-evitees-liste"></div>
+            <button id="ev-zone-eviter-btn" class="ev-btn" type="button">🚧 Marquer une route coupée sur la carte</button>
+          </div>
           <label class="ev-check"><input type="checkbox" id="ev-eviter-peages-checkbox"> 🛣️ Éviter les péages</label>
           <label class="ev-check"><input type="checkbox" id="ev-eviter-ferries-checkbox"> ⛴️ Éviter les ferries</label>
           <label class="ev-check"><input type="checkbox" id="ev-eviter-zfe-checkbox"> 🚫 Éviter les zones à faibles émissions</label>
@@ -389,6 +394,9 @@
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-travaux"> 🚧 Annoncer les travaux et routes fermées</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-bornes"> 🔋 Annoncer les bornes de recharge prévues</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-fenetre-voies"> 🛣️ Fenêtre des voies (comme Sygic) quand il faut choisir sa file</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-feux"> 🚦 « Au feu, tournez… » (feux d'OpenStreetMap)</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-zones-danger"> ⚠️ Zones de danger (radars fixes, comme la loi l'autorise : zone sans emplacement précis)</label>
         <div class="ev-hint">Les voies à prendre restent toujours affichées à l'écran.</div>
       </div>
 
@@ -446,7 +454,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 19 : zoom carrefours et bretelles, grand bandeau, sorties de ronds-points</div>
+      <div class="ev-hint ev-lien-centre">Version 20 : fenêtre des voies, feux, zones de danger, routes coupées</div>
     </div>
   </div>
 </section>
@@ -483,6 +491,11 @@
       </div>
     </div>
     <div id="ev-nav-voies" class="ev-nav-voies hidden" aria-label="Voies à prendre"></div>
+    <div id="ev-nav-danger" class="ev-nav-danger hidden"></div>
+    <div id="ev-nav-vue-voies" class="ev-nav-vue-voies hidden" aria-label="Voie à prendre">
+      <div id="ev-nav-vue-voies-distance" class="ev-nav-vue-voies-distance"></div>
+      <div id="ev-nav-vue-voies-dessin"></div>
+    </div>
     <div id="ev-nav-ensuite" class="ev-nav-ensuite hidden"></div>
     <div id="ev-nav-borne" class="ev-nav-borne hidden"></div>
     <div id="ev-nav-alerte" class="ev-nav-alerte hidden"></div>
