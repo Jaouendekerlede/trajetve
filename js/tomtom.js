@@ -78,11 +78,13 @@ export async function calculerItineraireTomTom(apiKey, lat1, lon1, lat2, lon2, o
   try {
     // Filets de sécurité : sans les sections de vitesse (requête d'origine
     // de JARVIS), puis sans le tracé imposé, plutôt que d'échouer.
+    // Voies de circulation : seulement pour le guidage (navigation).
+    const detail = [...SECTIONS_BASE, ...SECTIONS_VITESSE, ...(options.instructions ? ["lanes"] : [])];
     const essais = [
-      [[...SECTIONS_BASE, ...SECTIONS_VITESSE], support],
+      [detail, support],
       [SECTIONS_BASE, support],
     ];
-    if (support) essais.push([[...SECTIONS_BASE, ...SECTIONS_VITESSE], null], [SECTIONS_BASE, null]);
+    if (support) essais.push([detail, null], [SECTIONS_BASE, null]);
     let resp;
     let traceSuivie = false;
     for (const [sections, pts] of essais) {

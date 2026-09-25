@@ -128,7 +128,14 @@ function construireRoute(r) {
   }
   if (!troncons.length) troncons.push({ debut: 0, fin: cum[dernier], duree: r.summary?.travelTimeInSeconds || 0 });
 
-  return { coords, cum, total: cum[dernier], instructions, limites, troncons };
+  // Voies de circulation : la section se termine sur la manœuvre concernée,
+  // et `follow` marque la ou les voies à prendre.
+  const voies = (r.sections || [])
+    .filter((s) => s.sectionType === "LANES" && s.lanes?.length > 1 && s.lanes.some((l) => l.follow))
+    .map((s) => ({ offset: cum[Math.min(Math.max(0, s.endPointIndex ?? 0), dernier)], lanes: s.lanes }))
+    .sort((a, b) => a.offset - b.offset);
+
+  return { coords, cum, total: cum[dernier], instructions, limites, troncons, voies };
 }
 
 // Partie du tracé choisi encore devant la voiture. La recherche repart du
@@ -175,6 +182,9 @@ function installerRoute(route) {
   etat.route = route;
   etat.idx = 0;
   etat.offset = 0;
+  // Les distances de l'animation se rapportaient à l'ancien tracé.
+  if (etat.aff) etat.aff.offset = null;
+  etat.anim = null;
   etat.annoncesBornes = new Set();
   dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   if (etat.pos) {
@@ -232,6 +242,45 @@ function batterieEstimee() {
 
 // ── Écran ───────────────────────────────────────────────────────────────────
 
+const FLECHES_VOIE = {
+  STRAIGHT: "↑",
+  LEFT: "←",
+  RIGHT: "→",
+  SLIGHT_LEFT: "↖",
+  SLIGHT_RIGHT: "↗",
+  SHARP_LEFT: "↙",
+  SHARP_RIGHT: "↘",
+  LEFT_U_TURN: "↶",
+  RIGHT_U_TURN: "↷",
+};
+// Au-delà, trop tôt pour être utile ; sur autoroute, 800 m laissent le
+// temps de changer de file.
+const DISTANCE_MAX_VOIES_M = 800;
+
+// Bandeau des voies (comme Sygic) : chaque voie avec ses flèches, celle(s)
+// à prendre en évidence. Seulement pour la prochaine manœuvre, quand
+// TomTom connaît les voies à cet endroit.
+function afficherVoies(instr) {
+  const zone = $("ev-nav-voies");
+  const reste = instr ? instr.offset - etat.offset : Infinity;
+  const section = instr && !etat.aLaBorne && !etat.arrive && reste < DISTANCE_MAX_VOIES_M ? etat.route.voies.find((v) => Math.abs(v.offset - instr.offset) < 40) : null;
+  if (!section) {
+    zone.classList.add("hidden");
+    zone.dataset.cle = "";
+    return;
+  }
+  const cle = String(section.offset);
+  if (zone.dataset.cle === cle) return;
+  zone.dataset.cle = cle;
+  zone.innerHTML = section.lanes
+    .map((l) => {
+      const fleches = (l.directions || ["STRAIGHT"]).map((d) => `<span class="${d === l.follow ? "suivre" : ""}">${FLECHES_VOIE[d] || "↑"}</span>`).join("");
+      return `<div class="ev-nav-voie${l.follow ? " active" : ""}">${fleches}</div>`;
+    })
+    .join("");
+  zone.classList.remove("hidden");
+}
+
 function afficherAlerte(texte, bouton) {
   const el = $("ev-nav-alerte");
   if (!texte) {
@@ -275,6 +324,8 @@ function majEcran() {
     $("ev-nav-distance").textContent = distanceAffichee(route.total - etat.offset);
     $("ev-nav-instruction").textContent = "Continuez jusqu'à la destination";
   }
+
+  afficherVoies(instr);
 
   // Vitesse et limitation
   const kmh = Math.round((pos.vitesse || 0) * 3.6);
@@ -515,16 +566,94 @@ function surPosition(p) {
   }
   if (!arret && (etat.offset >= etat.route.total - 30 || haversineKm(p.lat, p.lon, etat.destination.lat, etat.destination.lon) < 0.04)) arriveeDestination();
 
-  const affichee = m.d < 30 ? { lat: m.lat, lon: m.lon } : p;
-  majVoiture(affichee.lat, affichee.lon, p.cap);
-  majProgressionNavigation(etat.route.coords, etat.idx, affichee.lat, affichee.lon);
-  if (etat.suivi) {
-    etat.zoom = zoomNavigation((p.vitesse || 0) * 3.6, etat.zoom);
-    cameraNavigation(affichee.lat, affichee.lon, p.cap, etat.zoom, etat.sensDeMarche);
-  }
+  etat.zoom = zoomNavigation((p.vitesse || 0) * 3.6, etat.zoom);
+  programmerAnimation(p, m);
   annonces();
   majEcran();
   rafraichirBornesProches();
+}
+
+// ── Animation fluide de la voiture ──────────────────────────────────────────
+// Le GPS ne donne qu'une position par seconde : afficher chacune telle
+// quelle fait avancer la voiture par sauts. On glisse donc le long de la
+// route entre deux positions (en visant là où la voiture sera à la
+// suivante, pour ne pas afficher avec une seconde de retard), et la
+// rotation et le zoom de la carte suivent en douceur.
+
+const CONSTANTE_CAP_MS = 350;
+const CONSTANTE_ZOOM_MS = 700;
+const INTERVALLE_TRACE_MS = 120;
+
+function programmerAnimation(p, m) {
+  const maintenant = performance.now();
+  const duree = etat.derniereFixe ? Math.min(1500, Math.max(300, maintenant - etat.derniereFixe)) : 0;
+  etat.derniereFixe = maintenant;
+
+  let vers;
+  if (m.d < 30) {
+    vers = { offset: Math.min(etat.route.total, m.offset + (p.vitesse || 0) * (duree / 1000)) };
+    // Petit retour en arrière dû à l'anticipation (la voiture a freiné) : on attend.
+    const avant = etat.aff?.offset;
+    if (avant != null && vers.offset < avant && avant - vers.offset < 15) vers.offset = avant;
+  } else {
+    vers = { lat: p.lat, lon: p.lon, cap: p.cap, offset: null };
+  }
+  if (!etat.aff) {
+    const pt = vers.offset != null ? pointSurRoute(vers.offset) : vers;
+    etat.aff = { lat: pt.lat, lon: pt.lon, cap: pt.cap || 0, zoom: etat.zoom, offset: vers.offset };
+  }
+  etat.anim = { depuis: { ...etat.aff }, vers, debut: maintenant, duree: Math.max(1, duree) };
+  if (!etat.raf) etat.raf = requestAnimationFrame(boucleAnimation);
+}
+
+function boucleAnimation(t) {
+  if (!etat?.route || !etat.anim) {
+    if (etat) etat.raf = null;
+    return;
+  }
+  const { depuis, vers, debut, duree } = etat.anim;
+  const k = Math.min(1, (t - debut) / duree);
+  const dtImage = etat.derniereImage ? Math.min(100, t - etat.derniereImage) : 16;
+  etat.derniereImage = t;
+  const aff = etat.aff;
+
+  let capCible;
+  let indice = etat.idx;
+  if (vers.offset != null && depuis.offset != null && Math.abs(vers.offset - depuis.offset) < 800) {
+    aff.offset = depuis.offset + (vers.offset - depuis.offset) * k;
+    const pt = pointSurRoute(aff.offset);
+    aff.lat = pt.lat;
+    aff.lon = pt.lon;
+    capCible = pt.cap;
+    indice = pt.i;
+  } else {
+    const but = vers.offset != null ? pointSurRoute(vers.offset) : vers;
+    aff.lat = depuis.lat + (but.lat - depuis.lat) * k;
+    aff.lon = depuis.lon + (but.lon - depuis.lon) * k;
+    capCible = Number.isFinite(but.cap) ? but.cap : aff.cap;
+    aff.offset = k >= 1 ? vers.offset : null;
+  }
+
+  const ecartCap = ((capCible - aff.cap + 540) % 360) - 180;
+  aff.cap = (aff.cap + ecartCap * Math.min(1, dtImage / CONSTANTE_CAP_MS) + 360) % 360;
+  const ecartZoom = etat.zoom - aff.zoom;
+  aff.zoom = Math.abs(ecartZoom) < 0.01 ? etat.zoom : aff.zoom + ecartZoom * Math.min(1, dtImage / CONSTANTE_ZOOM_MS);
+
+  majVoiture(aff.lat, aff.lon, aff.cap);
+  if (etat.suivi) cameraNavigation(aff.lat, aff.lon, aff.cap, aff.zoom, etat.sensDeMarche, false);
+  if (t - (etat.derniereTrace || 0) > INTERVALLE_TRACE_MS || k >= 1) {
+    etat.derniereTrace = t;
+    majProgressionNavigation(etat.route.coords, indice, aff.lat, aff.lon);
+  }
+
+  // Au repos (animation finie, rotation et zoom stabilisés) : plus rien à
+  // redessiner avant la prochaine position, on économise la batterie.
+  if (k >= 1 && Math.abs(ecartCap) < 0.5 && Math.abs(ecartZoom) < 0.01) {
+    etat.raf = null;
+    etat.derniereImage = null;
+    return;
+  }
+  etat.raf = requestAnimationFrame(boucleAnimation);
 }
 
 // Comme un GPS : large sur autoroute, rapproché en ville et à l'approche
@@ -584,8 +713,15 @@ function demarrerGps() {
 
 function pointSurRoute(offset) {
   const { coords, cum } = etat.route;
-  let i = 0;
-  while (i < cum.length - 2 && cum[i + 1] < offset) i++;
+  // Recherche dichotomique : appelée à chaque image pendant l'animation.
+  let bas = 0;
+  let haut = cum.length - 2;
+  while (bas < haut) {
+    const milieu = (bas + haut + 1) >> 1;
+    if (cum[milieu] <= offset) bas = milieu;
+    else haut = milieu - 1;
+  }
+  const i = Math.max(0, bas);
   const t = cum[i + 1] > cum[i] ? Math.max(0, Math.min(1, (offset - cum[i]) / (cum[i + 1] - cum[i]))) : 0;
   const [lonA, latA] = coords[i];
   const [lonB, latB] = coords[i + 1];
@@ -790,6 +926,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
   if (etat.demoTimer) clearInterval(etat.demoTimer);
+  if (etat.raf) cancelAnimationFrame(etat.raf);
   try {
     etat.wakeLock?.release();
   } catch {

@@ -485,7 +485,7 @@ async function chargerBornesZone(force = false) {
 
 function surDeplacementCarte() {
   const contexteTrajet = vueCourante === "resultat" || (vueCourante === "borne" && vueAvantBorne === "resultat");
-  if (rechercheManuelle || contexteTrajet) return;
+  if (rechercheManuelle || contexteTrajet || navigationActive()) return;
   clearTimeout(minuteurDeplacement);
   minuteurDeplacement = setTimeout(() => chargerBornesZone(), 650);
 }

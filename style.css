@@ -600,6 +600,11 @@ body.ev-mode-navigation .ev-carte { left: 0; }
 .ev-nav-manoeuvre-texte { min-width: 0; }
 .ev-nav-distance { font-size: 30px; font-weight: 900; line-height: 1.1; }
 .ev-nav-instruction { font-size: 17px; font-weight: 600; line-height: 1.25; opacity: 0.95; }
+.ev-nav-voies { align-self: center; display: flex; gap: 0; padding: 6px 8px; border-radius: 14px; background: #0b4a35; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
+.ev-nav-voie { min-width: 46px; height: 46px; padding: 0 6px; display: flex; align-items: center; justify-content: center; gap: 1px; font-size: 30px; font-weight: 900; line-height: 1; color: rgba(255, 255, 255, 0.3); border-left: 2px dashed rgba(255, 255, 255, 0.35); }
+.ev-nav-voie:first-child { border-left: none; }
+.ev-nav-voie.active { color: rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.14); border-radius: 8px; }
+.ev-nav-voie .suivre { color: #fff; }
 .ev-nav-ensuite { align-self: flex-start; padding: 7px 14px; border-radius: 12px; background: #0b4a35; color: #d9fff0; font-size: 14px; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 .ev-nav-borne { padding: 9px 14px; border-radius: 14px; background: var(--panneau); border: 1px solid rgba(79, 224, 255, 0.45); font-size: 13.5px; line-height: 1.35; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 .ev-nav-borne strong { color: var(--cyan); }

@@ -75,11 +75,13 @@ let ligneRestante = null;
 let marqueurVoiture = null;
 let surDeplacementManuel = null;
 
+const ZOOM_SNAP = 0.5;
+
 export function initCarte(idElement, { fondInitial = "sombre", onDeplacement } = {}) {
   carte = L.map(idElement, {
     zoomControl: false,
     attributionControl: true,
-    zoomSnap: 0.5,
+    zoomSnap: ZOOM_SNAP,
     // module leaflet-rotate : carte orientable (navigation "sens de marche")
     rotate: true,
     bearing: 0,
@@ -114,6 +116,8 @@ export function entrerNavigation({ onDeplacementManuel } = {}) {
   coucheNav = coucheNav || L.layerGroup();
   coucheNav.clearLayers();
   coucheNav.addTo(carte);
+  // Zoom continu pour que l'animation de navigation le fasse varier en douceur.
+  carte.options.zoomSnap = 0;
   setTimeout(() => carte.invalidateSize(), 50);
 }
 
@@ -128,6 +132,8 @@ export function quitterNavigation() {
     marqueurVoiture = null;
   }
   if (rotationDispo) carte.setBearing(0);
+  carte.options.zoomSnap = ZOOM_SNAP;
+  carte.setZoom(Math.round(carte.getZoom() / ZOOM_SNAP) * ZOOM_SNAP, { animate: false });
   if (!carte.hasLayer(coucheTrajet)) carte.addLayer(coucheTrajet);
   setTimeout(() => carte.invalidateSize(), 50);
 }
@@ -163,7 +169,9 @@ function iconeVoiture() {
 export function majVoiture(lat, lon, cap) {
   if (!marqueurVoiture) marqueurVoiture = L.marker([lat, lon], { icon: iconeVoiture(), interactive: false, zIndexOffset: 30000 }).addTo(carte);
   else marqueurVoiture.setLatLng([lat, lon]);
-  const relatif = (cap || 0) - (rotationDispo ? carte.getBearing() : 0);
+  // leaflet-rotate tourne la carte dans le sens horaire : un cap apparaît
+  // à l'écran décalé de +bearing.
+  const relatif = (cap || 0) + (rotationDispo ? carte.getBearing() : 0);
   const el = marqueurVoiture.getElement()?.querySelector(".ev-voiture");
   if (el) el.style.transform = `rotate(${relatif}deg)`;
 }
@@ -172,11 +180,14 @@ export function majVoiture(lat, lon, cap) {
 // route devant soit en haut ; la voiture est placée vers le bas de l'écran
 // pour voir plus loin devant.
 export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true) {
-  const bearing = rotationDispo && sensDeMarche ? cap || 0 : 0;
+  // Mesuré : setBearing(90) met l'est en BAS de l'écran (rotation horaire).
+  // Pour avoir le cap en haut, il faut donc tourner de -cap.
+  const bearing = rotationDispo && sensDeMarche ? (360 - (cap || 0)) % 360 : 0;
   if (rotationDispo && Math.abs(((carte.getBearing() - bearing + 540) % 360) - 180) > 0.5) carte.setBearing(bearing);
   const hauteur = carte.getSize().y;
   const recul = hauteur * 0.2;
-  const angle = (bearing * Math.PI) / 180;
+  // Le haut de l'écran, exprimé dans le plan non tourné de la carte.
+  const angle = (-bearing * Math.PI) / 180;
   const point = carte.project([lat, lon], zoom).add([Math.sin(angle) * recul, -Math.cos(angle) * recul]);
   carte.setView(carte.unproject(point, zoom), zoom, { animate: anime, duration: 0.9, easeLinearity: 1 });
 }
