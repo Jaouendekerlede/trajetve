@@ -41,7 +41,7 @@ let coucheBatiments = null;
 let nomFournisseur = "";
 let raisonEchec = "";
 let avertissement = "";
-let surPanne = null;
+const surPannes = new Set();
 let tuilesKoDeSuite = 0;
 let horsService = false;
 
@@ -81,6 +81,25 @@ function urlStyle(fournisseur, sombre) {
   }
   // Style détaillé dans les deux cas ; la version nuit est calculée ici.
   return "https://tiles.openfreemap.org/styles/liberty";
+}
+
+// Fond satellite (images Esri, sans clé, comme en 2D) : pas de bâtiments,
+// mais routes et noms de lieux par-dessus.
+function styleSatellite() {
+  const esri = (chemin) => ({ type: "raster", tiles: [`https://server.arcgisonline.com/ArcGIS/rest/services/${chemin}/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 });
+  return {
+    version: 8,
+    sources: {
+      images: { ...esri("World_Imagery"), attribution: "Imagerie © Esri" },
+      routes: esri("Reference/World_Transportation"),
+      lieux: esri("Reference/World_Boundaries_and_Places"),
+    },
+    layers: [
+      { id: "images", type: "raster", source: "images" },
+      { id: "routes", type: "raster", source: "routes" },
+      { id: "lieux", type: "raster", source: "lieux" },
+    ],
+  };
 }
 
 const NOM_FRANCAIS = ["coalesce", ["get", "name:fr"], ["get", "name"], ["get", "name_en"]];
@@ -235,6 +254,14 @@ async function telechargerStyle(fournisseur, sombre) {
   }
 }
 
+// Nos tracés vont au-dessus de toutes les routes du fond (pointillés,
+// tunnels, ponts compris) mais sous les noms : lisibles d'un coup d'œil.
+function coucheSousLesNoms() {
+  const couches = carte.getStyle().layers;
+  const derniereLigne = couches.map((c) => c.type).lastIndexOf("line");
+  return couches.slice(derniereLigne + 1).find((c) => c.type === "symbol")?.id;
+}
+
 function ajouterCouchesTrajet() {
   // Bâtiments en relief : présents mais masqués dans le style TomTom.
   coucheBatiments = carte.getStyle().layers.find((c) => c.type === "fill-extrusion")?.id || null;
@@ -243,11 +270,7 @@ function ajouterCouchesTrajet() {
     carte.setPaintProperty(coucheBatiments, "fill-extrusion-opacity", 0.85);
   }
   carte.addSource("trajet", { type: "geojson", data: { type: "FeatureCollection", features: [] }, lineMetrics: true });
-  // Au-dessus de toutes les routes (pointillés, tunnels, ponts compris) mais
-  // sous les noms : le tracé doit rester lisible d'un coup d'œil.
-  const couches = carte.getStyle().layers;
-  const derniereLigne = couches.map((c) => c.type).lastIndexOf("line");
-  const dessous = couches.slice(derniereLigne + 1).find((c) => c.type === "symbol")?.id;
+  const dessous = coucheSousLesNoms();
   carte.addLayer({ id: "trajet-halo", type: "line", source: "trajet", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#062a1e", "line-opacity": 0.55, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 8, 17, 22] } }, dessous);
   carte.addLayer({
     id: "trajet-ligne",
@@ -272,7 +295,7 @@ export function dernierAvertissement() {
 // cb(raison) : la carte 3D ne peut plus s'afficher (tuiles refusées,
 // moteur graphique coupé par Android) ; la navigation repasse en 2D.
 export function definirSurPanne(cb) {
-  surPanne = cb;
+  surPannes.add(cb);
 }
 
 function panne(raison) {
@@ -280,25 +303,55 @@ function panne(raison) {
   horsService = true;
   raisonEchec = raison;
   console.warn("[3D] Panne :", raison);
-  surPanne?.(raison);
+  for (const cb of surPannes) cb(raison);
+}
+
+// Relief du terrain : altitudes « Terrain Tiles » (données ouvertes
+// hébergées par AWS, sans clé). Un peu exagéré pour être perceptible.
+const TUILES_RELIEF = "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png";
+let reliefKo = 0;
+
+function ajouterRelief() {
+  reliefKo = 0;
+  carte.addSource("relief", { type: "raster-dem", tiles: [TUILES_RELIEF], encoding: "terrarium", tileSize: 256, maxzoom: 14, attribution: "Relief : Terrain Tiles (AWS)" });
+  carte.setTerrain({ source: "relief", exaggeration: 1.3 });
 }
 
 function surveiller() {
   carte.on("error", (e) => {
     if (!e.sourceId) return;
+    // Relief indisponible : on s'en passe, la carte reste utilisable.
+    if (e.sourceId === "relief") {
+      if (++reliefKo >= 5 && carte.getTerrain()) {
+        console.warn("[3D] Relief indisponible, carte à plat");
+        carte.setTerrain(null);
+      }
+      return;
+    }
     // Refus en série (clé, quota, réseau coupé) : sans tuiles, la carte
     // devient noire. Une tuile ratée isolée ne suffit pas.
     if (++tuilesKoDeSuite >= 8) panne(`cartes ${nomFournisseur} refusées${e.error?.status ? `, HTTP ${e.error.status}` : ", réseau ?"}`);
   });
   carte.on("sourcedata", (e) => {
-    if (e.tile) tuilesKoDeSuite = 0;
+    if (e.tile && e.sourceId !== "relief") tuilesKoDeSuite = 0;
   });
   carte.on("webglcontextlost", () => panne("moteur graphique coupé par le téléphone"));
+  // Le style OpenFreeMap cite quelques icônes absentes de son catalogue :
+  // image vide plutôt qu'un avertissement par icône.
+  carte.on("styleimagemissing", (e) => {
+    if (!carte.hasImage(e.id)) carte.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+  });
 }
 
-async function creerCarte(fournisseur, sombre) {
-  const style = await telechargerStyle(fournisseur, sombre);
+async function creerCarte(fournisseur, fond, relief) {
+  const style = fond === "satellite" ? styleSatellite() : await telechargerStyle(fournisseur, fond === "sombre");
+  // Changement de style en cours d'exploration : on garde le même cadrage.
+  const vueAvant = carte ? { center: carte.getCenter(), zoom: carte.getZoom(), pitch: carte.getPitch(), bearing: carte.getBearing() } : null;
   if (carte) {
+    for (const m of explo.marqueursBornes.values()) m.remove();
+    for (const m of [...explo.marqueursTrajet, explo.marqueurPosition, explo.marqueurCurseur]) m?.remove();
+    explo.marqueurPosition = null;
+    explo.marqueurCurseur = null;
     carte.remove();
     carte = null;
   }
@@ -330,15 +383,32 @@ async function creerCarte(fournisseur, sombre) {
     });
   });
   ajouterCouchesTrajet();
+  ajouterCouchesExplo();
+  if (relief && fond !== "satellite") ajouterRelief();
   carte.on("dragstart", (e) => e.originalEvent && surDeplacementManuel?.());
   carte.on("zoomstart", (e) => e.originalEvent && surDeplacementManuel?.());
   surveiller();
-  nomFournisseur = FOURNISSEURS[fournisseur];
+  nomFournisseur = fond === "satellite" ? "satellite Esri" : FOURNISSEURS[fournisseur];
+  if (vueAvant) carte.jumpTo(vueAvant);
+  if (explo.actif) {
+    gestesExploration(!enNavigation);
+    rendreExplo();
+  }
 }
 
 // Prépare la carte 3D avec le fournisseur préféré, sinon l'autre. Renvoie
 // false si aucun ne marche : la navigation reste alors en 2D.
-export async function preparer({ sombre = true, fournisseur = "libre" } = {}) {
+// Les préparations s'exécutent l'une après l'autre : deux changements de
+// fond rapprochés ne doivent pas se croiser (le dernier demandé l'emporte).
+let fileAttente = Promise.resolve();
+
+export function preparer(options) {
+  const suite = fileAttente.then(() => preparerMaintenant(options));
+  fileAttente = suite.catch(() => {});
+  return suite;
+}
+
+async function preparerMaintenant({ sombre = true, fond = sombre ? "sombre" : "plan", fournisseur = "libre", relief = false } = {}) {
   avertissement = "";
   if (!webglDisponible()) {
     raisonEchec = "WebGL absent sur ce navigateur";
@@ -351,17 +421,19 @@ export async function preparer({ sombre = true, fournisseur = "libre" } = {}) {
     raisonEchec = e.message;
     return false;
   }
-  const ordre = [fournisseur, fournisseur === "tomtom" ? "libre" : "tomtom"].filter((f) => f !== "tomtom" || getApiKeys().tomtom);
+  // Le satellite ne dépend pas du fournisseur de carte vectorielle.
+  const ordre = fond === "satellite" ? ["satellite"] : [fournisseur, fournisseur === "tomtom" ? "libre" : "tomtom"].filter((f) => f !== "tomtom" || getApiKeys().tomtom);
   const echecs = [];
   for (const f of ordre) {
-    const cleStyle = `${f}-${sombre}`;
+    const cleStyle = `${f}-${fond}-${relief}`;
     if (carte && styleCharge === cleStyle && !horsService) return true;
     try {
-      await creerCarte(f, sombre);
+      await creerCarte(f, fond, relief);
       styleCharge = cleStyle;
       raisonEchec = "";
       if (echecs.length) avertissement = `${echecs.join(" ; ")} : carte ${FOURNISSEURS[f]} utilisée à la place`;
-      conteneur.classList.add("hidden");
+      // Reste affichée si la carte des bornes est déjà en 3D.
+      if (!explo.actif && !enNavigation) conteneur.classList.add("hidden");
       conteneur.classList.remove("ev-3d-invisible");
       return true;
     } catch (e) {
@@ -378,6 +450,313 @@ export async function preparer({ sombre = true, fournisseur = "libre" } = {}) {
   return false;
 }
 
+// ── Carte des bornes en 3D (exploration) ────────────────────────────────────
+// carte.js transmet ici toutes les données affichées (bornes, trajet…), même
+// quand la 3D est éteinte : à l'allumage, tout est déjà connu. Pendant une
+// navigation 3D, ces éléments sont masqués puis rétablis à la fin.
+
+const INCLINAISON_EXPLO = 50;
+const SANS_MARGE = { top: 0, left: 0, right: 0, bottom: 0 };
+const VIDE = { type: "FeatureCollection", features: [] };
+const COUCHES_EXPLO = ["alt-ligne", "alt-zone", "plan-halo", "plan-aller", "plan-retour"];
+
+const explo = {
+  actif: false,
+  onDeplacement: null,
+  decalageBas: 0,
+  vue: null,
+  bornes: [],
+  onClicBorne: null,
+  bornesVisibles: true,
+  selection: null,
+  marqueursBornes: new Map(),
+  position: null,
+  marqueurPosition: null,
+  trajet: null,
+  onClicArret: null,
+  marqueursTrajet: [],
+  alternatives: [],
+  curseur: null,
+  marqueurCurseur: null,
+};
+let enNavigation = false;
+
+function ajouterCouchesExplo() {
+  carte.addSource("plan", { type: "geojson", data: VIDE });
+  carte.addSource("plan-alternatives", { type: "geojson", data: VIDE });
+  const dessous = coucheSousLesNoms();
+  const rond = { "line-cap": "round", "line-join": "round" };
+  carte.addLayer({ id: "alt-ligne", type: "line", source: "plan-alternatives", layout: rond, paint: { "line-color": "#7d8797", "line-width": 5, "line-opacity": 0.8 } }, dessous);
+  // Zone de toucher bien plus large que le trait (doigt sur téléphone).
+  carte.addLayer({ id: "alt-zone", type: "line", source: "plan-alternatives", layout: rond, paint: { "line-color": "#000000", "line-width": 26, "line-opacity": 0.01 } }, dessous);
+  const filtre = (type) => ["==", ["get", "type"], type];
+  carte.addLayer({ id: "plan-halo", type: "line", source: "plan", filter: filtre("aller"), layout: rond, paint: { "line-color": "#04221a", "line-width": 11, "line-opacity": 0.35 } }, dessous);
+  carte.addLayer({ id: "plan-aller", type: "line", source: "plan", filter: filtre("aller"), layout: rond, paint: { "line-color": "#22e5a0", "line-width": 6, "line-opacity": 0.95 } }, dessous);
+  carte.addLayer({ id: "plan-retour", type: "line", source: "plan", filter: filtre("retour"), paint: { "line-color": "#ffb400", "line-width": 4, "line-opacity": 0.85, "line-dasharray": [2, 2] } }, dessous);
+  carte.on("click", "alt-zone", (e) => explo.alternatives[e.features?.[0]?.properties?.i]?.onClic?.());
+  carte.on("moveend", () => {
+    if (!explo.actif || enNavigation) return;
+    explo.vue = vueExplo();
+    explo.onDeplacement?.();
+  });
+}
+
+function vueExplo() {
+  const c = carte.getCenter();
+  return { lat: c.lat, lon: c.lng, zoom: carte.getZoom() - ECART_ZOOM_EXPLO };
+}
+
+// Zooms de l'interface exprimés à l'échelle Leaflet (tuiles 256 px).
+const ECART_ZOOM_EXPLO = -1;
+
+function gestesExploration(actifs) {
+  const action = actifs ? "enable" : "disable";
+  carte.dragRotate[action]();
+  carte.touchPitch[action]();
+  if (actifs) carte.touchZoomRotate.enableRotation();
+  else carte.touchZoomRotate.disableRotation();
+}
+
+function marqueur(element, lat, lon, options = {}) {
+  return new maplibregl.Marker({ element, ...options }).setLngLat([lon, lat]);
+}
+
+function afficherSiVisible(m, visible = true) {
+  if (visible && explo.actif && !enNavigation && carte) m.addTo(carte);
+  return m;
+}
+
+function rendreBorne(b) {
+  explo.marqueursBornes.get(b)?.remove();
+  const el = iconeBorne(b, b === explo.selection);
+  el.style.zIndex = String(puissanceBorne(b) * 2 + (b === explo.selection ? 10000 : 0));
+  el.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    explo.onClicBorne?.(b);
+  });
+  explo.marqueursBornes.set(b, afficherSiVisible(marqueur(el, b.lat, b.lon, { anchor: "bottom" }), explo.bornesVisibles));
+}
+
+function rendreBornes() {
+  for (const m of explo.marqueursBornes.values()) m.remove();
+  explo.marqueursBornes.clear();
+  if (carte) for (const b of explo.bornes) rendreBorne(b);
+}
+
+function rendrePosition() {
+  explo.marqueurPosition?.remove();
+  explo.marqueurPosition = null;
+  if (!carte || !explo.position) return;
+  const el = document.createElement("div");
+  el.innerHTML = '<div class="ev-position"></div>';
+  explo.marqueurPosition = afficherSiVisible(marqueur(el, explo.position.lat, explo.position.lon));
+}
+
+function rendreCurseur() {
+  explo.marqueurCurseur?.remove();
+  explo.marqueurCurseur = null;
+  if (!carte || !explo.curseur) return;
+  const el = pastille(22, "rgba(0,229,255,.95)");
+  el.classList.add("ev-curseur-3d");
+  el.insertAdjacentHTML("beforeend", `<span class="ev-curseur-3d-texte"></span>`);
+  el.querySelector(".ev-curseur-3d-texte").textContent = explo.curseur.label || "Position estimée";
+  explo.marqueurCurseur = afficherSiVisible(marqueur(el, explo.curseur.lat, explo.curseur.lon));
+}
+
+function rendreAlternatives() {
+  if (!carte) return;
+  const features = explo.alternatives
+    .map((a, i) => (a.coords?.length ? { type: "Feature", properties: { i }, geometry: { type: "LineString", coordinates: a.coords } } : null))
+    .filter(Boolean);
+  carte.getSource("plan-alternatives").setData({ type: "FeatureCollection", features });
+}
+
+function marqueurArret(arret, taille, couleur, titre) {
+  const el = pastille(taille, couleur, "🔋");
+  el.title = titre;
+  el.style.cursor = "pointer";
+  el.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    explo.onClicArret?.(arret);
+  });
+  return marqueur(el, arret.lat, arret.lon);
+}
+
+function rendreTrajet(recadrer) {
+  for (const m of explo.marqueursTrajet) m.remove();
+  explo.marqueursTrajet = [];
+  if (!carte) return;
+  const d = explo.trajet;
+  if (!d?.coords?.length) {
+    carte.getSource("plan").setData(VIDE);
+    return;
+  }
+  const features = [{ type: "Feature", properties: { type: "aller" }, geometry: { type: "LineString", coordinates: d.coords } }];
+  const limites = d.coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(d.coords[0], d.coords[0]));
+  const m = [];
+  if (d.retour?.ok && d.retour.coords?.length) {
+    features.push({ type: "Feature", properties: { type: "retour" }, geometry: { type: "LineString", coordinates: d.retour.coords } });
+    for (const c of d.retour.coords) limites.extend(c);
+    for (const a of d.retour.arrets || []) if (a.lat !== undefined) m.push(marqueurArret(a, 24, "rgba(255,180,0,.95)", `Retour : ${a.nom_borne || "Borne"}`));
+  }
+  carte.getSource("plan").setData({ type: "FeatureCollection", features });
+  if (d.from_lat !== undefined) {
+    const el = pastille(18, "#22e5a0");
+    el.title = d.from_name || "Départ";
+    m.push(marqueur(el, d.from_lat, d.from_lon));
+  }
+  if (d.to_lat !== undefined) {
+    const el = pastille(22, "#ff6b35", "🏁");
+    el.title = d.to_name || "Arrivée";
+    m.push(marqueur(el, d.to_lat, d.to_lon));
+  }
+  (d.arrets || []).forEach((a, i) => a.lat !== undefined && m.push(marqueurArret(a, 30, "rgba(79,224,255,.95)", `Arrêt ${i + 1} : ${a.nom_borne || "Borne"}`)));
+  explo.marqueursTrajet = m.map((x) => afficherSiVisible(x));
+  if (recadrer && explo.actif && !enNavigation) {
+    carte.fitBounds(limites, { padding: { top: 130, bottom: explo.decalageBas + 30, left: 30, right: 30 }, duration: 700, maxZoom: 16 });
+  }
+}
+
+function rendreExplo() {
+  rendreBornes();
+  rendrePosition();
+  rendreCurseur();
+  rendreAlternatives();
+  rendreTrajet(false);
+}
+
+// Masque (navigation) ou rétablit les éléments de la carte des bornes.
+function montrerElementsExplo(visible) {
+  if (!carte) return;
+  for (const id of COUCHES_EXPLO) if (carte.getLayer(id)) carte.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+  const marqueurs = [...explo.marqueursTrajet, explo.marqueurPosition, explo.marqueurCurseur].filter(Boolean);
+  if (explo.bornesVisibles) marqueurs.push(...explo.marqueursBornes.values());
+  for (const m of marqueurs) {
+    if (visible) m.addTo(carte);
+    else m.remove();
+  }
+}
+
+export function activerExploration({ lat, lon, zoom, onDeplacement, decalageBas = 0 }) {
+  explo.actif = true;
+  explo.onDeplacement = onDeplacement;
+  explo.decalageBas = decalageBas;
+  conteneur.classList.remove("hidden");
+  carte.resize();
+  gestesExploration(true);
+  carte.jumpTo({ center: [lon, lat], zoom: zoom + ECART_ZOOM_EXPLO, pitch: INCLINAISON_EXPLO, bearing: 0, padding: SANS_MARGE });
+  explo.vue = vueExplo();
+  rendreExplo();
+}
+
+// Renvoie le cadrage courant (échelle Leaflet) pour que la 2D reprenne au même endroit.
+export function desactiverExploration() {
+  const vue = carte ? vueExplo() : explo.vue;
+  explo.actif = false;
+  montrerElementsExplo(false);
+  if (!enNavigation) conteneur?.classList.add("hidden");
+  return vue;
+}
+
+// Carte 2D en navigation alors que la carte des bornes est en 3D : la 3D
+// doit s'effacer pour laisser voir la 2D, puis revenir.
+export function masquerExploration(masquer) {
+  if (!explo.actif) return;
+  conteneur.classList.toggle("hidden", masquer);
+  if (!masquer) carte?.resize();
+}
+
+// Simple mémorisation : modifier la caméra ici interromprait un cadrage en
+// cours (le panneau change de hauteur juste après l'affichage d'un trajet).
+export function exploDecalageBas(px) {
+  explo.decalageBas = px;
+}
+
+// Centre de la partie visible, au-dessus du panneau.
+export function exploCentreVisible() {
+  const { width, height } = carte.getCanvas().getBoundingClientRect();
+  const c = carte.unproject([width / 2, Math.max(1, (height - explo.decalageBas) / 2)]);
+  return { lat: c.lat, lon: c.lng };
+}
+
+// Carte inclinée : on mesure vers le bas de l'écran (côté proche), l'horizon
+// donnerait un rayon démesuré.
+export function exploRayonVisibleKm() {
+  const { width, height } = carte.getCanvas().getBoundingClientRect();
+  const c = exploCentreVisible();
+  const coin = carte.unproject([width, Math.max(1, height - explo.decalageBas)]);
+  return Math.min(30, haversineKm(c.lat, c.lon, coin.lat, coin.lng) * 1.2);
+}
+
+export function exploZoom() {
+  return carte.getZoom() - ECART_ZOOM_EXPLO;
+}
+
+export function exploCentrer(lat, lon, zoom) {
+  // Comme en 2D : le point visé se place au centre de la partie visible.
+  carte.easeTo({ center: [lon, lat], zoom: (zoom ?? exploZoom()) + ECART_ZOOM_EXPLO, padding: SANS_MARGE, offset: [0, -explo.decalageBas / 2], duration: 600 });
+}
+
+export function exploBornes(bornes, onClic) {
+  explo.bornes = bornes;
+  explo.onClicBorne = onClic;
+  rendreBornes();
+}
+
+export function exploRafraichirBorne(b) {
+  if (carte && explo.marqueursBornes.has(b)) rendreBorne(b);
+}
+
+export function exploSelection(b) {
+  const ancienne = explo.selection;
+  explo.selection = b;
+  exploRafraichirBorne(ancienne);
+  exploRafraichirBorne(b);
+}
+
+export function exploMontrerBornes(visible) {
+  explo.bornesVisibles = visible;
+  for (const m of explo.marqueursBornes.values()) {
+    if (visible && explo.actif && !enNavigation && carte) m.addTo(carte);
+    else m.remove();
+  }
+}
+
+export function exploPosition(lat, lon) {
+  explo.position = { lat, lon };
+  if (explo.marqueurPosition) explo.marqueurPosition.setLngLat([lon, lat]);
+  else rendrePosition();
+}
+
+export function exploTrajet(data, onClicArret) {
+  explo.trajet = data;
+  explo.onClicArret = onClicArret;
+  explo.curseur = null;
+  explo.alternatives = [];
+  rendreCurseur();
+  rendreAlternatives();
+  rendreTrajet(true);
+}
+
+export function exploAlternatives(liste) {
+  explo.alternatives = liste;
+  rendreAlternatives();
+}
+
+export function exploEffacerTrajet() {
+  explo.trajet = null;
+  explo.curseur = null;
+  explo.alternatives = [];
+  rendreTrajet(false);
+  rendreCurseur();
+  rendreAlternatives();
+}
+
+export function exploCurseur(lat, lon, label) {
+  explo.curseur = lat === undefined || lon === undefined ? null : { lat, lon, label };
+  rendreCurseur();
+}
+
 function iconeVoiture() {
   const el = document.createElement("div");
   el.innerHTML = `<svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="26" fill="rgba(61,139,255,0.22)"/><path d="M28 8 L42 44 L28 36 L14 44 Z" fill="#3d8bff" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/></svg>`;
@@ -392,18 +771,32 @@ function pastille(taille, couleur, contenu = "") {
 
 export function entrerNavigation({ onDeplacementManuel } = {}) {
   surDeplacementManuel = onDeplacementManuel;
+  enNavigation = true;
+  montrerElementsExplo(false);
+  gestesExploration(false);
   conteneur.classList.remove("hidden");
   carte.resize();
 }
 
 export function quitterNavigation() {
   surDeplacementManuel = null;
+  enNavigation = false;
   for (const m of [...marqueursRoute, ...marqueursBornes]) m.remove();
   marqueursRoute = [];
   marqueursBornes = [];
   voiture?.remove();
   voiture = null;
-  conteneur?.classList.add("hidden");
+  if (!carte) return;
+  carte.getSource("trajet")?.setData(VIDE);
+  if (explo.actif) {
+    // Retour à la carte des bornes, telle qu'elle était.
+    montrerElementsExplo(true);
+    gestesExploration(true);
+    const v = explo.vue;
+    carte.jumpTo({ pitch: INCLINAISON_EXPLO, bearing: 0, padding: SANS_MARGE, ...(v ? { center: [v.lon, v.lat], zoom: v.zoom + ECART_ZOOM_EXPLO } : {}) });
+  } else {
+    conteneur?.classList.add("hidden");
+  }
 }
 
 export function dessinerRouteNavigation(coords, arrets, destination) {
@@ -459,12 +852,12 @@ export function apercuNavigation(coords) {
   carte.fitBounds(limites, { bearing: 0, pitch: 0, padding: { top: 190, bottom: 150, left: 40, right: 40 }, duration: 800 });
 }
 
-function iconeBorne(b) {
+function iconeBorne(b, selectionnee = false) {
   const kw = puissanceBorne(b);
   const cb = b.officiel && !b.officiel.indisponible && ["oui", "partiel"].includes(b.officiel.paiement_cb);
   const el = document.createElement("div");
   el.className = "ev-pin-3d";
-  el.innerHTML = `<div class="ev-pin ${classePuissance(kw)}"><span>${kw || "?"}</span>${cb ? '<b class="ev-pin-cb">CB</b>' : ""}</div>`;
+  el.innerHTML = `<div class="ev-pin ${classePuissance(kw)}${selectionnee ? " selection" : ""}"><span>${kw || "?"}</span>${cb ? '<b class="ev-pin-cb">CB</b>' : ""}</div>`;
   return el;
 }
 

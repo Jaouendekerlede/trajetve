@@ -31,6 +31,9 @@ import {
   fondSuivant,
   choisirFond,
   rechargerFond,
+  activerCarte3D,
+  carte3DActive,
+  derniereErreur3D,
   ICONES_FONDS,
   definirDecalageBas,
   centreVisible,
@@ -526,6 +529,31 @@ function cablerTheme() {
   });
 }
 
+function majBoutonCarte3D() {
+  const actif = carte3DActive();
+  $("ev-carte3d-btn").classList.toggle("actif", actif);
+  $("ev-carte3d-btn").textContent = actif ? "2D" : "3D";
+  $("ev-carte3d-btn").title = actif ? "Revenir à la carte à plat (2D)" : "Voir la carte en 3D (inclinée, bâtiments en relief)";
+}
+
+// parUtilisateur : choix mémorisé et message ; sinon (démarrage), silencieux.
+async function basculerCarte3D(actif, parUtilisateur) {
+  const bouton = $("ev-carte3d-btn");
+  if (bouton.disabled) return;
+  bouton.disabled = true;
+  if (actif) bouton.textContent = "…";
+  try {
+    const ok = await activerCarte3D(actif);
+    if (parUtilisateur) {
+      if (ok) sauverReglages({ carte_explo_3d: actif });
+      toast(ok ? (actif ? "🏙️ Carte en 3D : deux doigts pour tourner ou incliner" : "🗺️ Carte à plat") : `⚠️ 3D indisponible : ${derniereErreur3D() || "raison inconnue"}`);
+    }
+  } finally {
+    bouton.disabled = false;
+    majBoutonCarte3D();
+  }
+}
+
 function cablerCarte() {
   const reglages = lireReglages();
   const fond = choisirFond(reglages.fond_carte || fondParDefaut());
@@ -536,6 +564,13 @@ function cablerCarte() {
     sauverReglages({ fond_carte: nom });
     toast({ sombre: "🌙 Carte sombre", plan: "🗺️ Plan clair", satellite: "🛰️ Vue satellite" }[nom]);
   });
+
+  $("ev-carte3d-btn").addEventListener("click", () => basculerCarte3D(!carte3DActive(), true));
+  document.addEventListener("carte3d-panne", (e) => {
+    majBoutonCarte3D();
+    toast(`⚠️ Carte 3D interrompue (${e.detail}) : retour en 2D`);
+  });
+  if (reglages.carte_explo_3d) basculerCarte3D(true, false);
 
   for (const f of reglages.filtres_carte || []) filtres.add(f);
   document.querySelectorAll(".ev-chip").forEach((chip) => {
@@ -1853,6 +1888,7 @@ function rendreProfil() {
   $("ev-reglage-domicile").value = reglages.adresse_domicile || "";
   $("ev-reglage-annonce").checked = !!reglages.annonce_vocale;
   $("ev-reglage-carte3d").value = reglages.carte_3d || "libre";
+  $("ev-reglage-relief").checked = reglages.relief_3d === true;
 
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
@@ -1914,6 +1950,7 @@ function cablerProfil() {
       adresse_domicile: $("ev-reglage-domicile").value.trim(),
       annonce_vocale: $("ev-reglage-annonce").checked,
       carte_3d: $("ev-reglage-carte3d").value,
+      relief_3d: $("ev-reglage-relief").checked,
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });

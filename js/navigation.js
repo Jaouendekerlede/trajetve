@@ -825,8 +825,9 @@ function cablerBoutons() {
   document.addEventListener("visibilitychange", surVisibilite);
 }
 
+// Même fond (nuit, jour, satellite) et mêmes réglages que la carte des bornes.
 function optionsCarte3D() {
-  return { sombre: themeSombre(), fournisseur: lireReglages().carte_3d || "libre" };
+  return carte2D.optionsCarte3D();
 }
 
 // Fournisseur choisi refusé, l'autre a pris le relais : on le dit sans insister.
@@ -838,10 +839,6 @@ function signalerRemplacementCarte() {
   setTimeout(() => {
     if (etat && $("ev-nav-alerte").textContent === message) afficherAlerte(null);
   }, 12000);
-}
-
-function themeSombre() {
-  return document.documentElement.dataset.theme !== "clair";
 }
 
 function surDeplacementManuel() {

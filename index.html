@@ -47,6 +47,7 @@
 <div class="ev-fabs">
   <button id="ev-urgence-btn" class="ev-fab ev-fab-urgence" type="button" title="Mode urgence : bornes les plus proches">🆘</button>
   <button id="ev-fond-btn" class="ev-fab" type="button" title="Changer le fond de carte">🌙</button>
+  <button id="ev-carte3d-btn" class="ev-fab ev-fab-texte" type="button" title="Carte en 3D / 2D">3D</button>
   <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser">📍</button>
 </div>
 
@@ -359,6 +360,7 @@
             <option value="tomtom">TomTom — utilise ta clé TomTom</option>
           </select>
         </label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-relief"> ⛰️ Relief du terrain (collines, vallées) — utile en montagne ; en ville, les bâtiments peuvent masquer le tracé, et un peu plus de batterie</label>
         <div class="ev-hint">Si la carte choisie ne répond pas, l'autre prend le relais ; sinon la navigation passe en 2D.</div>
       </div>
 
@@ -376,7 +378,7 @@
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
-      <div class="ev-hint ev-lien-centre">Version 11 du 25/09/2026 : carte 3D OpenFreeMap, test de la clé TomTom</div>
+      <div class="ev-hint ev-lien-centre">Version 12 du 25/09/2026 : carte des bornes en 3D, relief du terrain</div>
     </div>
   </div>
 </section>

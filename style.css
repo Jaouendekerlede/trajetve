@@ -235,6 +235,10 @@ button { font-family: inherit; color: inherit; }
 }
 .ev-diagnostic { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; background: var(--voile); border: 1px solid var(--bordure); }
 .ev-fab-texte { font-size: 15px; font-weight: 900; color: var(--texte); }
+.ev-fab.actif { border-color: var(--vert); color: var(--vert-vif); }
+/* Étiquette du curseur « où serai-je ? » sur la carte 3D */
+.ev-curseur-3d { position: relative; }
+.ev-curseur-3d-texte { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 8px; border-radius: 8px; background: var(--chip); color: var(--texte); font-size: 12px; font-weight: 700; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
 /* MapLibre impose position: relative à .maplibregl-map : on garde le plein écran. */
 .ev-carte-3d, .ev-carte-3d.maplibregl-map { position: fixed; inset: 0; z-index: 1; background: #0b1017; }
 .ev-carte-3d.ev-3d-invisible { visibility: hidden; }

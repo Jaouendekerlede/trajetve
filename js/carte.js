@@ -4,8 +4,17 @@
 // Le panneau coulissant cache le bas de la carte : `decalageBas` permet de
 // centrer et cadrer dans la partie réellement visible.
 
+// Cette carte 2D (Leaflet) peut être remplacée à l'écran par la carte 3D
+// (carte3d.js) : les fonctions d'affichage alimentent toujours les deux,
+// celles de cadrage s'adressent à la carte visible.
+
 import { escapeHtml } from "./util.js";
 import { getApiKeys } from "./config.js";
+import { lireReglages } from "./storage.js";
+import * as c3d from "./carte3d.js";
+
+let explo3D = false;
+let surDeplacement = null;
 
 let carte = null;
 let fond = null;
@@ -55,8 +64,8 @@ function fondTomTom(style, repli) {
       console.warn("[CARTE] Tuiles TomTom refusées, retour sur OpenStreetMap");
       tomtomRefuseJusqua = Date.now() + PAUSE_APRES_REFUS_MS;
       carte.removeLayer(couche);
-      fond = repli().addTo(carte);
-      fond.bringToBack();
+      fond = repli();
+      if (!explo3D) fond.addTo(carte).bringToBack();
     }
   });
   return couche;
@@ -102,7 +111,14 @@ export function initCarte(idElement, { fondInitial = "sombre", onDeplacement } =
   coucheBornes = L.layerGroup().addTo(carte);
   coucheTrajet = L.layerGroup().addTo(carte);
   coucheAlternatives = L.layerGroup();
-  carte.on("moveend", () => onDeplacement?.());
+  surDeplacement = onDeplacement;
+  carte.on("moveend", () => !explo3D && onDeplacement?.());
+  // Panne de la 3D (tuiles refusées, moteur graphique coupé) : retour en 2D.
+  c3d.definirSurPanne((raison) => {
+    if (!explo3D) return;
+    activerCarte3D(false);
+    document.dispatchEvent(new CustomEvent("carte3d-panne", { detail: raison }));
+  });
   carte.on("dragstart zoomstart", (e) => {
     if (e.type === "dragstart" || e.originalEvent) surDeplacementManuel?.();
   });
@@ -117,14 +133,19 @@ export function rotationDisponible() {
 
 export function entrerNavigation({ onDeplacementManuel } = {}) {
   surDeplacementManuel = onDeplacementManuel;
-  montrerBornes(false);
+  montrerBornes2D(false);
   if (carte.hasLayer(coucheTrajet)) carte.removeLayer(coucheTrajet);
-  placerCurseur(undefined, undefined);
+  placerCurseur2D(undefined, undefined);
   coucheNav = coucheNav || L.layerGroup();
   coucheNav.clearLayers();
   coucheNav.addTo(carte);
   // Zoom continu pour que l'animation de navigation le fasse varier en douceur.
   carte.options.zoomSnap = 0;
+  // Carte des bornes en 3D : elle s'efface le temps de cette navigation 2D.
+  if (explo3D) {
+    c3d.masquerExploration(true);
+    if (fond && !carte.hasLayer(fond)) fond.addTo(carte).bringToBack?.();
+  }
   setTimeout(() => carte.invalidateSize(), 50);
 }
 
@@ -142,6 +163,10 @@ export function quitterNavigation() {
   carte.options.zoomSnap = ZOOM_SNAP;
   carte.setZoom(Math.round(carte.getZoom() / ZOOM_SNAP) * ZOOM_SNAP, { animate: false });
   if (!carte.hasLayer(coucheTrajet)) carte.addLayer(coucheTrajet);
+  if (explo3D) {
+    if (fond) carte.removeLayer(fond);
+    c3d.masquerExploration(false);
+  }
   setTimeout(() => carte.invalidateSize(), 50);
 }
 
@@ -209,11 +234,55 @@ export function choisirFond(nom) {
   if (!FONDS[nom]) nom = "sombre";
   if (fond) carte.removeLayer(fond);
   fond = FONDS[nom]();
-  fond.addTo(carte);
-  if (fond.bringToBack) fond.bringToBack();
   nomFond = nom;
+  // En 3D, les tuiles 2D sont inutiles (et consommeraient le quota TomTom).
+  if (!explo3D) {
+    fond.addTo(carte);
+    if (fond.bringToBack) fond.bringToBack();
+  } else {
+    c3d.preparer(optionsCarte3D()).then((ok) => ok || activerCarte3D(false));
+  }
   return nom;
 }
+
+export function fondCourant() {
+  return nomFond;
+}
+
+export function optionsCarte3D() {
+  const r = lireReglages();
+  return { fond: nomFond, fournisseur: r.carte_3d || "libre", relief: r.relief_3d === true };
+}
+
+export function carte3DActive() {
+  return explo3D;
+}
+
+// Passe la carte des bornes en 3D (ou revient en 2D) au même endroit.
+// Renvoie false si la 3D n'a pas pu s'afficher (raison : c3d.derniereErreur()).
+export async function activerCarte3D(actif) {
+  if (!actif) {
+    if (!explo3D) return true;
+    const vue = c3d.desactiverExploration();
+    explo3D = false;
+    if (fond && !carte.hasLayer(fond)) {
+      fond.addTo(carte);
+      if (fond.bringToBack) fond.bringToBack();
+    }
+    if (vue) carte.setView([vue.lat, vue.lon], vue.zoom, { animate: false });
+    surDeplacement?.();
+    return true;
+  }
+  if (explo3D) return true;
+  if (!(await c3d.preparer(optionsCarte3D()))) return false;
+  const centre = carte.getCenter();
+  c3d.activerExploration({ lat: centre.lat, lon: centre.lng, zoom: carte.getZoom(), onDeplacement: surDeplacement, decalageBas });
+  explo3D = true;
+  if (fond) carte.removeLayer(fond);
+  return true;
+}
+
+export const derniereErreur3D = () => c3d.derniereErreur();
 
 // Après un changement de clé TomTom : passer aux tuiles nettes (ou en revenir).
 export function rechargerFond() {
@@ -224,29 +293,29 @@ export function fondSuivant() {
   return choisirFond(ORDRE_FONDS[(ORDRE_FONDS.indexOf(nomFond) + 1) % ORDRE_FONDS.length]);
 }
 
-export function definirDecalageBas(px) {
+function definirDecalageBas2D(px) {
   decalageBas = Math.max(0, px);
 }
 
 // Centre de la partie visible (au-dessus du panneau)
-export function centreVisible() {
+function centreVisible2D() {
   const taille = carte.getSize();
   const p = carte.containerPointToLatLng([taille.x / 2, Math.max(1, (taille.y - decalageBas) / 2)]);
   return { lat: p.lat, lon: p.lng };
 }
 
-export function rayonVisibleKm() {
+function rayonVisibleKm2D() {
   const taille = carte.getSize();
   const c = carte.containerPointToLatLng([taille.x / 2, Math.max(1, (taille.y - decalageBas) / 2)]);
   const coin = carte.containerPointToLatLng([taille.x, 0]);
   return c.distanceTo(coin) / 1000;
 }
 
-export function zoomActuel() {
+function zoomActuel2D() {
   return carte.getZoom();
 }
 
-export function centrer(lat, lon, zoom) {
+function centrer2D(lat, lon, zoom) {
   const z = zoom ?? carte.getZoom();
   const point = carte.project([lat, lon], z).add([0, decalageBas / 2]);
   carte.setView(carte.unproject(point, z), z, { animate: true });
@@ -278,7 +347,7 @@ function iconeBorne(b) {
   });
 }
 
-export function afficherBornes(bornes, onClic) {
+function afficherBornes2D(bornes, onClic) {
   coucheBornes.clearLayers();
   marqueurs.clear();
   for (const b of bornes) {
@@ -289,28 +358,28 @@ export function afficherBornes(bornes, onClic) {
   }
 }
 
-export function rafraichirBorne(b) {
+function rafraichirBorne2D(b) {
   marqueurs.get(b)?.setIcon(iconeBorne(b));
 }
 
-export function selectionnerBorne(b) {
+function selectionnerBorne2D(b) {
   const ancienne = selection;
   selection = b;
-  if (ancienne) rafraichirBorne(ancienne);
+  if (ancienne) rafraichirBorne2D(ancienne);
   if (b) {
-    rafraichirBorne(b);
+    rafraichirBorne2D(b);
     marqueurs.get(b)?.setZIndexOffset(10000);
   }
 }
 
-export function montrerBornes(visible) {
+function montrerBornes2D(visible) {
   if (visible && !carte.hasLayer(coucheBornes)) carte.addLayer(coucheBornes);
   if (!visible && carte.hasLayer(coucheBornes)) carte.removeLayer(coucheBornes);
 }
 
 // ── Position de l'utilisateur ───────────────────────────────────────────────
 
-export function afficherPosition(lat, lon) {
+function afficherPosition2D(lat, lon) {
   const icone = L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9], html: '<div class="ev-position"></div>' });
   if (marqueurPosition) marqueurPosition.setLatLng([lat, lon]);
   else marqueurPosition = L.marker([lat, lon], { icon: icone, interactive: false, zIndexOffset: 20000 }).addTo(carte);
@@ -339,7 +408,7 @@ function ajouterArrets(arrets, icone, prefixe, onClicArret) {
 
 // liste : [{ coords, libelle, onClic }] -- sans recadrer la carte, car
 // elle est rafraîchie au fil des calculs pendant que l'utilisateur regarde.
-export function afficherAlternatives(liste) {
+function afficherAlternatives2D(liste) {
   coucheAlternatives.clearLayers();
   for (const { coords, libelle, onClic } of liste) {
     if (!coords?.length) continue;
@@ -354,11 +423,11 @@ export function afficherAlternatives(liste) {
   }
 }
 
-export function afficherTrajet(data, onClicArret) {
+function afficherTrajet2D(data, onClicArret) {
   coucheTrajet.clearLayers();
   coucheAlternatives.clearLayers();
   coucheAlternatives.addTo(coucheTrajet);
-  placerCurseur(undefined, undefined);
+  placerCurseur2D(undefined, undefined);
   if (!data?.coords?.length) return;
 
   const aller = L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#22e5a0", weight: 6, opacity: 0.9 }).addTo(coucheTrajet);
@@ -383,12 +452,12 @@ export function afficherTrajet(data, onClicArret) {
   carte.fitBounds(limites, { paddingTopLeft: [30, 130], paddingBottomRight: [30, decalageBas + 30] });
 }
 
-export function effacerTrajet() {
+function effacerTrajet2D() {
   coucheTrajet.clearLayers();
-  placerCurseur(undefined, undefined);
+  placerCurseur2D(undefined, undefined);
 }
 
-export function placerCurseur(lat, lon, label) {
+function placerCurseur2D(lat, lon, label) {
   if (!carte) return;
   if (curseur) {
     carte.removeLayer(curseur);
@@ -398,4 +467,75 @@ export function placerCurseur(lat, lon, label) {
   curseur = L.marker([lat, lon], { icon: pastille(22, "rgba(0,229,255,.95)"), zIndexOffset: 7000 })
     .bindTooltip(escapeHtml(label || "Position estimée"), { permanent: true, direction: "top", offset: [0, -12] })
     .addTo(carte);
+}
+
+// ── Aiguillage 2D / 3D ──────────────────────────────────────────────────────
+// Données : la 2D et la 3D sont toujours tenues à jour (bascule instantanée).
+// Cadrage et mesures : seulement la carte affichée.
+
+export function definirDecalageBas(px) {
+  definirDecalageBas2D(px);
+  c3d.exploDecalageBas(Math.max(0, px));
+}
+
+export function centreVisible() {
+  return explo3D ? c3d.exploCentreVisible() : centreVisible2D();
+}
+
+export function rayonVisibleKm() {
+  return explo3D ? c3d.exploRayonVisibleKm() : rayonVisibleKm2D();
+}
+
+export function zoomActuel() {
+  return explo3D ? c3d.exploZoom() : zoomActuel2D();
+}
+
+export function centrer(lat, lon, zoom) {
+  if (explo3D) c3d.exploCentrer(lat, lon, zoom);
+  else centrer2D(lat, lon, zoom);
+}
+
+export function afficherBornes(bornes, onClic) {
+  afficherBornes2D(bornes, onClic);
+  c3d.exploBornes(bornes, onClic);
+}
+
+export function rafraichirBorne(b) {
+  rafraichirBorne2D(b);
+  c3d.exploRafraichirBorne(b);
+}
+
+export function selectionnerBorne(b) {
+  selectionnerBorne2D(b);
+  c3d.exploSelection(b);
+}
+
+export function montrerBornes(visible) {
+  montrerBornes2D(visible);
+  c3d.exploMontrerBornes(visible);
+}
+
+export function afficherPosition(lat, lon) {
+  afficherPosition2D(lat, lon);
+  c3d.exploPosition(lat, lon);
+}
+
+export function afficherAlternatives(liste) {
+  afficherAlternatives2D(liste);
+  c3d.exploAlternatives(liste);
+}
+
+export function afficherTrajet(data, onClicArret) {
+  afficherTrajet2D(data, onClicArret);
+  c3d.exploTrajet(data, onClicArret);
+}
+
+export function effacerTrajet() {
+  effacerTrajet2D();
+  c3d.exploEffacerTrajet();
+}
+
+export function placerCurseur(lat, lon, label) {
+  placerCurseur2D(lat, lon, label);
+  c3d.exploCurseur(lat, lon, label);
 }
