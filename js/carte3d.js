@@ -9,7 +9,7 @@ import { haversineKm } from "./geo.js";
 import { classePuissance, puissanceBorne } from "./carte.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
-const DELAI_CHARGEMENT_MS = 15000;
+const DELAI_CHARGEMENT_MS = 30000;
 const INCLINAISON = 55;
 // À échelle égale, le zoom MapLibre (tuiles 512 px) vaut celui de Leaflet
 // moins 1 ; l'inclinaison éloigne l'horizon, on rapproche un peu.
@@ -32,7 +32,12 @@ let surDeplacementManuel = null;
 
 function chargerMapLibre() {
   if (window.maplibregl) return Promise.resolve();
-  chargementLib ??= new Promise((ok, echec) => {
+  chargementLib ??= new Promise((ok, echecBrut) => {
+    const echec = (e) => {
+      chargementLib = null;
+      echecBrut(e);
+    };
+    setTimeout(() => echec(new Error("réseau trop lent pour télécharger le moteur 3D")), DELAI_CHARGEMENT_MS);
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = `${MAPLIBRE}.css`;
@@ -40,10 +45,7 @@ function chargerMapLibre() {
     const script = document.createElement("script");
     script.src = `${MAPLIBRE}.js`;
     script.onload = ok;
-    script.onerror = () => {
-      chargementLib = null;
-      echec(new Error("MapLibre indisponible (réseau ?)"));
-    };
+    script.onerror = () => echec(new Error("moteur 3D (MapLibre) non téléchargé : réseau ?"));
     document.head.appendChild(script);
   });
   return chargementLib;
@@ -83,18 +85,67 @@ function ajouterCouchesTrajet() {
 
 // Prépare la carte 3D (bibliothèque, style TomTom). Renvoie false si ce
 // n'est pas possible : la navigation reste alors en 2D.
+let raisonEchec = "";
+let surPanne = null;
+let tuilesKoDeSuite = 0;
+let horsService = false;
+
+// Raison du dernier échec, affichée à l'utilisateur pour le diagnostic.
+export function derniereErreur() {
+  return raisonEchec;
+}
+
+// cb(raison) : la carte 3D ne peut plus s'afficher (tuiles refusées,
+// moteur graphique coupé par Android) ; la navigation repasse en 2D.
+export function definirSurPanne(cb) {
+  surPanne = cb;
+}
+
+function panne(raison) {
+  if (horsService) return;
+  horsService = true;
+  raisonEchec = raison;
+  console.warn("[3D] Panne :", raison);
+  surPanne?.(raison);
+}
+
+function surveiller() {
+  carte.on("error", (e) => {
+    if (!e.sourceId) return;
+    // Refus en série (clé, quota du jour, réseau coupé) : sans tuiles, la
+    // carte devient noire. Une tuile ratée isolée ne suffit pas.
+    if (++tuilesKoDeSuite >= 8) panne(`cartes TomTom refusées${e.error?.status ? `, HTTP ${e.error.status}` : ", réseau ?"}`);
+  });
+  carte.on("sourcedata", (e) => {
+    if (e.tile) tuilesKoDeSuite = 0;
+  });
+  carte.on("webglcontextlost", () => panne("moteur graphique coupé par le téléphone"));
+}
+
 export async function preparer({ sombre = true } = {}) {
-  if (!getApiKeys().tomtom || !webglDisponible()) return false;
+  if (!getApiKeys().tomtom) {
+    raisonEchec = "clé TomTom absente";
+    return false;
+  }
+  if (!webglDisponible()) {
+    raisonEchec = "WebGL absent sur ce navigateur";
+    return false;
+  }
+  conteneur = document.getElementById("ev-carte-3d");
   try {
     await chargerMapLibre();
-    conteneur = document.getElementById("ev-carte-3d");
     const style = urlStyle(sombre);
-    if (carte && styleCharge === style) return true;
+    if (carte && styleCharge === style && !horsService) return true;
     if (carte) {
       carte.remove();
       carte = null;
     }
+    horsService = false;
+    tuilesKoDeSuite = 0;
+    // Invisible mais à sa taille pendant le chargement : MapLibre a besoin
+    // des dimensions, et l'écran ne reste pas noir en attendant.
     conteneur.classList.remove("hidden");
+    conteneur.classList.add("ev-3d-invisible");
     carte = new maplibregl.Map({
       container: conteneur,
       style,
@@ -107,31 +158,39 @@ export async function preparer({ sombre = true } = {}) {
       touchPitch: false,
       fadeDuration: 0,
     });
+    // Seul le style (description de la carte) est attendu : les tuiles
+    // arrivent ensuite. Les erreurs de tuiles ne sont pas bloquantes ici.
     await new Promise((ok, echec) => {
-      const minuteur = setTimeout(() => echec(new Error("style TomTom trop long à charger")), DELAI_CHARGEMENT_MS);
-      carte.once("load", () => {
+      const minuteur = setTimeout(() => echec(new Error("réseau trop lent pour charger la carte 3D")), DELAI_CHARGEMENT_MS);
+      carte.once("style.load", () => {
         clearTimeout(minuteur);
         ok();
       });
-      carte.once("error", (e) => {
-        if (!carte.isStyleLoaded()) {
-          clearTimeout(minuteur);
-          echec(e.error || new Error("style TomTom refusé"));
-        }
+      carte.on("error", function surErreurStyle(e) {
+        if (carte?.isStyleLoaded() || e.sourceId) return;
+        carte.off("error", surErreurStyle);
+        clearTimeout(minuteur);
+        const statut = e.error?.status;
+        echec(new Error(statut ? `style TomTom refusé (HTTP ${statut})` : `style TomTom inaccessible (${e.error?.message || "réseau"})`));
       });
     });
     ajouterCouchesTrajet();
     carte.on("dragstart", (e) => e.originalEvent && surDeplacementManuel?.());
     carte.on("zoomstart", (e) => e.originalEvent && surDeplacementManuel?.());
+    surveiller();
     styleCharge = style;
+    raisonEchec = "";
     conteneur.classList.add("hidden");
+    conteneur.classList.remove("ev-3d-invisible");
     return true;
   } catch (e) {
-    console.warn("[3D] Vue 3D indisponible, navigation en 2D", e);
+    raisonEchec = e.message || String(e);
+    console.warn("[3D] Vue 3D indisponible, navigation en 2D :", raisonEchec);
     if (carte) carte.remove();
     carte = null;
     styleCharge = null;
-    conteneur?.classList.add("hidden");
+    conteneur.classList.add("hidden");
+    conteneur.classList.remove("ev-3d-invisible");
     return false;
   }
 }

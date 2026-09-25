@@ -40,12 +40,13 @@ function fondTomTom(style, repli) {
     maxZoom: 20,
     attribution: '© <a href="https://www.tomtom.com/">TomTom</a>',
   });
-  let chargees = 0;
-  let erreurs = 0;
-  couche.on("tileload", () => chargees++);
+  let erreursDeSuite = 0;
+  couche.on("tileload", () => (erreursDeSuite = 0));
   couche.on("tileerror", () => {
-    // Clé refusée ou quota épuisé : toutes les tuiles échouent.
-    if (++erreurs >= 4 && !chargees && fond === couche) {
+    // Clé refusée, quota du jour épuisé ou réseau : les tuiles suivantes
+    // échouent toutes et la carte se remplit de noir. Une tuile ratée
+    // isolée (réseau instable) ne suffit pas.
+    if (++erreursDeSuite >= 6 && fond === couche) {
       console.warn("[CARTE] Tuiles TomTom refusées, retour sur OpenStreetMap");
       carte.removeLayer(couche);
       fond = repli().addTo(carte);

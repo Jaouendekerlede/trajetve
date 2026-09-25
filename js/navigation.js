@@ -841,8 +841,28 @@ function majBouton3D() {
 
 // Change de carte en pleine navigation : tout ce qui est dessiné (tracé,
 // bornes, voiture) est refait sur la nouvelle.
+function changerVue(nouvelle) {
+  if (nouvelle === vue) return;
+  vue.montrerBornes(false);
+  vue.quitterNavigation();
+  vue = nouvelle;
+  vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
+  if (etat.route) vue.dessinerRouteNavigation(etat.route.coords, etat.arretsRestants, etat.destination);
+  etat.posBornes = null;
+  rafraichirBornesProches();
+  etat.suivi = true;
+  $("ev-nav-recentrer-btn").classList.add("hidden");
+  const a = etat.aff;
+  if (a && etat.route) {
+    vue.majVoiture(a.lat, a.lon, a.cap);
+    vue.cameraNavigation(a.lat, a.lon, a.cap, a.zoom, etat.sensDeMarche, false);
+    vue.majProgressionNavigation(etat.route.coords, etat.idx, a.lat, a.lon);
+  }
+  majBouton3D();
+}
+
 async function basculerVue() {
-  if (!etat?.route || etat.basculeEnCours) return;
+  if (!etat || etat.basculeEnCours) return;
   etat.basculeEnCours = true;
   const vers3D = vue !== carte3D;
   sauverReglages({ vue_3d: vers3D });
@@ -850,29 +870,25 @@ async function basculerVue() {
   if (vers3D) {
     $("ev-nav-3d-btn").textContent = "…";
     if (await carte3D.preparer({ sombre: themeSombre() })) nouvelle = carte3D;
-    else afficherAlerte("⚠️ Vue 3D indisponible sur ce téléphone ou sans réseau : on reste en 2D.");
+    else afficherAlerte(`⚠️ Vue 3D indisponible : ${carte3D.derniereErreur() || "raison inconnue"}. On reste en 2D.`);
   }
   if (!etat) return;
   etat.basculeEnCours = false;
-  if (nouvelle !== vue) {
-    vue.montrerBornes(false);
-    vue.quitterNavigation();
-    vue = nouvelle;
-    vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
-    vue.dessinerRouteNavigation(etat.route.coords, etat.arretsRestants, etat.destination);
-    etat.posBornes = null;
-    rafraichirBornesProches();
-    etat.suivi = true;
-    $("ev-nav-recentrer-btn").classList.add("hidden");
-    const a = etat.aff;
-    if (a) {
-      vue.majVoiture(a.lat, a.lon, a.cap);
-      vue.cameraNavigation(a.lat, a.lon, a.cap, a.zoom, etat.sensDeMarche, false);
-      vue.majProgressionNavigation(etat.route.coords, etat.idx, a.lat, a.lon);
-    }
-  }
+  changerVue(nouvelle);
   majBouton3D();
 }
+
+// La 3D tombe en panne en route : on repasse en 2D sans changer la
+// préférence (la 3D sera retentée au prochain trajet).
+carte3D.definirSurPanne((raison) => {
+  if (!etat || vue !== carte3D) return;
+  changerVue(carte2D);
+  const texte = `⚠️ Vue 3D interrompue (${raison}) : passage en 2D. Touchez « 2D » pour réessayer.`;
+  afficherAlerte(texte);
+  setTimeout(() => {
+    if (etat && $("ev-nav-alerte").textContent === texte) afficherAlerte(null);
+  }, 15000);
+});
 
 export function navigationActive() {
   return !!etat;
@@ -934,6 +950,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   vue = veut3D && (await carte3D.preparer({ sombre: themeSombre() })) ? carte3D : carte2D;
   if (!etat) return;
   majBouton3D();
+  if (veut3D && vue === carte2D) afficherAlerte(`⚠️ Vue 3D indisponible : ${carte3D.derniereErreur() || "raison inconnue"}. Navigation en 2D.`);
   $("ev-nav-instruction").textContent = "Calcul du guidage…";
   vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
   garderEcranAllume();
