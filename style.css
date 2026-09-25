@@ -782,3 +782,5 @@ body.ev-mode-voiture .ev-nav-limite { width: 64px; height: 64px; font-size: 24px
   body[data-feuille="haut"] .ev-fabs { opacity: 1; pointer-events: auto; }
   .ev-toast { left: calc(50% + 210px); }
 }
+.ev-btn-plein { width: 100%; margin-top: 8px; }
+body.ev-mode-navigation .ev-maj { display: none; }

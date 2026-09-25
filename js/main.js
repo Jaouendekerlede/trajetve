@@ -1,7 +1,24 @@
 import { initialiserUI } from "./ui.js";
 import { navigationActive } from "./navigation.js";
+import { restaurerDepuisAdresse, proposerRappelSauvegarde } from "./ui-sauvegarde.js";
+import { proposerInstallation } from "./ui-installation.js";
+import { toast } from "./ui-commun.js";
 
+const DELAI_RAPPEL_SAUVEGARDE_MS = 8000;
+
+// Ouverte par un lien de restauration : les données sont remises avant
+// que l'interface ne les lise.
+const restaures = await restaurerDepuisAdresse();
 initialiserUI();
+if (restaures) {
+  toast(`✅ Données restaurées (${restaures} éléments)`);
+  proposerInstallation({ insister: true });
+} else setTimeout(proposerRappelSauvegarde, DELAI_RAPPEL_SAUVEGARDE_MS);
+// Lien ouvert alors que l'appli l'était déjà : même page, pas de nouveau
+// démarrage, on le provoque.
+window.addEventListener("hashchange", () => {
+  if (location.hash.startsWith("#restaurer=")) location.reload();
+});
 
 const VERIFICATION_MAJ_MS = 30 * 60 * 1000;
 

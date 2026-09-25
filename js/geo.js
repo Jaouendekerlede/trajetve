@@ -99,3 +99,39 @@ export function pointADistanceSurTrace(coords, distanceCibleKm) {
   const dernier = coords[coords.length - 1];
   return { lat: dernier[1], lon: dernier[0] };
 }
+
+// Carrés (format « avoidAreas » de TomTom) centrés sur le tracé, aux
+// distances données (m) après `offset`. cum : distances cumulées (m) des
+// points de coords ([lon, lat]). Les distances au-delà du tracé sont ignorées.
+export function carresSurTrace(coords, cum, offset, distances, demiCoteM) {
+  const carres = [];
+  const total = cum[cum.length - 1];
+  let i = 0;
+  for (const d of distances) {
+    const cible = offset + d;
+    if (cible > total || coords.length < 2) break;
+    while (i < cum.length - 2 && cum[i + 1] < cible) i++;
+    const t = cum[i + 1] > cum[i] ? Math.max(0, Math.min(1, (cible - cum[i]) / (cum[i + 1] - cum[i]))) : 0;
+    const lon = coords[i][0] + t * (coords[i + 1][0] - coords[i][0]);
+    const lat = coords[i][1] + t * (coords[i + 1][1] - coords[i][1]);
+    const dLat = demiCoteM / 111320;
+    const dLon = demiCoteM / (111320 * Math.cos((lat * Math.PI) / 180));
+    carres.push({ southWestCorner: { latitude: lat - dLat, longitude: lon - dLon }, northEastCorner: { latitude: lat + dLat, longitude: lon + dLon } });
+  }
+  return carres;
+}
+
+// Le tracé ([lon, lat]) passe-t-il dans l'un des carrés ? Chaque segment
+// est parcouru par pas de 10 m au plus (les points peuvent être espacés).
+export function traceTraverseCarres(coords, carres) {
+  const dedans = (lon, lat) => carres.some((c) => lat >= c.southWestCorner.latitude && lat <= c.northEastCorner.latitude && lon >= c.southWestCorner.longitude && lon <= c.northEastCorner.longitude);
+  for (let i = 0; i < coords.length; i++) {
+    const [lonA, latA] = coords[i];
+    if (dedans(lonA, latA)) return true;
+    if (i === coords.length - 1) break;
+    const [lonB, latB] = coords[i + 1];
+    const pas = Math.ceil((haversineKm(latA, lonA, latB, lonB) * 1000) / 10);
+    for (let k = 1; k < pas; k++) if (dedans(lonA + ((lonB - lonA) * k) / pas, latA + ((latB - latA) * k) / pas)) return true;
+  }
+  return false;
+}

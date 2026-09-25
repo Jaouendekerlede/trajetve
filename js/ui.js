@@ -17,7 +17,8 @@ import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
 import { $, toast, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur } from "./ui-commun.js";
 import { rendreJournal, cablerJournal } from "./ui-journal.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
-import { exporterSauvegarde, importerSauvegarde } from "./ui-sauvegarde.js";
+import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
+import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
 import { cablerParkings, planifierParkings } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
@@ -1945,6 +1946,10 @@ function expliquerRefusTomTom(r) {
 
 function cablerProfil() {
   $("ev-export-donnees-btn").addEventListener("click", exporterSauvegarde);
+  $("ev-lien-sauvegarde-btn").addEventListener("click", envoyerLienRestauration);
+  $("ev-installer-btn").addEventListener("click", installerAppli);
+  majInfoLien();
+  majBoutonInstallation();
   $("ev-revoir-accueil-btn").addEventListener("click", () => afficherAccueil(afficherVue));
   cablerAbonnements();
   $("ev-import-donnees-btn").addEventListener("click", () => $("ev-import-donnees-fichier").click());

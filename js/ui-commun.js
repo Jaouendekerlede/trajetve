@@ -103,3 +103,27 @@ export function badgeOperateur(nom) {
   }
   return `<span class="ev-badge-op" style="background:${fond};color:${texte}" title="${escapeHtml(nom)}">${escapeHtml(sigle)}</span>`;
 }
+
+// Bandeau en bas de l'écran avec des boutons (un seul à la fois ; il se
+// ferme au premier appui). boutons : [{ libelle, action, secondaire }].
+export function bandeau({ id, texte, boutons }) {
+  if (document.querySelector(".ev-maj")) return null;
+  const el = document.createElement("div");
+  el.id = id;
+  el.className = "ev-maj";
+  el.innerHTML = `<span></span><div class="ev-maj-boutons"></div>`;
+  el.querySelector("span").textContent = texte;
+  for (const b of boutons) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = b.secondaire ? "ev-lien" : "ev-btn";
+    btn.textContent = b.libelle;
+    btn.addEventListener("click", () => {
+      el.remove();
+      b.action?.();
+    });
+    el.querySelector(".ev-maj-boutons").appendChild(btn);
+  }
+  document.body.appendChild(el);
+  return el;
+}

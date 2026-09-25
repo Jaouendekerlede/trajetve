@@ -47,11 +47,15 @@ async function requete(apiKey, points, options, sections, pointsSupport) {
   if (options.eviterZonesFaiblesEmissions) params.append("avoid", "lowEmissionZones");
   if (options.eviterRoutesNonRevetues) params.append("avoid", "unpavedRoads");
 
-  if (!pointsSupport) return fetch(`${url}?${params.toString()}`);
+  // Tracé à suivre et zones à éviter (route barrée) : seulement en POST.
+  const corps = {};
+  if (pointsSupport) corps.supportingPoints = pointsSupport;
+  if (options.zonesEvitees?.length) corps.avoidAreas = { rectangles: options.zonesEvitees };
+  if (!Object.keys(corps).length) return fetch(`${url}?${params.toString()}`);
   return fetch(`${url}?${params.toString()}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ supportingPoints: pointsSupport }),
+    body: JSON.stringify(corps),
   });
 }
 
@@ -105,6 +109,8 @@ export async function diagnostiquerCleTomTom(cle) {
 // options.traceImposee ([lon, lat][]) : TomTom reconstruit cette route au
 // lieu de choisir la plus rapide. Incompatible avec des étapes (refus de
 // l'API), donc ignorée s'il y en a.
+// options.zonesEvitees : rectangles { southWestCorner, northEastCorner }
+// ({ latitude, longitude }) que la route ne doit pas traverser (10 au plus).
 export async function calculerItineraireTomTom(apiKey, lat1, lon1, lat2, lon2, options = {}) {
   if (!apiKey) {
     return { erreur: "cle_manquante" };

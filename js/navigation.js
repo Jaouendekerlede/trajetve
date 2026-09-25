@@ -1,14 +1,15 @@
 // Navigation GPS : suivi de la voiture sur l'itinéraire (via les bornes de
 // recharge prévues), guidage vocal tourne-à-tourne (instructions TomTom en
-// français), recalcul automatique hors itinéraire, mise à jour du trafic,
-// vitesse et limitation, heure d'arrivée, batterie estimée en direct.
+// français), recalcul automatique hors itinéraire, mise à jour du trafic
+// (travaux annoncés, bouton « route barrée »), vitesse et limitation, heure
+// d'arrivée, batterie estimée en direct.
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
-import { haversineKm } from "./geo.js";
+import { haversineKm, carresSurTrace, traceTraverseCarres } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
@@ -29,6 +30,16 @@ const ACCELERATION_DEMO = 2;
 const DELAI_BORNES_MS = 90 * 1000;
 const RAYON_BORNES_KM = 12;
 const DISTANCE_MIN_RAFRAICHIR_BORNES_KM = RAYON_BORNES_KM * 0.4;
+// Route barrée : petits carrés posés sur la route juste devant la voiture
+// (pas sur elle : TomTom refuse un départ dans une zone évitée).
+const DISTANCES_ROUTE_BARREE_M = [40, 120, 200, 280];
+const DEMI_COTE_ZONE_M = 25;
+const MAX_ZONES_EVITEES = 10; // limite TomTom
+// Pas d'autre chemin possible tout de suite (sens unique…) : nouvel essai
+// tous les 80 m, 6 fois au plus.
+const PAS_REESSAI_BARREE_M = 80;
+const NB_REESSAIS_BARREE = 6;
+const DISTANCE_ANNONCE_TRAVAUX_M = 1500;
 
 let etat = null;
 
@@ -133,8 +144,19 @@ function construireRoute(r) {
     .map((s) => ({ offset: cum[Math.min(Math.max(0, s.endPointIndex ?? 0), dernier)], lanes: s.lanes }))
     .sort((a, b) => a.offset - b.offset);
 
-  return { coords, cum, total: cum[dernier], instructions, limites, troncons, voies };
+  // Travaux et fermetures connus de TomTom sur le trajet (pour les annoncer).
+  const travaux = (r.sections || [])
+    .filter((s) => String(s.sectionType || "").toUpperCase() === "TRAFFIC" && ["ROAD_WORK", "ROAD_CLOSURE"].includes(s.simpleCategory))
+    .map((s) => {
+      const i = Math.min(Math.max(0, s.startPointIndex ?? 0), dernier);
+      return { offset: cum[i], cle: `${coords[i][1].toFixed(3)},${coords[i][0].toFixed(3)}`, fermeture: s.simpleCategory === "ROAD_CLOSURE", retard_min: Math.round((s.delayInSeconds || 0) / 60) };
+    })
+    .sort((a, b) => a.offset - b.offset);
+
+  return { coords, cum, total: cum[dernier], instructions, limites, troncons, voies, travaux };
 }
+
+
 
 // Partie du tracé choisi encore devant la voiture. La recherche repart du
 // dernier point atteint pour ne pas s'accrocher à un passage antérieur
@@ -152,13 +174,14 @@ export function traceRestante(coords, lat, lon, depuis = 0) {
   return { indice: meilleur, coords: coords.slice(meilleur) };
 }
 
-async function calculerRouteNav(pos, cap) {
+async function calculerRouteNav(pos, cap, { sansSecours = false } = {}) {
   const cle = getApiKeys().tomtom;
   const o = etat.options || {};
   let traceImposee = null;
   // TomTom refuse tracé imposé + étapes : tant qu'il reste des bornes (qui
   // sont sur la route choisie), le guidage passe simplement par elles.
-  if (etat.plan.suivre_trace && !etat.arretsRestants.length && etat.plan.coords?.length) {
+  // Route barrée : le tracé choisi passe justement par là, on le lâche.
+  if (etat.plan.suivre_trace && !etat.arretsRestants.length && etat.plan.coords?.length && !etat.zonesEvitees.length) {
     const reste = traceRestante(etat.plan.coords, pos.lat, pos.lon, etat.indiceTrace);
     etat.indiceTrace = reste.indice;
     if (reste.coords.length >= 2) traceImposee = [[pos.lon, pos.lat], ...reste.coords];
@@ -168,12 +191,14 @@ async function calculerRouteNav(pos, cap) {
     traceImposee,
     instructions: true,
     cap,
+    zonesEvitees: etat.zonesEvitees,
     eviterPeages: o.eviter_peages,
     eviterFerries: o.eviter_ferries,
     eviterZonesFaiblesEmissions: o.eviter_zones_faibles_emissions,
     eviterRoutesNonRevetues: o.eviter_routes_non_revetues,
   });
   if (!r.erreur) return construireRoute(r);
+  if (sansSecours) return null;
   // Pas de réseau : guidage préparé à l'avance (« 📥 Hors ligne »), s'il
   // correspond à ce trajet et aux bornes restantes.
   const garde = guidageHorsLigne(etat.destination.lat, etat.destination.lon, etat.arretsRestants.length);
@@ -188,6 +213,8 @@ function installerRoute(route) {
   if (etat.aff) etat.aff.offset = null;
   etat.anim = null;
   etat.annoncesBornes = new Set();
+  // Le mode démo repart de la position actuelle sur le nouveau tracé.
+  etat.demoOffset = null;
   vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   if (etat.pos) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
@@ -461,6 +488,22 @@ function annonces() {
     }
   }
 
+  // Travaux (clé = lieu : pas de nouvelle annonce après un recalcul).
+  const travaux = etat.route.travaux.find((t) => t.offset > etat.offset && t.offset - etat.offset <= DISTANCE_ANNONCE_TRAVAUX_M);
+  if (travaux && !etat.annoncesTravaux.has(travaux.cle)) {
+    etat.annoncesTravaux.add(travaux.cle);
+    const d = travaux.offset - etat.offset;
+    const retard = travaux.retard_min >= 1 ? `, environ ${travaux.retard_min} minute${travaux.retard_min > 1 ? "s" : ""} de retard` : "";
+    parler(travaux.fermeture ? `Attention, route signalée fermée dans ${distanceParlee(d)}.` : `Travaux dans ${distanceParlee(d)}${retard}.`);
+    const texte = travaux.fermeture ? `⛔ Route signalée fermée dans ${distanceAffichee(d)}` : `🚧 Travaux dans ${distanceAffichee(d)}${travaux.retard_min >= 1 ? ` (+${travaux.retard_min} min)` : ""}`;
+    if ($("ev-nav-alerte").classList.contains("hidden")) {
+      afficherAlerte(texte, travaux.fermeture ? { libelle: "🚧 Éviter", action: routeBarree } : null);
+      setTimeout(() => {
+        if (etat && $("ev-nav-alerte").textContent.startsWith(texte)) afficherAlerte(null);
+      }, 15000);
+    }
+  }
+
   const arret = etat.arretsRestants[0];
   if (arret) {
     const reste = etat.route.troncons[0].fin - etat.offset;
@@ -617,6 +660,70 @@ async function replanifier() {
   majEcran();
 }
 
+// Le conducteur voit la route barrée devant lui (travaux inconnus de
+// TomTom) : on l'évite pour tout le reste du trajet, recalculs compris.
+async function routeBarree() {
+  if (!etat?.route || !etat.pos || etat.recalculEnCours || etat.aLaBorne || etat.arrive) return;
+  const zones = carresSurTrace(etat.route.coords, etat.route.cum, etat.offset, DISTANCES_ROUTE_BARREE_M, DEMI_COTE_ZONE_M);
+  if (!zones.length) return;
+  const avant = etat.zonesEvitees;
+  etat.zonesEvitees = [...avant, ...zones].slice(-MAX_ZONES_EVITEES);
+  etat.recalculEnCours = true;
+  afficherAlerte("🚧 Route barrée : recherche d'un autre chemin…");
+  parler("D'accord, je cherche un autre chemin.", true);
+  const route = await calculerRouteNav(etat.pos, etat.pos.cap, { sansSecours: true });
+  if (!etat) return;
+  etat.recalculEnCours = false;
+  etat.dernierRecalcul = Date.now();
+  etat.dernierTrafic = Date.now();
+  if (!route) {
+    etat.zonesEvitees = avant;
+    afficherAlerte("⚠️ Pas de réponse pour un autre chemin (réseau ?). Touche 🚧 à nouveau un peu plus loin.");
+    parler("Je n'ai pas pu chercher d'autre chemin.", true);
+    return;
+  }
+  etat.reessaiBarree = { zones, restants: NB_REESSAIS_BARREE };
+  accepterRouteBarree(route);
+}
+
+// Nouvelle route après « route barrée » : si TomTom n'a pas pu éviter
+// l'endroit (aucun autre chemin depuis la position actuelle), on le dit et
+// on réessaie un peu plus loin.
+function accepterRouteBarree(route) {
+  const r = etat.reessaiBarree;
+  const traverse = traceTraverseCarres(route.coords, r.zones);
+  installerRoute(route);
+  etat.horsRoute = 0;
+  if (!traverse) {
+    etat.reessaiBarree = null;
+    afficherAlerte(null);
+    const premiere = route.instructions.find((i) => i.offset > etat.offset + 8 && i.type !== "LOCATION_DEPARTURE");
+    parler(`Autre chemin trouvé. ${premiere ? premiere.message : ""}`, true);
+  } else if (r.restants > 0) {
+    r.restants--;
+    r.odometre = etat.odometre + PAS_REESSAI_BARREE_M;
+    afficherAlerte("🚧 Pas encore d'autre chemin possible d'ici (sens unique ?). Je réessaie un peu plus loin.");
+    if (r.restants === NB_REESSAIS_BARREE - 1) parler("Pas d'autre chemin possible d'ici. Je réessaie un peu plus loin.", true);
+  } else {
+    etat.reessaiBarree = null;
+    afficherAlerte("⚠️ Aucun autre chemin trouvé : il faudra passer par là, ou faire demi-tour quand c'est possible.");
+    parler("Je ne trouve pas d'autre chemin.", true);
+  }
+  majEcran();
+}
+
+async function reessayerRouteBarree() {
+  etat.recalculEnCours = true;
+  const route = await calculerRouteNav(etat.pos, etat.pos.cap, { sansSecours: true });
+  if (!etat) return;
+  etat.recalculEnCours = false;
+  etat.dernierRecalcul = Date.now();
+  etat.dernierTrafic = Date.now();
+  if (!etat.reessaiBarree) return;
+  if (route) accepterRouteBarree(route);
+  else etat.reessaiBarree.odometre = etat.odometre + PAS_REESSAI_BARREE_M;
+}
+
 // ── Réception des positions ─────────────────────────────────────────────────
 
 function surPosition(p) {
@@ -641,7 +748,14 @@ function surPosition(p) {
   // Hors itinéraire : plusieurs positions de suite trop loin du tracé
   const seuil = Math.max(40, (p.precision || 20) * 1.5);
   etat.horsRoute = m.d > seuil && (p.vitesse || 0) > 2 ? etat.horsRoute + 1 : 0;
-  if (etat.horsRoute >= 3 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
+  // Passé quand même par l'endroit barré (voiture au bout des zones, pas
+  // seulement en approche) : plus rien à éviter devant.
+  if (etat.reessaiBarree && traceTraverseCarres([[p.lon, p.lat]], etat.reessaiBarree.zones.slice(-2))) {
+    etat.reessaiBarree = null;
+    afficherAlerte(null);
+  }
+  if (etat.reessaiBarree && etat.odometre >= etat.reessaiBarree.odometre && !etat.recalculEnCours) reessayerRouteBarree();
+  else if (etat.horsRoute >= 3 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
   else if (!etat.demo && Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
 
   // Arrivée à une borne ou à destination
@@ -826,14 +940,16 @@ function vitesseDemoKmh(offset, i) {
 }
 
 function demarrerDemo() {
-  let offset = etat.offset;
+  etat.demoOffset = etat.offset;
   const acceleration = window.TRAJETVE_ACCELERATION_DEMO || ACCELERATION_DEMO;
   etat.demoTimer = setInterval(() => {
     if (!etat || etat.aLaBorne || etat.arrive) return;
+    let offset = etat.demoOffset ?? etat.offset;
     const p0 = pointSurRoute(offset);
     const kmh = vitesseDemoKmh(offset, p0.i);
     offset = Math.max(offset, etat.offset) + (kmh / 3.6) * acceleration;
     if (offset > etat.route.total) offset = etat.route.total;
+    etat.demoOffset = offset;
     const p = pointSurRoute(offset);
     surPosition({ lat: p.lat, lon: p.lon, vitesse: kmh / 3.6, cap: p.cap, precision: 5, t: Date.now() });
   }, 1000);
@@ -874,6 +990,7 @@ function cablerBoutons() {
     if (etat.pos) vue.cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
   });
   $("ev-nav-3d-btn").addEventListener("click", basculerVue);
+  $("ev-nav-barree-btn").addEventListener("click", routeBarree);
   $("ev-nav-apercu-btn").addEventListener("click", () => {
     etat.suivi = false;
     $("ev-nav-recentrer-btn").classList.remove("hidden");
@@ -1033,6 +1150,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     posBornes: null,
     jetonBornes: 0,
     annoncesBornes: new Set(),
+    annoncesTravaux: new Set(),
+    zonesEvitees: [],
     capacite: obtenirProfilVehicule().capacite_kwh,
     consoKwhKm: (plan.energie_totale_necessaire_kwh || 13) / Math.max(1, plan.distance_km),
     margePct: options.marge_pct ?? plan.arrets?.[0]?.pct_arrivee_borne ?? 12,

@@ -10,6 +10,11 @@ const PAGES_ACCUEIL = [
     texte: "Les bornes de recharge autour de toi, et des trajets en voiture électrique avec les arrêts de recharge calculés pour ta voiture : batterie, météo, relief, prix.",
   },
   {
+    icone: "📧",
+    titre: "Nouveau téléphone ?",
+    texte: "Si tu avais déjà Trajet VE ailleurs, touche simplement le lien de restauration reçu par e-mail : clés, voiture et réglages reviennent tout seuls. Sinon, continue.",
+  },
+  {
     icone: "🔑",
     titre: "Deux clés gratuites",
     texte: "TomTom calcule les itinéraires, Open Charge Map trouve les bornes. Crée-les gratuitement (liens dans l'onglet 🚗 Profil) puis colle-les dans « Clés API ». Elles restent dans ce téléphone.",
@@ -23,7 +28,7 @@ const PAGES_ACCUEIL = [
   {
     icone: "💡",
     titre: "Quelques astuces",
-    texte: "• « 3D » : carte inclinée avec les bâtiments.\n• 🌙 / 🗺️ / 🛰️ : fond de carte (nuit et jour automatiques).\n• 🎬 Mode démo : essayer la navigation sans rouler.\n• 💾 Profil > Exporter : sauvegarder tes données pour un autre téléphone.",
+    texte: "• « 3D » : carte inclinée avec les bâtiments.\n• 🌙 / 🗺️ / 🛰️ : fond de carte (nuit et jour automatiques).\n• 🎬 Mode démo : essayer la navigation sans rouler.\n• 🚧 En navigation : route barrée devant toi ? Un appui et l'appli trouve un autre chemin.\n• 📧 Profil > Sauvegarde : envoie-toi le lien qui réinstalle tout sur un autre téléphone.",
   },
 ];
 
