@@ -26,6 +26,7 @@ export function consommationEffectiveKwh100km(profil) {
 export function typesDeCharge(profil) {
   return {
     lente: { label: "Lente (prise domestique)", puissance_kw: PUISSANCE_LENTE_KW },
+    domicile: { label: "Borne à domicile", puissance_kw: profil.puissance_domicile_kw || 7.4 },
     normale: { label: "Normale (borne AC)", puissance_kw: profil.puissance_ac_kw },
     rapide: { label: "Rapide (borne DC)", puissance_kw: profil.puissance_dc_kw },
   };
@@ -82,10 +83,66 @@ export function exporterScenariosTexte(depart, destination, scenarios) {
   return lignes.join("\n");
 }
 
-export function calculerTempsCharge(kwhAAjouter, puissanceKw) {
-  if (puissanceKw <= 0 || kwhAAjouter <= 0) return 0;
-  let minutes = (kwhAAjouter / puissanceKw) * 60;
-  if (puissanceKw >= SEUIL_PUISSANCE_DC_KW) minutes *= FACTEUR_RALENTISSEMENT_DC;
+// Courbe de charge rapide typique (part de la puissance maximale de la
+// voiture selon la batterie) : presque pleine puissance jusqu'à ~35 %, puis
+// la voiture ralentit pour protéger la batterie. En moyenne ~75 % du
+// maximum entre 10 et 80 % : avec la vraie puissance maximale de la voiture
+// dans le profil (ex. Kona 64 kWh : 77 kW), on retrouve les temps annoncés
+// par les constructeurs (Kona : 10 → 80 % en ~47 min).
+const COURBE_CHARGE_DC = [
+  [0, 0.75],
+  [10, 0.95],
+  [35, 0.95],
+  [50, 0.8],
+  [60, 0.68],
+  [70, 0.55],
+  [80, 0.42],
+  [90, 0.25],
+  [100, 0.1],
+];
+// Pertes (chauffage de la batterie, conversion) en charge lente.
+const PERTES_CHARGE_AC = 1.08;
+
+function facteurCourbe(pct) {
+  const p = Math.max(0, Math.min(100, pct));
+  for (let i = 1; i < COURBE_CHARGE_DC.length; i++) {
+    const [x1, y1] = COURBE_CHARGE_DC[i];
+    if (p <= x1) {
+      const [x0, y0] = COURBE_CHARGE_DC[i - 1];
+      return y0 + ((y1 - y0) * (p - x0)) / (x1 - x0);
+    }
+  }
+  return COURBE_CHARGE_DC[COURBE_CHARGE_DC.length - 1][1];
+}
+
+// Minutes pour ajouter kwhAAjouter sur une borne de puissanceBorneKw.
+// Avec la batterie de départ et le véhicule (profil), on suit la courbe de
+// charge et la limite du chargeur embarqué en courant alternatif ; sans, on
+// garde l'ancienne estimation (puissance constante, ×1,5 en charge rapide).
+export function calculerTempsCharge(kwhAAjouter, puissanceBorneKw, { pctDebut, profil } = {}) {
+  if (puissanceBorneKw <= 0 || kwhAAjouter <= 0) return 0;
+  if (pctDebut == null || !profil?.capacite_kwh) {
+    let minutes = (kwhAAjouter / puissanceBorneKw) * 60;
+    if (puissanceBorneKw >= SEUIL_PUISSANCE_DC_KW) minutes *= FACTEUR_RALENTISSEMENT_DC;
+    return minutes;
+  }
+  if (puissanceBorneKw < SEUIL_PUISSANCE_DC_KW) {
+    const kw = Math.min(puissanceBorneKw, profil.puissance_ac_kw || puissanceBorneKw);
+    return (kwhAAjouter / kw) * 60 * PERTES_CHARGE_AC;
+  }
+  // Intégration par pas de 1 % de batterie.
+  const capacite = profil.capacite_kwh;
+  const maxVehicule = profil.puissance_dc_kw || puissanceBorneKw;
+  let restant = kwhAAjouter;
+  let pct = pctDebut;
+  let minutes = 0;
+  while (restant > 1e-6) {
+    const kwh = Math.min(restant, capacite / 100);
+    const kw = Math.max(1, Math.min(puissanceBorneKw, maxVehicule * facteurCourbe(pct + 0.5)));
+    minutes += (kwh / kw) * 60;
+    restant -= kwh;
+    pct += (kwh / capacite) * 100;
+  }
   return minutes;
 }
 
@@ -147,6 +204,17 @@ function calculerScoreBorne(borne, profil, mode, preferCb = false) {
   if (borne.fraicheur?.niveau === "ancien") {
     score -= 5;
     details.push({ label: "Information ancienne sur cette borne", points: -5 });
+  }
+
+  // Points déclarés hors service par l'opérateur (base nationale).
+  const etat = borne.etat_dynamique;
+  if (etat?.tous_hors_service) {
+    score -= 60;
+    details.push({ label: "Tous les points déclarés hors service", points: -60 });
+  } else if (etat?.hors_service) {
+    const pts = -Math.min(15, Math.round((etat.hors_service / etat.total) * 20));
+    score += pts;
+    details.push({ label: `${etat.hors_service} point(s) sur ${etat.total} déclaré(s) hors service`, points: pts });
   }
 
   if (preferCb) {
@@ -334,6 +402,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       prix_source: b.prix_source,
       fraicheur: b.fraicheur,
       officiel: b.officiel,
+      etat_dynamique: b.etat_dynamique,
       score: b._score_info.score,
     }));
 
@@ -344,8 +413,12 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     const besoinFinPct = Math.ceil(margeSecuritePct + pctConsomme(pointRechargeKm, distanceKm) + RESERVE_DERNIER_ARRET_PCT);
     const departBornePct = atteignable(pointRechargeKm, cibleRechargePct) >= distanceKm ? Math.min(cibleRechargePct, Math.max(chargeALaBornePct + 1, besoinFinPct)) : cibleRechargePct;
     const kwhACharger = (profil.capacite_kwh * (departBornePct - chargeALaBornePct)) / 100;
-    const puissanceKw = borne.puissance_max_kw ? Math.min(borne.puissance_max_kw, profil.puissance_dc_kw) : profil.puissance_dc_kw;
-    const tempsChargeMin = calculerTempsCharge(kwhACharger, puissanceKw);
+    // Puissance réellement reçue : borne rapide limitée par la voiture en
+    // courant continu, borne lente par son chargeur embarqué (alternatif).
+    const kwBorne = borne.puissance_max_kw || profil.puissance_dc_kw;
+    const rapide = kwBorne >= SEUIL_PUISSANCE_DC_KW;
+    const puissanceKw = Math.min(kwBorne, rapide ? profil.puissance_dc_kw : profil.puissance_ac_kw || kwBorne);
+    const tempsChargeMin = calculerTempsCharge(kwhACharger, kwBorne, { pctDebut: chargeALaBornePct, profil });
     const coutEstimeEur = Math.round(kwhACharger * borne.prix_kwh_eur * 100) / 100;
 
     arrets.push({
@@ -376,6 +449,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       paiement_cb_probable: borne.paiement_cb_probable,
       prix_source: borne.prix_source,
       officiel: borne.officiel,
+      etat_dynamique: borne.etat_dynamique,
       score: borne._score_info.score,
       score_details: borne._score_info.details,
       alternatives,

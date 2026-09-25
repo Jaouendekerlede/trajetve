@@ -31,7 +31,11 @@ export const PROFIL_PAR_DEFAUT = {
   capacite_kwh: 64.8,
   consommation_kwh_100km: 13.2,
   puissance_ac_kw: 11.0,
-  puissance_dc_kw: 100.0,
+  // Puissance maximale réellement atteinte (fiche Hyundai : 77 kW) ; elle
+  // sert de base à la courbe de charge rapide.
+  puissance_dc_kw: 77.0,
+  // Borne murale « 7 kW » (monophasé 32 A = 7,4 kW).
+  puissance_domicile_kw: 7.4,
   connecteurs_acceptes: ["CCS", "Type 2", "Mennekes"],
   prix_hc_eur_kwh: 0.21,
   prix_hp_eur_kwh: 0.27,

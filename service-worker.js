@@ -3,7 +3,7 @@
 // suite, la copie ne sert que hors connexion. Les API externes (TomTom,
 // Open Charge Map, IRVE, Open-Meteo, cartes) ne passent jamais par ici.
 
-const CACHE_NOM = "trajetve-v13";
+const CACHE_NOM = "trajetve-v14";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -17,6 +17,7 @@ const FICHIERS_COQUILLE = [
   "./js/courbe.js",
   "./js/carte.js",
   "./js/carte3d.js",
+  "./js/parkings.js",
   "./js/navigation.js",
   "./js/irve.js",
   "./js/ocm.js",
@@ -42,7 +43,9 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((noms) => Promise.all(noms.filter((n) => n !== CACHE_NOM).map((n) => caches.delete(n))))
+      // Seulement les anciennes copies de l'appli (pas les données gardées
+      // par l'appli elle-même, comme l'état des bornes).
+      .then((noms) => Promise.all(noms.filter((n) => n.startsWith("trajetve-v") && n !== CACHE_NOM).map((n) => caches.delete(n))))
       .then(() => self.clients.claim()),
   );
 });

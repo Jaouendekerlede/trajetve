@@ -8,7 +8,7 @@
 
 import { getApiKeys } from "./config.js";
 import { haversineKm } from "./geo.js";
-import { classePuissance, puissanceBorne } from "./carte.js";
+import { classePuissance, puissanceBorne, htmlIconeParking } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
@@ -351,8 +351,9 @@ async function creerCarte(fournisseur, fond, relief) {
   // Changement de style en cours d'exploration : on garde le même cadrage.
   const vueAvant = carte ? { center: carte.getCenter(), zoom: carte.getZoom(), pitch: carte.getPitch(), bearing: carte.getBearing() } : null;
   if (carte) {
-    for (const m of [...explo.marqueursBornes.values(), ...explo.grappes]) m.remove();
+    for (const m of [...explo.marqueursBornes.values(), ...explo.grappes, ...explo.marqueursParkings]) m.remove();
     explo.grappes = [];
+    explo.marqueursParkings = [];
     for (const m of [...explo.marqueursTrajet, explo.marqueurPosition, explo.marqueurCurseur]) m?.remove();
     explo.marqueurPosition = null;
     explo.marqueurCurseur = null;
@@ -480,6 +481,9 @@ const explo = {
   selection: null,
   marqueursBornes: new Map(),
   grappes: [],
+  parkings: [],
+  parkingsVisibles: false,
+  marqueursParkings: [],
   position: null,
   marqueurPosition: null,
   trajet: null,
@@ -676,6 +680,7 @@ function rendreTrajet(recadrer) {
 
 function rendreExplo() {
   rendreBornes();
+  rendreParkings();
   rendrePosition();
   rendreCurseur();
   rendreAlternatives();
@@ -688,6 +693,7 @@ function montrerElementsExplo(visible) {
   for (const id of COUCHES_EXPLO) if (carte.getLayer(id)) carte.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
   const marqueurs = [...explo.marqueursTrajet, explo.marqueurPosition, explo.marqueurCurseur].filter(Boolean);
   if (explo.bornesVisibles) marqueurs.push(...explo.marqueursBornes.values(), ...explo.grappes);
+  if (explo.parkingsVisibles) marqueurs.push(...explo.marqueursParkings);
   for (const m of marqueurs) {
     if (visible) m.addTo(carte);
     else m.remove();
@@ -806,6 +812,44 @@ export function exploEffacerTrajet() {
   rendreTrajet(false);
   rendreCurseur();
   rendreAlternatives();
+}
+
+// ── Parkings (carte des bornes en 3D) ───────────────────────────────────────
+
+function rendreParkings() {
+  for (const m of explo.marqueursParkings) m.remove();
+  explo.marqueursParkings = [];
+  if (!carte) return;
+  explo.marqueursParkings = explo.parkings.map(({ parking: p, html }) => {
+    const el = document.createElement("div");
+    el.innerHTML = htmlIconeParking(p);
+    const m = marqueur(el, p.lat, p.lon).setPopup(new maplibregl.Popup({ offset: 16, maxWidth: "260px" }).setHTML(html));
+    return afficherSiVisible(m, explo.parkingsVisibles);
+  });
+}
+
+export function exploParkings(liste) {
+  explo.parkings = liste;
+  rendreParkings();
+}
+
+export function exploMontrerParkings(visible) {
+  explo.parkingsVisibles = visible;
+  for (const m of explo.marqueursParkings) {
+    if (visible && explo.actif && !enNavigation && carte) m.addTo(carte);
+    else m.remove();
+  }
+}
+
+// Zone visible au-dessus du panneau : carte inclinée, donc les quatre coins
+// (le haut de l'écran regarde plus loin que le bas).
+export function exploLimitesVisibles() {
+  const { width, height } = carte.getCanvas().getBoundingClientRect();
+  const bas = Math.max(1, height - explo.decalageBas);
+  const coins = [[0, 0], [width, 0], [0, bas], [width, bas]].map((p) => carte.unproject(p));
+  const lats = coins.map((c) => c.lat);
+  const lons = coins.map((c) => c.lng);
+  return { sud: Math.min(...lats), nord: Math.max(...lats), ouest: Math.min(...lons), est: Math.max(...lons) };
 }
 
 export function exploCurseur(lat, lon, label) {

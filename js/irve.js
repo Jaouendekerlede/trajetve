@@ -54,6 +54,7 @@ function agregerStation(lignes, distanceM) {
 
   return {
     id_station: l0.id_station_itinerance,
+    ids_pdc: lignes.map((l) => texteUtile(l.id_pdc_itinerance)).filter(Boolean),
     nom_station: texteUtile(l0.nom_station),
     adresse: texteUtile(l0.adresse_station),
     implantation: texteUtile(l0.implantation_station),
@@ -83,6 +84,86 @@ function agregerStation(lignes, distanceM) {
     date_maj: dates("date_maj").pop() || "",
     distance_m: Math.round(distanceM),
   };
+}
+
+// ── État des points de charge (base nationale « dynamique ») ────────────────
+// Consolidation officielle (transport.data.gouv.fr, en test) : l'état de
+// chaque point de charge tel que déclaré par les opérateurs. Mise à jour
+// tous les quelques jours seulement : fiable pour les points HORS SERVICE,
+// pas pour l'occupation (qu'on n'affiche que si elle a moins d'une heure).
+// Fichier de ~9 Mo : téléchargé au plus toutes les 6 h, et on n'en garde
+// que l'utile (points pas en service, occupations récentes).
+
+const URL_ETATS = "https://transport.data.gouv.fr/resources/84098/download";
+const CACHE_ETATS = "trajetve-etats-irve";
+const DUREE_ETATS_MS = 6 * 3600 * 1000;
+const OCCUPATION_RECENTE_MS = 3600 * 1000;
+let etatsPdc = null;
+let chargementEtats = null;
+
+function lireEtatsCsv(texte) {
+  const lignes = texte.split("\n");
+  const entete = lignes[0].split(",");
+  const col = (nom) => entete.indexOf(nom);
+  const [cId, cEtat, cOcc, cDate] = [col("id_pdc_itinerance"), col("etat_pdc"), col("occupation_pdc"), col("horodatage")];
+  const etats = {};
+  const limiteOccupation = Date.now() - OCCUPATION_RECENTE_MS;
+  for (let i = 1; i < lignes.length; i++) {
+    const v = lignes[i].split(",");
+    if (v.length <= cDate) continue;
+    const t = Date.parse(v[cDate].replace(" ", "T"));
+    if (v[cEtat] === "hors_service" || (v[cEtat] === "en_service" && t > limiteOccupation)) etats[v[cId]] = { e: v[cEtat], o: v[cOcc], t };
+  }
+  return etats;
+}
+
+export function chargerEtatsDynamiques() {
+  if (etatsPdc) return Promise.resolve(etatsPdc);
+  chargementEtats ??= (async () => {
+    try {
+      const cache = typeof caches !== "undefined" ? await caches.open(CACHE_ETATS) : null;
+      const garde = await cache?.match("etats.json");
+      if (garde && Date.now() - Number(garde.headers.get("x-date")) < DUREE_ETATS_MS) {
+        etatsPdc = await garde.json();
+        return etatsPdc;
+      }
+      const resp = await fetch(URL_ETATS);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      etatsPdc = lireEtatsCsv(await resp.text());
+      await cache?.put("etats.json", new Response(JSON.stringify(etatsPdc), { headers: { "content-type": "application/json", "x-date": String(Date.now()) } }));
+      return etatsPdc;
+    } catch (e) {
+      console.warn("[IRVE] État des points de charge indisponible", e);
+      chargementEtats = null; // réessayer plus tard
+      return null;
+    }
+  })();
+  return chargementEtats;
+}
+
+// Synthèse pour une station officielle : points hors service, et points
+// libres si l'information est récente.
+export function etatStation(officiel) {
+  const ids = officiel?.ids_pdc;
+  if (!etatsPdc || !ids?.length) return null;
+  let horsService = 0;
+  let libres = 0;
+  let occupes = 0;
+  let dateSignalement = 0;
+  const limite = Date.now() - OCCUPATION_RECENTE_MS;
+  for (const id of ids) {
+    const e = etatsPdc[id];
+    if (!e) continue;
+    if (e.e === "hors_service") {
+      horsService++;
+      dateSignalement = Math.max(dateSignalement, e.t || 0);
+    } else if (e.e === "en_service" && e.t > limite) {
+      if (e.o === "libre") libres++;
+      else if (e.o === "occupe" || e.o === "reserve") occupes++;
+    }
+  }
+  if (!horsService && !libres && !occupes) return null;
+  return { total: ids.length, hors_service: horsService, tous_hors_service: horsService === ids.length, libres, occupes, date_signalement: dateSignalement || null };
 }
 
 function ressemblance(a, b) {
@@ -280,7 +361,11 @@ export function fusionnerBornes(bornesOcm, bornesOfficielles) {
 
 // Ajoute `officiel` à chaque borne ; si Open Charge Map n'avait pas de
 // tarif, reprend le tarif officiel déclaré (quand il est en €/kWh).
-export async function enrichirBornes(bornes) {
+// attendreEtats : le calcul d'un trajet attend l'état des points de charge
+// (éviter une station en panne compte) ; la liste des bornes non, elle
+// l'affichera dès qu'il sera arrivé.
+export async function enrichirBornes(bornes, { attendreEtats = false } = {}) {
+  const etats = chargerEtatsDynamiques();
   await Promise.all(
     bornes.map(async (b) => {
       if (b.officiel === undefined) b.officiel = await infosOfficiellesBorne(b.lat, b.lon, { operateur: b.operateur });
@@ -292,5 +377,8 @@ export async function enrichirBornes(bornes) {
       }
     }),
   );
+  // Points hors service (et occupation récente) déclarés par l'opérateur.
+  if (attendreEtats) await etats;
+  for (const b of bornes) b.etat_dynamique = etatStation(b.officiel && !b.officiel.indisponible ? b.officiel : null);
   return bornes;
 }

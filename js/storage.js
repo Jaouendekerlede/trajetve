@@ -21,7 +21,7 @@ function ecrireJson(cle, valeur) {
   localStorage.setItem(cle, JSON.stringify(valeur));
 }
 
-const CHAMPS_NUMERIQUES = ["capacite_kwh", "consommation_kwh_100km", "puissance_ac_kw", "puissance_dc_kw", "prix_hc_eur_kwh", "prix_hp_eur_kwh"];
+const CHAMPS_NUMERIQUES = ["capacite_kwh", "consommation_kwh_100km", "puissance_ac_kw", "puissance_dc_kw", "puissance_domicile_kw", "prix_hc_eur_kwh", "prix_hp_eur_kwh"];
 
 // Prix moyen payé à domicile, selon la part de recharge faite en heures
 // creuses -- c'est lui qu'utilise la comparaison domicile/public de JARVIS.

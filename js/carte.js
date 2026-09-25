@@ -418,6 +418,40 @@ function montrerBornes2D(visible) {
 
 // ── Position de l'utilisateur ───────────────────────────────────────────────
 
+// ── Parkings ────────────────────────────────────────────────────────────────
+
+let coucheParkings = null;
+
+// Icône « P » (⚡ s'il y a des places avec recharge), partagée avec la 3D.
+export function htmlIconeParking(p) {
+  return `<div class="ev-parking${p.places_recharge ? " recharge" : ""}">P${p.places_recharge ? "<b>⚡</b>" : ""}</div>`;
+}
+
+// liste : [{ parking, html }] -- html : fiche affichée au toucher.
+function afficherParkings2D(liste) {
+  coucheParkings ??= L.layerGroup();
+  coucheParkings.clearLayers();
+  for (const { parking: p, html } of liste) {
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13], html: htmlIconeParking(p) }), zIndexOffset: -1000 })
+      .bindPopup(html, { maxWidth: 260 })
+      .addTo(coucheParkings);
+  }
+}
+
+function montrerParkings2D(visible) {
+  coucheParkings ??= L.layerGroup();
+  if (visible && !carte.hasLayer(coucheParkings)) carte.addLayer(coucheParkings);
+  if (!visible && carte.hasLayer(coucheParkings)) carte.removeLayer(coucheParkings);
+}
+
+// Zone visible au-dessus du panneau, en degrés.
+function limitesVisibles2D() {
+  const taille = carte.getSize();
+  const a = carte.containerPointToLatLng([0, 0]);
+  const b = carte.containerPointToLatLng([taille.x, Math.max(1, taille.y - decalageBas)]);
+  return { sud: Math.min(a.lat, b.lat), nord: Math.max(a.lat, b.lat), ouest: Math.min(a.lng, b.lng), est: Math.max(a.lng, b.lng) };
+}
+
 function afficherPosition2D(lat, lon) {
   const icone = L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9], html: '<div class="ev-position"></div>' });
   if (marqueurPosition) marqueurPosition.setLatLng([lat, lon]);
@@ -577,4 +611,19 @@ export function effacerTrajet() {
 export function placerCurseur(lat, lon, label) {
   placerCurseur2D(lat, lon, label);
   c3d.exploCurseur(lat, lon, label);
+}
+
+// Parkings : liste [{ parking, html }].
+export function afficherParkings(liste) {
+  afficherParkings2D(liste);
+  c3d.exploParkings(liste);
+}
+
+export function montrerParkings(visible) {
+  montrerParkings2D(visible);
+  c3d.exploMontrerParkings(visible);
+}
+
+export function limitesVisibles() {
+  return explo3D ? c3d.exploLimitesVisibles() : limitesVisibles2D();
 }

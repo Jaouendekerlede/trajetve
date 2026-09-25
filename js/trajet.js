@@ -178,7 +178,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     seuilCoutEur: opts.seuil_cout_eur,
     mode: opts.mode,
     energie,
-    enrichirBornes,
+    enrichirBornes: (bornes) => enrichirBornes(bornes, { attendreEtats: true }),
     preferCb: opts.preferer_cb,
     fusionner: fusionnerBornes,
     bornesSupplementaires: async (lat, lon) => {

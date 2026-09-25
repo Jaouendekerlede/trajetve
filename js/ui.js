@@ -30,6 +30,7 @@ import {
 } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
+import { rechercherParkings } from "./parkings.js";
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
 import {
   initCarte,
@@ -39,6 +40,9 @@ import {
   activerCarte3D,
   carte3DActive,
   fondCourant,
+  afficherParkings,
+  montrerParkings,
+  limitesVisibles,
   derniereErreur3D,
   ICONES_FONDS,
   definirDecalageBas,
@@ -350,10 +354,22 @@ function coutHtml(coutEstime, prixKwh, estimation) {
   return "";
 }
 
+// État déclaré par l'opérateur : hors service (avec la date du signalement)
+// ou, si l'information a moins d'une heure, points libres.
+function pastilleEtat(etat) {
+  if (!etat) return "";
+  const date = etat.date_signalement ? ` (${new Date(etat.date_signalement).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })})` : "";
+  if (etat.tous_hors_service) return `<span class="ev-cb-pill non">🔴 Hors service${date}</span>`;
+  if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>`;
+  if (etat.libres) return `<span class="ev-cb-pill ok">🟢 ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (< 1 h)</span>`;
+  if (etat.occupes) return `<span class="ev-cb-pill warn">🟠 Occupée (< 1 h)</span>`;
+  return "";
+}
+
 function pastillesBorne(b) {
   const o = officielValide(b);
   const cb = etatCb(b);
-  const morceaux = [`<span class="ev-cb-pill ${cb.classe}">${cb.court}</span>`];
+  const morceaux = [pastilleEtat(b.etat_dynamique), `<span class="ev-cb-pill ${cb.classe}">${cb.court}</span>`].filter(Boolean);
   const prix = prixConnu(b);
   if (o?.gratuit === "oui") morceaux.push(`<span class="ev-cb-pill ok">🎁 Gratuit</span>`);
   else if (prix !== null) morceaux.push(`<span class="ev-cb-pill neutre">💶 ${euros(prix)}/kWh</span>`);
@@ -543,7 +559,68 @@ async function chargerBornesZone(force = false) {
   );
 }
 
+// ── Parkings ───────────────────────────────────────────────────────────────
+
+const RAYON_MAX_PARKINGS_KM = 6;
+let parkingsActifs = false;
+let jetonParkings = 0;
+let minuteurParkings = null;
+
+function ficheParkingHtml(p) {
+  const infos = [
+    p.type ? `Parking ${p.type}` : "",
+    p.places != null ? `${p.places} places` : "",
+    p.payant === "oui" ? "💶 Payant" : p.payant === "non" ? "🎁 Gratuit" : "",
+    p.places_recharge ? `⚡ ${p.places_recharge} place${p.places_recharge > 1 ? "s" : ""} avec recharge` : "",
+    p.places_pmr ? `♿ ${p.places_pmr}` : "",
+    p.hauteur_max ? `↕️ Hauteur max ${p.hauteur_max} m` : "",
+    p.clients ? "Réservé aux clients" : "",
+  ].filter(Boolean);
+  return `<div class="ev-fiche-parking">
+    <strong>🅿️ ${escapeHtml(p.nom)}</strong>
+    ${infos.length ? `<div>${infos.map(escapeHtml).join(" · ")}</div>` : ""}
+    ${p.horaires ? `<div>🕐 ${escapeHtml(p.horaires)}</div>` : ""}
+    ${p.operateur ? `<div>${escapeHtml(p.operateur)}</div>` : ""}
+    <a href="${escapeHtml(lienGoogleMaps(p.lat, p.lon))}" target="_blank" rel="noopener">🧭 Y aller</a>
+  </div>`;
+}
+
+async function chargerParkings() {
+  if (!parkingsActifs || navigationActive()) return;
+  if (rayonVisibleKm() > RAYON_MAX_PARKINGS_KM) {
+    afficherParkings([]);
+    return;
+  }
+  const jeton = ++jetonParkings;
+  const r = await rechercherParkings(limitesVisibles());
+  if (jeton !== jetonParkings || !parkingsActifs) return;
+  if (!r.ok) return toast(`🅿️ Parkings indisponibles : ${r.erreur}`);
+  afficherParkings(r.parkings.map((p) => ({ parking: p, html: ficheParkingHtml(p) })));
+}
+
+function cablerParkings() {
+  const chip = $("ev-parkings-chip");
+  const appliquer = (actif) => {
+    parkingsActifs = actif;
+    chip.classList.toggle("actif", actif);
+    montrerParkings(actif);
+  };
+  appliquer(!!lireReglages().parkings);
+  chip.addEventListener("click", () => {
+    appliquer(!parkingsActifs);
+    sauverReglages({ parkings: parkingsActifs });
+    if (!parkingsActifs) return;
+    if (rayonVisibleKm() > RAYON_MAX_PARKINGS_KM) toast("🅿️ Zoome sur la carte pour voir les parkings");
+    chargerParkings();
+  });
+}
+
 function surDeplacementCarte() {
+  // Parkings : aussi sur l'écran du trajet (se garer à l'arrivée).
+  if (parkingsActifs) {
+    clearTimeout(minuteurParkings);
+    minuteurParkings = setTimeout(chargerParkings, 800);
+  }
   const contexteTrajet = vueCourante === "resultat" || (vueCourante === "borne" && vueAvantBorne === "resultat");
   if (rechercheManuelle || contexteTrajet || navigationActive()) return;
   clearTimeout(minuteurDeplacement);
@@ -649,7 +726,9 @@ function cablerCarte() {
   if (reglages.carte_explo_3d) basculerCarte3D(true, false);
 
   for (const f of reglages.filtres_carte || []) filtres.add(f);
-  document.querySelectorAll(".ev-chip").forEach((chip) => {
+  cablerParkings();
+
+  document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
     chip.addEventListener("click", () => {
       const f = chip.dataset.filtre;
@@ -746,6 +825,7 @@ function ficheBorneHtml(b, ctx) {
       </div>
     </div>
     <div class="ev-badges">
+      ${pastilleEtat(b.etat_dynamique)}
       <span class="ev-cb-pill ${cb.classe}">${cb.court}</span>
       ${points ? `<span class="ev-cb-pill neutre">🔌 ${escapeHtml(points)} point${points > 1 ? "s" : ""}</span>` : ""}
       ${o?.horaires ? `<span class="ev-cb-pill neutre">🕐 ${escapeHtml(o.horaires)}</span>` : ""}
@@ -1234,7 +1314,7 @@ function etapesHtml(p) {
             <div class="ev-borne-sous">${badgeOperateur(a.operateur)}${escapeHtml(a.operateur || "")}${a.adresse ? ` · ${escapeHtml(a.adresse)}` : ""}</div>
             <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
-            <div class="ev-borne-pastilles"><span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique)}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
           </div>
           ${route(a.km_depuis_depart, suivant)}
         </div>
@@ -1302,9 +1382,12 @@ function afficherResultat(p) {
       d.cout_hc_eur != null
         ? `${euros(d.cout_hc_eur)} en heures creuses (${euros(d.prix_hc_eur_kwh)}/kWh) ou ${euros(d.cout_hp_eur)} en heures pleines (${euros(d.prix_hp_eur_kwh)}/kWh)`
         : `${euros(d.cout_domicile_eur)}`;
+    const profil = obtenirProfilVehicule();
+    const kwMaison = profil.puissance_domicile_kw || 7.4;
+    const dureeMaison = formaterMinutes(calculerTempsCharge(d.kwh, kwMaison, { pctDebut: 20, profil }));
     domicile.innerHTML = `💡 Ces ${nombre(d.kwh, 1)} kWh coûteraient ${detail} à la maison, contre ${euros(d.cout_public_eur)} en public.<br>Économie possible : <strong>${euros(d.economie_eur)}</strong>${
       d.part_hc_pct != null ? ` (avec ${escapeHtml(d.part_hc_pct)} % en heures creuses)` : ""
-    }.`;
+    }.<br>🏠 Sur ta borne de ${nombre(kwMaison, 1)} kW : environ <strong>${dureeMaison}</strong> de charge avant de partir.`;
     domicile.classList.remove("hidden");
   } else {
     domicile.classList.add("hidden");
@@ -1982,7 +2065,8 @@ function cablerOutils() {
     const types = typesDeCharge(profil);
     const type = types[$("ev-calc-type-select").value] || types.rapide;
     const kwh = parseFloat($("ev-calc-kwh-input").value) || 0;
-    const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw));
+    // Calculateur : charge supposée partir de 20 % (cas le plus courant).
+    const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw, { pctDebut: 20, profil }));
     const resultat = $("ev-calc-result");
     resultat.classList.remove("hidden");
     resultat.innerHTML =
@@ -2061,6 +2145,7 @@ function rendreProfil() {
   $("ev-profil-conso").value = profil.consommation_kwh_100km;
   $("ev-profil-ac").value = profil.puissance_ac_kw;
   $("ev-profil-dc").value = profil.puissance_dc_kw;
+  $("ev-profil-domicile").value = profil.puissance_domicile_kw ?? "";
   $("ev-profil-connecteurs").value = (profil.connecteurs_acceptes || []).join(", ");
   $("ev-profil-saison").value = profil.saison || "mi_saison";
   $("ev-profil-prix-hc").value = profil.prix_hc_eur_kwh;
@@ -2132,6 +2217,7 @@ function cablerProfil() {
       consommation_kwh_100km: nombreOuUndefined($("ev-profil-conso").value),
       puissance_ac_kw: nombreOuUndefined($("ev-profil-ac").value),
       puissance_dc_kw: nombreOuUndefined($("ev-profil-dc").value),
+      puissance_domicile_kw: nombreOuUndefined($("ev-profil-domicile").value),
       prix_hc_eur_kwh: nombreOuUndefined($("ev-profil-prix-hc").value),
       prix_hp_eur_kwh: nombreOuUndefined($("ev-profil-prix-hp").value),
       part_hc_pct: nombreOuUndefined($("ev-profil-part-hc").value),

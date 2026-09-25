@@ -1,0 +1,81 @@
+// Parkings autour de la zone regardée : données OpenStreetMap interrogées via
+// le service public Overpass (gratuit, sans clé). On ne garde que les
+// parkings utiles à un automobiliste : ouverts au public, et nommés, grands,
+// souterrains ou à étages (pas les petits parkings privés d'immeuble).
+
+import { avecMemoire } from "./util.js";
+
+// Serveurs Overpass publics, gratuits mais parfois saturés : le principal
+// d'abord, un secours s'il ne répond pas assez vite.
+const SERVEURS = [
+  { url: "https://overpass-api.de/api/interpreter", delaiMs: 10000 },
+  { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", delaiMs: 25000 },
+];
+const DUREE_MEMOIRE_MS = 30 * 60 * 1000;
+const MAX_RESULTATS = 150;
+const ACCES_EXCLUS = /^(private|no|permit|residents|delivery)$/;
+const TYPES = {
+  underground: "souterrain",
+  "multi-storey": "à étages",
+  surface: "en surface",
+  rooftop: "sur le toit",
+  street_side: "le long de la rue",
+  lane: "le long de la rue",
+};
+
+function nombre(v) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function parkingDepuisOsm(e) {
+  const t = e.tags || {};
+  const lat = e.lat ?? e.center?.lat;
+  const lon = e.lon ?? e.center?.lon;
+  if (lat == null || lon == null) return null;
+  const places = nombre(t.capacity);
+  const type = t.parking || "";
+  const utile = t.name || (places ?? 0) >= 30 || type === "underground" || type === "multi-storey";
+  if (!utile || ACCES_EXCLUS.test(t.access || "")) return null;
+  return {
+    id: `${e.type}/${e.id}`,
+    nom: t.name || (type === "underground" ? "Parking souterrain" : type === "multi-storey" ? "Parking à étages" : "Parking"),
+    lat,
+    lon,
+    type: TYPES[type] || "",
+    places,
+    places_recharge: nombre(t["capacity:charging"]),
+    places_pmr: nombre(t["capacity:disabled"]),
+    payant: t.fee === "yes" ? "oui" : t.fee === "no" ? "non" : null,
+    horaires: t.opening_hours || "",
+    clients: t.access === "customers",
+    hauteur_max: t.maxheight || "",
+    operateur: t.operator || "",
+  };
+}
+
+// Zone : { sud, ouest, nord, est } en degrés. Renvoie { ok, parkings } ou
+// { ok: false, erreur }.
+export async function rechercherParkings(zone) {
+  const r = (x) => x.toFixed(3);
+  const cle = `parkings|${r(zone.sud)}|${r(zone.ouest)}|${r(zone.nord)}|${r(zone.est)}`;
+  return avecMemoire(cle, DUREE_MEMOIRE_MS, async () => {
+    const requete = `[out:json][timeout:20];nwr["amenity"="parking"](${zone.sud},${zone.ouest},${zone.nord},${zone.est});out center tags ${MAX_RESULTATS * 3};`;
+    let erreur = "";
+    for (const { url, delaiMs } of SERVEURS) {
+      try {
+        const resp = await fetch(url, { method: "POST", body: new URLSearchParams({ data: requete }), signal: AbortSignal.timeout(delaiMs) });
+        if (!resp.ok) {
+          erreur = resp.status === 429 ? "service des parkings surchargé, réessaie dans une minute" : `HTTP ${resp.status}`;
+          continue;
+        }
+        const donnees = await resp.json();
+        const parkings = (donnees.elements || []).map(parkingDepuisOsm).filter(Boolean).slice(0, MAX_RESULTATS);
+        return { ok: true, parkings };
+      } catch (e) {
+        erreur = e.name === "TimeoutError" ? "service des parkings trop lent" : `réseau (${e.message})`;
+      }
+    }
+    return { ok: false, erreur };
+  });
+}
