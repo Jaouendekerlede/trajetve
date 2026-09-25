@@ -233,6 +233,11 @@ button { font-family: inherit; color: inherit; }
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
+.ev-fab-texte { font-size: 15px; font-weight: 900; color: var(--texte); }
+/* MapLibre impose position: relative à .maplibregl-map : on garde le plein écran. */
+.ev-carte-3d, .ev-carte-3d.maplibregl-map { position: fixed; inset: 0; z-index: 1; background: #0b1017; }
+/* Même boîte que l'icône Leaflet (36 × 46), l'épingle y est positionnée en absolu. */
+.ev-pin-3d { position: relative; width: 36px; height: 46px; cursor: pointer; }
 .ev-fab-urgence { background: var(--fab-urgence); border-color: rgba(255, 90, 110, 0.6); }
 body[data-feuille="haut"] .ev-fabs { opacity: 0; pointer-events: none; }
 

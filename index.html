@@ -23,6 +23,8 @@
 
 <!-- Carte plein écran -->
 <div id="ev-carte" class="ev-carte"></div>
+<!-- Carte 3D de la navigation (MapLibre), chargée à la demande -->
+<div id="ev-carte-3d" class="ev-carte ev-carte-3d hidden"></div>
 
 <!-- Barre du haut : recherche + filtres -->
 <header class="ev-haut">
@@ -361,7 +363,7 @@
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
-      <div class="ev-hint ev-lien-centre">Version 8 du 25/09/2026 : voiture fluide, indication des voies</div>
+      <div class="ev-hint ev-lien-centre">Version 9 du 25/09/2026 : navigation en 3D</div>
     </div>
   </div>
 </section>
@@ -408,6 +410,7 @@
   <div class="ev-nav-boutons">
     <button id="ev-nav-voix-btn" class="ev-fab" type="button" title="Couper / remettre la voix">🔊</button>
     <button id="ev-nav-orientation-btn" class="ev-fab" type="button" title="Sens de marche / nord en haut">🧭</button>
+    <button id="ev-nav-3d-btn" class="ev-fab ev-fab-texte" type="button" title="Vue 3D / 2D">3D</button>
     <button id="ev-nav-apercu-btn" class="ev-fab" type="button" title="Aperçu du trajet restant">🗺️</button>
   </div>
   <button id="ev-nav-recentrer-btn" class="ev-nav-recentrer hidden" type="button">🎯 Recentrer</button>

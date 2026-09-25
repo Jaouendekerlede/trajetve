@@ -5,24 +5,19 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { haversineKm } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
 import { stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
-import {
-  entrerNavigation,
-  quitterNavigation,
-  dessinerRouteNavigation,
-  majProgressionNavigation,
-  majVoiture,
-  cameraNavigation,
-  apercuNavigation,
-  afficherBornes,
-  montrerBornes,
-} from "./carte.js";
+import * as carte2D from "./carte.js";
+import * as carte3D from "./carte3d.js";
+
+// Carte utilisée pendant la navigation : 3D si possible, sinon 2D. Les deux
+// modules offrent les mêmes fonctions.
+let vue = carte2D;
 
 const $ = (id) => document.getElementById(id);
 const DELAI_TRAFIC_MS = 5 * 60 * 1000;
@@ -186,7 +181,7 @@ function installerRoute(route) {
   if (etat.aff) etat.aff.offset = null;
   etat.anim = null;
   etat.annoncesBornes = new Set();
-  dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
+  vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   if (etat.pos) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
     etat.idx = m.i;
@@ -473,8 +468,8 @@ async function rafraichirBornesProches() {
     stationsOfficiellesZone(pos.lat, pos.lon, RAYON_BORNES_KM, { maxLignes: 300 }),
   ]);
   if (!etat || jeton !== etat.jetonBornes) return;
-  afficherBornes(fusionnerBornes(res.ok ? res.bornes : [], officielles.bornes), () => {});
-  montrerBornes(true);
+  vue.afficherBornes(fusionnerBornes(res.ok ? res.bornes : [], officielles.bornes), () => {});
+  vue.montrerBornes(true);
 }
 
 // ── Recalculs ───────────────────────────────────────────────────────────────
@@ -639,11 +634,11 @@ function boucleAnimation(t) {
   const ecartZoom = etat.zoom - aff.zoom;
   aff.zoom = Math.abs(ecartZoom) < 0.01 ? etat.zoom : aff.zoom + ecartZoom * Math.min(1, dtImage / CONSTANTE_ZOOM_MS);
 
-  majVoiture(aff.lat, aff.lon, aff.cap);
-  if (etat.suivi) cameraNavigation(aff.lat, aff.lon, aff.cap, aff.zoom, etat.sensDeMarche, false);
+  vue.majVoiture(aff.lat, aff.lon, aff.cap);
+  if (etat.suivi) vue.cameraNavigation(aff.lat, aff.lon, aff.cap, aff.zoom, etat.sensDeMarche, false);
   if (t - (etat.derniereTrace || 0) > INTERVALLE_TRACE_MS || k >= 1) {
     etat.derniereTrace = t;
-    majProgressionNavigation(etat.route.coords, indice, aff.lat, aff.lon);
+    vue.majProgressionNavigation(etat.route.coords, indice, aff.lat, aff.lon);
   }
 
   // Au repos (animation finie, rotation et zoom stabilisés) : plus rien à
@@ -785,17 +780,18 @@ function cablerBoutons() {
     $("ev-nav-orientation-btn").textContent = etat.sensDeMarche ? "🧭" : "🅽";
     etat.suivi = true;
     $("ev-nav-recentrer-btn").classList.add("hidden");
-    if (etat.pos) cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
+    if (etat.pos) vue.cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
   });
+  $("ev-nav-3d-btn").addEventListener("click", basculerVue);
   $("ev-nav-apercu-btn").addEventListener("click", () => {
     etat.suivi = false;
     $("ev-nav-recentrer-btn").classList.remove("hidden");
-    apercuNavigation(etat.route.coords.slice(etat.idx));
+    vue.apercuNavigation(etat.route.coords.slice(etat.idx));
   });
   $("ev-nav-recentrer-btn").addEventListener("click", () => {
     etat.suivi = true;
     $("ev-nav-recentrer-btn").classList.add("hidden");
-    if (etat.pos) cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
+    if (etat.pos) vue.cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
   });
   $("ev-nav-batt-btn").addEventListener("click", () => {
     const panneau = $("ev-nav-batterie-panneau");
@@ -825,6 +821,57 @@ function cablerBoutons() {
     if (etat) arreterNavigation({ depuisRetour: true });
   });
   document.addEventListener("visibilitychange", surVisibilite);
+}
+
+function themeSombre() {
+  return document.documentElement.dataset.theme !== "clair";
+}
+
+function surDeplacementManuel() {
+  if (!etat) return;
+  etat.suivi = false;
+  $("ev-nav-recentrer-btn").classList.remove("hidden");
+}
+
+function majBouton3D() {
+  const btn = $("ev-nav-3d-btn");
+  btn.textContent = vue === carte3D ? "3D" : "2D";
+  btn.title = vue === carte3D ? "Vue 3D (toucher pour passer en 2D)" : "Vue 2D (toucher pour passer en 3D)";
+}
+
+// Change de carte en pleine navigation : tout ce qui est dessiné (tracé,
+// bornes, voiture) est refait sur la nouvelle.
+async function basculerVue() {
+  if (!etat?.route || etat.basculeEnCours) return;
+  etat.basculeEnCours = true;
+  const vers3D = vue !== carte3D;
+  sauverReglages({ vue_3d: vers3D });
+  let nouvelle = carte2D;
+  if (vers3D) {
+    $("ev-nav-3d-btn").textContent = "…";
+    if (await carte3D.preparer({ sombre: themeSombre() })) nouvelle = carte3D;
+    else afficherAlerte("⚠️ Vue 3D indisponible sur ce téléphone ou sans réseau : on reste en 2D.");
+  }
+  if (!etat) return;
+  etat.basculeEnCours = false;
+  if (nouvelle !== vue) {
+    vue.montrerBornes(false);
+    vue.quitterNavigation();
+    vue = nouvelle;
+    vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
+    vue.dessinerRouteNavigation(etat.route.coords, etat.arretsRestants, etat.destination);
+    etat.posBornes = null;
+    rafraichirBornesProches();
+    etat.suivi = true;
+    $("ev-nav-recentrer-btn").classList.add("hidden");
+    const a = etat.aff;
+    if (a) {
+      vue.majVoiture(a.lat, a.lon, a.cap);
+      vue.cameraNavigation(a.lat, a.lon, a.cap, a.zoom, etat.sensDeMarche, false);
+      vue.majProgressionNavigation(etat.route.coords, etat.idx, a.lat, a.lon);
+    }
+  }
+  majBouton3D();
 }
 
 export function navigationActive() {
@@ -882,13 +929,13 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-instruction").textContent = "Calcul du guidage…";
   afficherAlerte(null);
   history.pushState({ navigation: true }, "");
-  entrerNavigation({
-    onDeplacementManuel: () => {
-      if (!etat) return;
-      etat.suivi = false;
-      $("ev-nav-recentrer-btn").classList.remove("hidden");
-    },
-  });
+  const veut3D = lireReglages().vue_3d !== false;
+  if (veut3D) $("ev-nav-instruction").textContent = "Préparation de la vue 3D…";
+  vue = veut3D && (await carte3D.preparer({ sombre: themeSombre() })) ? carte3D : carte2D;
+  if (!etat) return;
+  majBouton3D();
+  $("ev-nav-instruction").textContent = "Calcul du guidage…";
+  vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
   garderEcranAllume();
 
   // Position de départ : GPS réel, ou début du trajet en démo
@@ -936,8 +983,8 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   const onFin = etat.onFin;
   const plan = etat.plan;
   etat = null;
-  montrerBornes(false);
-  quitterNavigation();
+  vue.montrerBornes(false);
+  vue.quitterNavigation();
   document.body.classList.remove("ev-mode-navigation");
   $("ev-navigation").classList.add("hidden");
   if (!depuisRetour && history.state?.navigation) {
