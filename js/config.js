@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   bornesNotes: "trajetve_bornes_notes",
   prefs: "trajetve_prefs",
   reglages: "trajetve_reglages",
+  journal: "trajetve_journal",
 };
 
 export function getApiKeys() {

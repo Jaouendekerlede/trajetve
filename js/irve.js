@@ -7,6 +7,7 @@
 import { haversineKm } from "./geo.js";
 import { extrairePrixKwh } from "./ocm.js";
 import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
+import { avecMemoire } from "./util.js";
 
 const API = "https://tabular-api.data.gouv.fr/api/resources/eb76d20a-8501-400e-b336-d85724de5435/data/";
 const RAYON_RECHERCHE_M = 150;
@@ -200,6 +201,16 @@ function borneDepuisStation(o, lat, lon) {
 }
 
 export async function stationsOfficiellesZone(lat, lon, rayonKm, { puissanceMin = 0, maxLignes = 400 } = {}) {
+  const cle = `irve|${lat.toFixed(3)}|${lon.toFixed(3)}|${rayonKm}|${puissanceMin}|${maxLignes}`;
+  const r = await avecMemoire(cle, 10 * 60 * 1000, () => stationsOfficiellesZoneReseau(lat, lon, rayonKm, puissanceMin, maxLignes));
+  if (r.ok) {
+    for (const b of r.bornes) b.distance_km = Math.round(haversineKm(lat, lon, b.lat, b.lon) * 10) / 10;
+    r.bornes.sort((a, b) => a.distance_km - b.distance_km);
+  }
+  return r;
+}
+
+async function stationsOfficiellesZoneReseau(lat, lon, rayonKm, puissanceMin, maxLignes) {
   try {
     let rayon = rayonKm;
     let params = parametresZone(lat, lon, rayon, puissanceMin);

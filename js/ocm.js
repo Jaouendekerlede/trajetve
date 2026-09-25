@@ -6,6 +6,7 @@
 
 import { haversineKm } from "./geo.js";
 import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
+import { avecMemoire } from "./util.js";
 
 const MOTIF_PRIX_KWH = /(\d+(?:[.,]\d+)?)\s*(?:€|eur)\s*\/?\s*kwh/i;
 
@@ -28,7 +29,21 @@ function fraicheurBorne(derniereMaj) {
   return { label: `Information ancienne (${Math.floor(jours / 365)} an(s))`, niveau: "ancien" };
 }
 
+// Même zone (à ~100 m près) redemandée dans les 10 min : réponse gardée,
+// distances recalculées depuis le point exact.
+const DUREE_MEMOIRE_MS = 10 * 60 * 1000;
+
 async function requeteOpenChargeMap(apiKey, lat, lon, rayonKm, maxResultats) {
+  const cle = `ocm|${lat.toFixed(3)}|${lon.toFixed(3)}|${rayonKm}|${maxResultats}`;
+  const r = await avecMemoire(cle, DUREE_MEMOIRE_MS, () => requeteOpenChargeMapReseau(apiKey, lat, lon, rayonKm, maxResultats));
+  if (r.ok) {
+    for (const b of r.bornes) b.distance_km = Math.round(haversineKm(lat, lon, b.lat, b.lon) * 10) / 10;
+    r.bornes.sort((a, b) => a.distance_km - b.distance_km);
+  }
+  return r;
+}
+
+async function requeteOpenChargeMapReseau(apiKey, lat, lon, rayonKm, maxResultats) {
   const params = new URLSearchParams({
     output: "json",
     latitude: lat,

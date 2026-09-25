@@ -36,6 +36,9 @@ let marqueursRoute = [];
 let marqueursBornes = [];
 let bornesVisibles = false;
 let cumRoute = null;
+// Dernier tracé de navigation : à redessiner si la carte est recréée en
+// route (changement de fond au coucher du soleil, par exemple).
+let traceNav = null;
 let surDeplacementManuel = null;
 let coucheBatiments = null;
 let nomFournisseur = "";
@@ -348,7 +351,8 @@ async function creerCarte(fournisseur, fond, relief) {
   // Changement de style en cours d'exploration : on garde le même cadrage.
   const vueAvant = carte ? { center: carte.getCenter(), zoom: carte.getZoom(), pitch: carte.getPitch(), bearing: carte.getBearing() } : null;
   if (carte) {
-    for (const m of explo.marqueursBornes.values()) m.remove();
+    for (const m of [...explo.marqueursBornes.values(), ...explo.grappes]) m.remove();
+    explo.grappes = [];
     for (const m of [...explo.marqueursTrajet, explo.marqueurPosition, explo.marqueurCurseur]) m?.remove();
     explo.marqueurPosition = null;
     explo.marqueurCurseur = null;
@@ -390,6 +394,11 @@ async function creerCarte(fournisseur, fond, relief) {
   surveiller();
   nomFournisseur = fond === "satellite" ? "satellite Esri" : FOURNISSEURS[fournisseur];
   if (vueAvant) carte.jumpTo(vueAvant);
+  if (enNavigation) {
+    if (traceNav) dessinerRouteNavigation(...traceNav);
+    voiture?.addTo(carte);
+    if (bornesVisibles) for (const m of marqueursBornes) m.addTo(carte);
+  }
   if (explo.actif) {
     gestesExploration(!enNavigation);
     rendreExplo();
@@ -470,6 +479,7 @@ const explo = {
   bornesVisibles: true,
   selection: null,
   marqueursBornes: new Map(),
+  grappes: [],
   position: null,
   marqueurPosition: null,
   trajet: null,
@@ -497,6 +507,8 @@ function ajouterCouchesExplo() {
   carte.on("moveend", () => {
     if (!explo.actif || enNavigation) return;
     explo.vue = vueExplo();
+    // Distances à l'écran changées (zoom, rotation, inclinaison) : regrouper à nouveau.
+    rendreBornes();
     explo.onDeplacement?.();
   });
 }
@@ -537,10 +549,55 @@ function rendreBorne(b) {
   explo.marqueursBornes.set(b, afficherSiVisible(marqueur(el, b.lat, b.lon, { anchor: "bottom" }), explo.bornesVisibles));
 }
 
+// Bornes qui se chevaucheraient à l'écran : un seul rond « nombre », de la
+// couleur de la plus puissante ; le toucher rapproche la carte. Comme en 2D,
+// plus de regroupement à partir du zoom 16, et la sélection reste à part.
+const RAYON_GRAPPE_PX = 42;
+const ZOOM_SANS_REGROUPEMENT = 16;
+
+function grappe(groupe) {
+  const kwMax = Math.max(0, ...groupe.map(puissanceBorne));
+  const lat = groupe.reduce((s, b) => s + b.lat, 0) / groupe.length;
+  const lon = groupe.reduce((s, b) => s + b.lon, 0) / groupe.length;
+  const el = document.createElement("div");
+  el.className = `ev-grappe ${classePuissance(kwMax)}`;
+  el.textContent = String(groupe.length);
+  el.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    carte.easeTo({ center: [lon, lat], zoom: carte.getZoom() + 2, duration: 500 });
+  });
+  return afficherSiVisible(marqueur(el, lat, lon), explo.bornesVisibles);
+}
+
 function rendreBornes() {
   for (const m of explo.marqueursBornes.values()) m.remove();
   explo.marqueursBornes.clear();
-  if (carte) for (const b of explo.bornes) rendreBorne(b);
+  for (const m of explo.grappes) m.remove();
+  explo.grappes = [];
+  if (!carte) return;
+  const seules = [];
+  const autres = explo.bornes.filter((b) => b !== explo.selection);
+  if (explo.selection && explo.bornes.includes(explo.selection)) seules.push(explo.selection);
+  if (exploZoom() >= ZOOM_SANS_REGROUPEMENT) {
+    seules.push(...autres);
+  } else {
+    const points = autres.map((b) => ({ b, p: carte.project([b.lon, b.lat]) })).sort((x, y) => puissanceBorne(y.b) - puissanceBorne(x.b));
+    const pris = new Set();
+    for (let i = 0; i < points.length; i++) {
+      if (pris.has(i)) continue;
+      pris.add(i);
+      const groupe = [points[i].b];
+      for (let j = i + 1; j < points.length; j++) {
+        if (!pris.has(j) && Math.hypot(points[i].p.x - points[j].p.x, points[i].p.y - points[j].p.y) < RAYON_GRAPPE_PX) {
+          pris.add(j);
+          groupe.push(points[j].b);
+        }
+      }
+      if (groupe.length === 1) seules.push(groupe[0]);
+      else explo.grappes.push(grappe(groupe));
+    }
+  }
+  for (const b of seules) rendreBorne(b);
 }
 
 function rendrePosition() {
@@ -630,7 +687,7 @@ function montrerElementsExplo(visible) {
   if (!carte) return;
   for (const id of COUCHES_EXPLO) if (carte.getLayer(id)) carte.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
   const marqueurs = [...explo.marqueursTrajet, explo.marqueurPosition, explo.marqueurCurseur].filter(Boolean);
-  if (explo.bornesVisibles) marqueurs.push(...explo.marqueursBornes.values());
+  if (explo.bornesVisibles) marqueurs.push(...explo.marqueursBornes.values(), ...explo.grappes);
   for (const m of marqueurs) {
     if (visible) m.addTo(carte);
     else m.remove();
@@ -707,16 +764,15 @@ export function exploRafraichirBorne(b) {
   if (carte && explo.marqueursBornes.has(b)) rendreBorne(b);
 }
 
+// La sélection sort de son groupe : on regroupe à nouveau.
 export function exploSelection(b) {
-  const ancienne = explo.selection;
   explo.selection = b;
-  exploRafraichirBorne(ancienne);
-  exploRafraichirBorne(b);
+  rendreBornes();
 }
 
 export function exploMontrerBornes(visible) {
   explo.bornesVisibles = visible;
-  for (const m of explo.marqueursBornes.values()) {
+  for (const m of [...explo.marqueursBornes.values(), ...explo.grappes]) {
     if (visible && explo.actif && !enNavigation && carte) m.addTo(carte);
     else m.remove();
   }
@@ -786,6 +842,7 @@ export function quitterNavigation() {
   marqueursBornes = [];
   voiture?.remove();
   voiture = null;
+  traceNav = null;
   if (!carte) return;
   carte.getSource("trajet")?.setData(VIDE);
   if (explo.actif) {
@@ -800,6 +857,7 @@ export function quitterNavigation() {
 }
 
 export function dessinerRouteNavigation(coords, arrets, destination) {
+  traceNav = [coords, arrets, destination];
   cumRoute = [0];
   for (let i = 1; i < coords.length; i++) cumRoute.push(cumRoute[i - 1] + haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]));
   carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });

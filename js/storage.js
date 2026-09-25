@@ -175,3 +175,52 @@ export function lireReglages() {
 export function sauverReglages(reglages) {
   ecrireJson(STORAGE_KEYS.reglages, { ...lireReglages(), ...reglages });
 }
+
+// ── Journal des recharges ──────────────────────────────────────────────────
+
+const MAX_JOURNAL = 500;
+
+export function listerJournal() {
+  return lireJson(STORAGE_KEYS.journal, []);
+}
+
+// entree : { lieu, kwh, cout_eur, source: "navigation" | "manuel" }
+export function ajouterAuJournal(entree) {
+  const journal = listerJournal();
+  journal.unshift({ id: `recharge_${Date.now()}`, ts: Date.now(), ...entree });
+  ecrireJson(STORAGE_KEYS.journal, journal.slice(0, MAX_JOURNAL));
+}
+
+export function retirerDuJournal(id) {
+  ecrireJson(STORAGE_KEYS.journal, listerJournal().filter((e) => e.id !== id));
+}
+
+// ── Sauvegarde complète (changement de téléphone) ──────────────────────────
+// Toutes les données de l'appli sont dans le localStorage sous des clés
+// « trajetve_… » : on les exporte telles quelles dans un fichier.
+
+const PREFIXE = "trajetve_";
+const FORMAT_SAUVEGARDE = "trajetve-sauvegarde";
+
+export function exporterDonnees() {
+  const donnees = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const cle = localStorage.key(i);
+    if (cle?.startsWith(PREFIXE)) donnees[cle] = localStorage.getItem(cle);
+  }
+  return { format: FORMAT_SAUVEGARDE, version: 1, date: new Date().toISOString(), donnees };
+}
+
+// Remplace les données de ce téléphone par celles du fichier. Renvoie le
+// nombre d'éléments restaurés, ou lève une erreur si le fichier n'en est pas un.
+export function importerDonnees(sauvegarde) {
+  if (sauvegarde?.format !== FORMAT_SAUVEGARDE || typeof sauvegarde.donnees !== "object") {
+    throw new Error("ce fichier n'est pas une sauvegarde Trajet VE");
+  }
+  const entrees = Object.entries(sauvegarde.donnees).filter(([cle, valeur]) => cle.startsWith(PREFIXE) && typeof valeur === "string");
+  const anciennes = [];
+  for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith(PREFIXE)) anciennes.push(localStorage.key(i));
+  for (const cle of anciennes) localStorage.removeItem(cle);
+  for (const [cle, valeur] of entrees) localStorage.setItem(cle, valeur);
+  return entrees.length;
+}

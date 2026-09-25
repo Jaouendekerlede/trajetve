@@ -20,6 +20,7 @@ let carte = null;
 let fond = null;
 let nomFond = "sombre";
 let coucheBornes = null;
+let coucheSelection = null;
 let coucheTrajet = null;
 // Itinéraires proposés mais non choisis : dans coucheTrajet pour être
 // masqués avec lui pendant la navigation.
@@ -108,7 +109,8 @@ export function initCarte(idElement, { fondInitial = "sombre", onDeplacement } =
   rotationDispo = typeof carte.setBearing === "function";
   carte.attributionControl.setPrefix(false);
   choisirFond(fondInitial);
-  coucheBornes = L.layerGroup().addTo(carte);
+  coucheBornes = creerCoucheBornes().addTo(carte);
+  coucheSelection = L.layerGroup().addTo(carte);
   coucheTrajet = L.layerGroup().addTo(carte);
   coucheAlternatives = L.layerGroup();
   surDeplacement = onDeplacement;
@@ -336,6 +338,26 @@ function cbConfirmee(b) {
   return cb === "oui" || cb === "partiel";
 }
 
+// Bornes proches regroupées en un rond « nombre » quand elles se
+// chevaucheraient ; séparées à partir du zoom 16. Sans l'extension (réseau),
+// simple couche sans regroupement.
+const ZOOM_SANS_REGROUPEMENT = 16;
+
+function creerCoucheBornes() {
+  if (!L.markerClusterGroup) return L.layerGroup();
+  return L.markerClusterGroup({
+    maxClusterRadius: 42,
+    disableClusteringAtZoom: ZOOM_SANS_REGROUPEMENT,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: false,
+    iconCreateFunction: (groupe) => {
+      const enfants = groupe.getAllChildMarkers();
+      const kwMax = Math.max(0, ...enfants.map((m) => m.options.kw || 0));
+      return L.divIcon({ className: "", iconSize: [40, 40], html: `<div class="ev-grappe ${classePuissance(kwMax)}">${enfants.length}</div>` });
+    },
+  });
+}
+
 function iconeBorne(b) {
   const kw = puissanceBorne(b);
   return L.divIcon({
@@ -347,13 +369,19 @@ function iconeBorne(b) {
   });
 }
 
+// La borne sélectionnée vit hors des groupes, pour rester toujours visible.
+function coucheDe(b) {
+  return b === selection ? coucheSelection : coucheBornes;
+}
+
 function afficherBornes2D(bornes, onClic) {
   coucheBornes.clearLayers();
+  coucheSelection.clearLayers();
   marqueurs.clear();
   for (const b of bornes) {
-    const m = L.marker([b.lat, b.lon], { icon: iconeBorne(b), zIndexOffset: puissanceBorne(b) * 2 + (b === selection ? 10000 : 0) });
+    const m = L.marker([b.lat, b.lon], { icon: iconeBorne(b), kw: puissanceBorne(b), zIndexOffset: puissanceBorne(b) * 2 + (b === selection ? 10000 : 0) });
     m.on("click", () => onClic(b));
-    m.addTo(coucheBornes);
+    m.addTo(coucheDe(b));
     marqueurs.set(b, m);
   }
 }
@@ -365,16 +393,27 @@ function rafraichirBorne2D(b) {
 function selectionnerBorne2D(b) {
   const ancienne = selection;
   selection = b;
-  if (ancienne) rafraichirBorne2D(ancienne);
-  if (b) {
+  const mAncienne = marqueurs.get(ancienne);
+  if (mAncienne) {
+    coucheSelection.removeLayer(mAncienne);
+    mAncienne.setZIndexOffset(puissanceBorne(ancienne) * 2);
+    coucheBornes.addLayer(mAncienne);
+    rafraichirBorne2D(ancienne);
+  }
+  const m = marqueurs.get(b);
+  if (m) {
+    coucheBornes.removeLayer(m);
+    m.setZIndexOffset(10000);
+    coucheSelection.addLayer(m);
     rafraichirBorne2D(b);
-    marqueurs.get(b)?.setZIndexOffset(10000);
   }
 }
 
 function montrerBornes2D(visible) {
-  if (visible && !carte.hasLayer(coucheBornes)) carte.addLayer(coucheBornes);
-  if (!visible && carte.hasLayer(coucheBornes)) carte.removeLayer(coucheBornes);
+  for (const couche of [coucheBornes, coucheSelection]) {
+    if (visible && !carte.hasLayer(couche)) carte.addLayer(couche);
+    if (!visible && carte.hasLayer(couche)) carte.removeLayer(couche);
+  }
 }
 
 // ── Position de l'utilisateur ───────────────────────────────────────────────

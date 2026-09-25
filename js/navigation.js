@@ -5,7 +5,7 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { haversineKm } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
@@ -331,6 +331,7 @@ function majEcran() {
   $("ev-nav-vitesse").classList.toggle("exces", !!limite && kmh > limite + 3);
   $("ev-nav-limite").textContent = limite || "";
   $("ev-nav-limite").classList.toggle("hidden", !limite);
+  surveillerVitesse(kmh, limite);
 
   // Prochaine borne
   const arret = etat.arretsRestants[0];
@@ -364,6 +365,66 @@ function majEcran() {
 
 // ── Annonces vocales ────────────────────────────────────────────────────────
 
+const NOMBRES = ["", "la", "les deux", "les trois", "les quatre"];
+
+// « Prenez les deux voies de droite » : d'après les voies à suivre pour
+// cette manœuvre. Rien si toutes les voies conviennent.
+function phraseVoies(instr) {
+  const section = etat.route.voies.find((v) => Math.abs(v.offset - instr.offset) < 40);
+  if (!section) return "";
+  const suivies = section.lanes.map((l, i) => (l.follow ? i : -1)).filter((i) => i >= 0);
+  const n = section.lanes.length;
+  const k = suivies.length;
+  if (!k || k === n) return "";
+  const pluriel = k > 1 ? "voies" : "voie";
+  const debut = `Prenez ${NOMBRES[k] || k}`;
+  if (suivies[0] === 0 && suivies[k - 1] === k - 1) return `${debut} ${pluriel} de gauche.`;
+  if (suivies[k - 1] === n - 1 && suivies[0] === n - k) return `${debut} ${pluriel} de droite.`;
+  if (k === 1 && n === 3 && suivies[0] === 1) return "Prenez la voie du milieu.";
+  return k === 1 ? `Prenez la ${suivies[0] + 1}${suivies[0] === 0 ? "re" : "e"} voie en partant de la gauche.` : "";
+}
+
+// Double bip court (sans fichier son) : dépassement de la limitation.
+let contexteAudio = null;
+function bip() {
+  if (!etat?.voix) return;
+  try {
+    contexteAudio ??= new (window.AudioContext || window.webkitAudioContext)();
+    const t = contexteAudio.currentTime;
+    for (const debut of [0, 0.22]) {
+      const osc = contexteAudio.createOscillator();
+      const gain = contexteAudio.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, t + debut);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + debut + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + debut + 0.16);
+      osc.connect(gain).connect(contexteAudio.destination);
+      osc.start(t + debut);
+      osc.stop(t + debut + 0.18);
+    }
+  } catch {
+    // Son indisponible : l'alerte visuelle (compteur rouge) suffit.
+  }
+}
+
+const TOLERANCE_VITESSE_KMH = 5;
+const DUREE_AVANT_BIP_MS = 2000;
+
+// Un seul bip par dépassement, après 2 s au-dessus (pas pour un pic de GPS).
+function surveillerVitesse(kmh, limite) {
+  const exces = !!limite && kmh > limite + TOLERANCE_VITESSE_KMH;
+  if (!exces) {
+    etat.excesDepuis = null;
+    etat.bipFait = false;
+    return;
+  }
+  etat.excesDepuis ??= Date.now();
+  if (!etat.bipFait && Date.now() - etat.excesDepuis >= DUREE_AVANT_BIP_MS) {
+    etat.bipFait = true;
+    bip();
+  }
+}
+
 function annonces() {
   if (etat.aLaBorne) return;
   const v = Math.max(etat.pos.vitesse || 0, 5);
@@ -380,10 +441,10 @@ function annonces() {
       parler(instr.message, true);
     } else if (d <= proche && d > maintenant && !instr.annonces.has(2)) {
       instr.annonces.add(1).add(2);
-      parler(`Dans ${distanceParlee(d)}, ${minusculeInitiale(instr.message)}`, true);
+      parler(`Dans ${distanceParlee(d)}, ${minusculeInitiale(instr.message)}. ${phraseVoies(instr)}`, true);
     } else if (d <= loin && d > proche && ecart > loin + 200 && !instr.annonces.has(1)) {
       instr.annonces.add(1);
-      parler(`Dans ${distanceParlee(d)}, ${minusculeInitiale(instr.message)}`);
+      parler(`Dans ${distanceParlee(d)}, ${minusculeInitiale(instr.message)}. ${phraseVoies(instr)}`);
     }
   }
 
@@ -418,8 +479,16 @@ function arriveeBorne(arret) {
     <button type="button" id="ev-nav-reprendre-btn" class="ev-btn-principal">▶ Reprendre la route</button>`;
   carteBorne.classList.remove("hidden");
   $("ev-nav-reprise-input").addEventListener("input", (e) => ($("ev-nav-reprise-val").textContent = e.target.value));
+  const pctArrivee = batterieEstimee();
   $("ev-nav-reprendre-btn").addEventListener("click", () => {
-    etat.batterie = { refPct: Number($("ev-nav-reprise-input").value), refOdometre: etat.odometre };
+    const pctRepart = Number($("ev-nav-reprise-input").value);
+    // Journal des recharges (pas en démo) : kWh réellement ajoutés d'après
+    // la batterie estimée à l'arrivée et celle indiquée au départ.
+    const kwh = Math.round(((pctRepart - pctArrivee) * etat.capacite) / 10) / 10;
+    if (!etat.demo && kwh >= 0.5) {
+      ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation" });
+    }
+    etat.batterie = { refPct: pctRepart, refOdometre: etat.odometre };
     etat.arretsRestants.shift();
     etat.route.troncons.shift();
     etat.aLaBorne = null;

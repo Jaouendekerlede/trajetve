@@ -17,6 +17,7 @@
 <link rel="icon" href="./icons/icon-192.png" />
 <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -235,6 +236,29 @@
       <div class="ev-vue-entete"><h2>⚡ Outils</h2></div>
 
       <div class="ev-carte-bloc">
+        <h3>📒 Journal des recharges</h3>
+        <div class="ev-hint">Rempli tout seul en navigation (à « Reprendre la route »), ou à la main ci-dessous.</div>
+        <div id="ev-journal-bilan"></div>
+        <details class="ev-details">
+          <summary>➕ Ajouter une recharge à la main</summary>
+          <div class="ev-grille-2">
+            <label class="ev-champ">Lieu <input type="text" id="ev-journal-lieu" class="ev-input" placeholder="Domicile"></label>
+            <label class="ev-champ">Énergie (kWh) <input type="number" id="ev-journal-kwh" class="ev-input" min="0" step="0.1"></label>
+            <label class="ev-champ">Coût (€) <input type="number" id="ev-journal-cout" class="ev-input" min="0" step="0.01"></label>
+            <button id="ev-journal-ajouter-btn" class="ev-btn" type="button">Ajouter</button>
+          </div>
+        </details>
+        <details class="ev-details">
+          <summary>⛽ Comparaison avec une voiture essence</summary>
+          <div class="ev-grille-2">
+            <label class="ev-champ">Consommation (L/100 km) <input type="number" id="ev-journal-conso-essence" class="ev-input" min="0" step="0.1"></label>
+            <label class="ev-champ">Prix du litre (€) <input type="number" id="ev-journal-prix-essence" class="ev-input" min="0" step="0.01"></label>
+          </div>
+        </details>
+        <div id="ev-journal-liste" class="ev-journal-liste"></div>
+      </div>
+
+      <div class="ev-carte-bloc">
         <h3>🔍 Rechercher des bornes</h3>
         <div class="ev-colonne">
           <label class="ev-champ">Zone (ville, adresse, « Ma position »…)
@@ -353,8 +377,9 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <h3>Carte de navigation 3D</h3>
-        <label class="ev-champ">Fournisseur de la carte
+        <h3>Cartes</h3>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-jour-nuit"> 🌗 Carte de nuit / de jour automatique (au coucher et au lever du soleil)</label>
+        <label class="ev-champ">Fournisseur de la carte 3D
           <select id="ev-reglage-carte3d" class="ev-input">
             <option value="libre">OpenFreeMap — gratuite, sans clé ni limite</option>
             <option value="tomtom">TomTom — utilise ta clé TomTom</option>
@@ -378,7 +403,18 @@
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
-      <div class="ev-hint ev-lien-centre">Version 12 du 25/09/2026 : carte des bornes en 3D, relief du terrain</div>
+
+      <div class="ev-carte-bloc">
+        <h3>💾 Sauvegarde de mes données</h3>
+        <div class="ev-hint">Clés, profil du véhicule, favoris, historique, journal et réglages tiennent dans un seul fichier. Pour un nouveau téléphone : installe l'appli, puis « Importer ». Le fichier contient tes clés : garde-le pour toi.</div>
+        <div class="ev-grille-2">
+          <button id="ev-export-donnees-btn" class="ev-btn" type="button">⬆️ Exporter mes données</button>
+          <button id="ev-import-donnees-btn" class="ev-btn" type="button">⬇️ Importer une sauvegarde</button>
+        </div>
+        <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
+      </div>
+      <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
+      <div class="ev-hint ev-lien-centre">Version 13 du 25/09/2026 : sauvegarde, journal, bornes regroupées, nuit/jour auto</div>
     </div>
   </div>
 </section>
@@ -458,6 +494,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 <script type="module" src="./js/main.js"></script>
 </body>
