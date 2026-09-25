@@ -87,6 +87,27 @@ test("borne lente seule disponible : temps de charge réaliste (chargeur embarqu
   assert.ok(Math.abs(a.temps_charge_min - attendu) <= 1, `${a.temps_charge_min} min, attendu ${attendu.toFixed(0)}`);
 });
 
+// À la limite de la batterie (au-delà de 2,5° de latitude) seulement une
+// borne lente ; plus tôt, une station rapide.
+function lenteALaLimiteRapidePlusTot() {
+  bornesAutour((lat, lon) => (lat > 2.5 ? [poiOcm({ nom: "Borne lente", lat: lat + 0.001, lon, kw: 22 })] : [poiOcm({ nom: "Station rapide", lat: lat + 0.001, lon, kw: 150 })]));
+}
+
+test("optimisation : une station rapide un peu plus tôt plutôt qu'une borne lente au dernier moment", async () => {
+  lenteALaLimiteRapidePlusTot();
+  const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });
+  assert.equal(r.ok, true, r.erreur);
+  assert.equal(r.arrets[0].nom_borne, "Station rapide");
+  assert.ok(r.temps_charge_total_min < 30, `${r.temps_charge_total_min} min de charge`);
+});
+
+test("sans optimisation : l'ancienne méthode (la borne à la limite) reste disponible", async () => {
+  lenteALaLimiteRapidePlusTot();
+  const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80, optimiserArrets: false });
+  assert.equal(r.arrets[0].nom_borne, "Borne lente");
+  assert.ok(r.temps_charge_total_min > 60);
+});
+
 test("aucune borne compatible : message clair", async () => {
   bornesAutour(() => []);
   const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });

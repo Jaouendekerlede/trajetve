@@ -20,6 +20,7 @@ import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde } from "./ui-sauvegarde.js";
 import { cablerParkings, planifierParkings } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
+import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
 
@@ -1331,6 +1332,25 @@ function lancerNavigation(demo) {
   });
 }
 
+// Télécharge la carte du trajet et son guidage pour rouler sans réseau.
+async function preparerTrajetHorsLigne() {
+  if (!dernierTrajet?.coords?.length) return;
+  const bouton = $("ev-hors-ligne-btn");
+  const { tuiles, mo } = estimerPreparation(dernierTrajet);
+  if (!confirm(`Préparer ce trajet pour rouler sans réseau ?\n\nCarte le long du tracé : environ ${tuiles} morceaux (~${mo} Mo), plus le guidage.\nMieux vaut être en wifi.`)) return;
+  bouton.disabled = true;
+  try {
+    const r = await preparerHorsLigne(dernierTrajet, (fait, total) => {
+      if (fait % 25 === 0 || fait === total) toast(`📥 Préparation hors ligne : ${Math.round((fait / total) * 100)} %`);
+    });
+    toast(`✅ Prêt hors ligne : ${r.tuiles}/${r.tuilesTotal} morceaux de carte${r.guidage ? " + guidage" : " (guidage indisponible)"}. Utilise la vue 3D sans réseau.`);
+  } catch (e) {
+    toast(`⚠️ Préparation impossible : ${e.message}`);
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
 function cablerResultat() {
   $("ev-nav-demarrer-btn").addEventListener("click", () => lancerNavigation(false));
   $("ev-nav-demo-btn").addEventListener("click", () => lancerNavigation(true));
@@ -1342,6 +1362,7 @@ function cablerResultat() {
   $("ev-partager-btn").addEventListener("click", () => {
     if (dernierTrajet) partagerTexte(`Trajet électrique : ${nomCourt(dernierTrajet.from_name)} → ${nomCourt(dernierTrajet.to_name)}`, exporterTrajetTexte(dernierTrajet));
   });
+  $("ev-hors-ligne-btn").addEventListener("click", preparerTrajetHorsLigne);
   $("ev-qrcode-btn").addEventListener("click", () => {
     if (!dernierTrajet) return;
     const box = $("ev-qrcode-box");

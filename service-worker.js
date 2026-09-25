@@ -1,9 +1,12 @@
 // Garde une copie de l'appli (HTML/CSS/JS/icônes) pour qu'elle démarre même
 // sans réseau. Réseau d'abord : une mise à jour publiée est prise tout de
-// suite, la copie ne sert que hors connexion. Les API externes (TomTom,
-// Open Charge Map, IRVE, Open-Meteo, cartes) ne passent jamais par ici.
+// suite, la copie ne sert que hors connexion.
+// Garde aussi, pour rouler sans réseau, la carte OpenFreeMap (tuiles
+// vectorielles, polices, icônes) et les bibliothèques de carte déjà vues ou
+// préparées. Les autres services (TomTom, bornes, météo) ne passent pas ici :
+// TomTom interdit de stocker ses cartes, et les autres doivent être frais.
 
-const CACHE_NOM = "trajetve-v16";
+const CACHE_NOM = "trajetve-v17";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -24,6 +27,7 @@ const FICHIERS_COQUILLE = [
   "./js/carte.js",
   "./js/carte3d.js",
   "./js/parkings.js",
+  "./js/hors-ligne.js",
   "./js/navigation.js",
   "./js/irve.js",
   "./js/ocm.js",
@@ -56,9 +60,61 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// ── Carte et bibliothèques pour le hors ligne ───────────────────────────────
+
+const CACHE_CARTES = "trajetve-cartes";
+const HOTES_CARTES = ["tiles.openfreemap.org", "cdn.jsdelivr.net", "unpkg.com"];
+const MAX_ELEMENTS_CARTES = 6000;
+let ajoutsDepuisMenage = 0;
+
+// Adresses versionnées (tuiles, polices, icônes, bibliothèques) : elles ne
+// changent jamais, la copie gardée suffit. Le style (non versionné) passe
+// d'abord par le réseau pour rester à jour.
+function immuable(url) {
+  return url.pathname.endsWith(".pbf") || url.pathname.includes("/sprites/") || url.pathname.includes("/natural_earth/") || url.hostname !== "tiles.openfreemap.org";
+}
+
+async function menageCartes(cache) {
+  const cles = await cache.keys();
+  const surplus = cles.length - MAX_ELEMENTS_CARTES;
+  // Les plus anciennes d'abord (ordre d'ajout).
+  for (let i = 0; i < surplus + 500 && surplus > 0; i++) await cache.delete(cles[i]);
+}
+
+async function carteOuReseau(requete) {
+  const url = new URL(requete.url);
+  const cache = await caches.open(CACHE_CARTES);
+  if (immuable(url)) {
+    const garde = await cache.match(requete);
+    if (garde) return garde;
+  }
+  try {
+    const reponse = await fetch(requete);
+    // « opaque » : bibliothèques chargées par <script> (Leaflet…), sans quoi
+    // l'appli ne démarrerait pas hors connexion.
+    if (reponse.ok || reponse.type === "opaque") {
+      await cache.put(requete, reponse.clone());
+      if (++ajoutsDepuisMenage >= 200) {
+        ajoutsDepuisMenage = 0;
+        menageCartes(cache);
+      }
+    }
+    return reponse;
+  } catch (e) {
+    const garde = await cache.match(requete);
+    if (garde) return garde;
+    throw e;
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (event.request.method !== "GET") return;
+  if (HOTES_CARTES.includes(url.hostname)) {
+    event.respondWith(carteOuReseau(event.request));
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
 
   // "no-cache" : GitHub Pages autorise 10 min de cache navigateur, pendant
   // lesquelles une version publiée n'arrivait pas. On revalide à chaque fois

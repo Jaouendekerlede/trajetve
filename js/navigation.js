@@ -7,6 +7,7 @@
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso } from "./storage.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
+import { guidageHorsLigne } from "./hors-ligne.js";
 import { haversineKm } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
@@ -172,7 +173,11 @@ async function calculerRouteNav(pos, cap) {
     eviterZonesFaiblesEmissions: o.eviter_zones_faibles_emissions,
     eviterRoutesNonRevetues: o.eviter_routes_non_revetues,
   });
-  return r.erreur ? null : construireRoute(r);
+  if (!r.erreur) return construireRoute(r);
+  // Pas de réseau : guidage préparé à l'avance (« 📥 Hors ligne »), s'il
+  // correspond à ce trajet et aux bornes restantes.
+  const garde = guidageHorsLigne(etat.destination.lat, etat.destination.lon, etat.arretsRestants.length);
+  return garde ? construireRoute(garde) : null;
 }
 
 function installerRoute(route) {
@@ -913,7 +918,9 @@ function cablerBoutons() {
 
 // Même fond (nuit, jour, satellite) et mêmes réglages que la carte des bornes.
 function optionsCarte3D() {
-  return carte2D.optionsCarte3D();
+  const options = carte2D.optionsCarte3D();
+  // Sans réseau, seule la carte OpenFreeMap a pu être gardée.
+  return navigator.onLine === false ? { ...options, fournisseur: "libre", fond: options.fond === "satellite" ? "sombre" : options.fond } : options;
 }
 
 // Fournisseur choisi refusé, l'autre a pris le relais : on le dit sans insister.

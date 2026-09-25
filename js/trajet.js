@@ -180,6 +180,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     energie,
     enrichirBornes: async (bornes) => appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true })),
     preferCb: opts.preferer_cb,
+    optimiserArrets: opts.optimiser_arrets !== false,
     fusionner: fusionnerBornes,
     bornesSupplementaires: async (lat, lon) => {
       const r = await stationsOfficiellesZone(lat, lon, 20, { puissanceMin: Math.max(40, opts.puissance_min_kw || 0), maxLignes: 300 });

@@ -483,7 +483,7 @@ textarea.ev-input { resize: vertical; }
 .ev-fiche-titre { font-size: 19px; font-weight: 800; line-height: 1.25; }
 .ev-fiche-sous { font-size: 13px; color: var(--texte-att); margin-top: 3px; }
 .ev-badges { display: flex; flex-wrap: wrap; gap: 6px; }
-.ev-actions-rangee { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ev-actions-rangee { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 8px; }
 .ev-action {
   display: flex;
   flex-direction: column;

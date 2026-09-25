@@ -331,25 +331,13 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
   const arrets = [];
   let distanceParcourue = 0;
   let chargePct = chargeActuellePct;
+  const connecteursAcceptes = profil.connecteurs_acceptes?.length ? profil.connecteurs_acceptes : ["CCS", "Type 2"];
 
-  while (true) {
-    const limite = atteignable(distanceParcourue, chargePct);
-    if (limite >= distanceKm) break;
-    const distanceMaxAvantRecharge = limite - distanceParcourue;
-
-    if (distanceMaxAvantRecharge <= 0) {
-      return { ok: false, erreur: "Autonomie insuffisante pour rejoindre une borne en sécurité à cette étape.", ...base };
-    }
-    if (arrets.length >= MAX_ARRETS) {
-      return { ok: false, erreur: "Trajet trop long pour ce planificateur (plus de 6 arrêts nécessaires).", ...base };
-    }
-
-    const pointRechargeKm = distanceParcourue + distanceMaxAvantRecharge;
-    const point = pointADistanceSurTrace(coords, pointRechargeKm);
-    if (!point) {
-      return { ok: false, erreur: "Impossible de localiser un point de recharge sur le tracé.", ...base };
-    }
-
+  // Bornes compatibles, enrichies et notées autour d'un point du tracé ;
+  // { erreur } si la recherche échoue ou ne trouve rien d'utilisable.
+  async function candidatsAutour(km) {
+    const point = pointADistanceSurTrace(coords, km);
+    if (!point) return { erreur: "Impossible de localiser un point de recharge sur le tracé." };
     let recherche = await rechercherBornesProches(ocmApiKey, point.lat, point.lon);
     // Bornes rapides de la base officielle (absentes d'Open Charge Map, ou
     // si Open Charge Map est indisponible).
@@ -361,30 +349,99 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       }
     }
     if (!recherche.ok) {
-      if (recherche.erreur === "cle_manquante") {
-        return { ok: false, erreur: "La recherche de bornes nécessite une clé Open Charge Map (gratuite sur openchargemap.org).", ...base };
-      }
-      return { ok: false, erreur: `Service de recherche de bornes indisponible (${recherche.erreur}).`, ...base };
+      if (recherche.erreur === "cle_manquante") return { erreur: "La recherche de bornes nécessite une clé Open Charge Map (gratuite sur openchargemap.org).", bloquant: true };
+      return { erreur: `Service de recherche de bornes indisponible (${recherche.erreur}).`, bloquant: true };
     }
-    if (!recherche.bornes.length) {
-      return { ok: false, erreur: `Aucune borne de recharge trouvée à proximité du km ${Math.round(pointRechargeKm)}, même en élargissant la recherche.`, ...base };
-    }
-
-    const connecteursAcceptes = profil.connecteurs_acceptes?.length ? profil.connecteurs_acceptes : ["CCS", "Type 2"];
+    if (!recherche.bornes.length) return { erreur: `Aucune borne de recharge trouvée à proximité du km ${Math.round(km)}, même en élargissant la recherche.` };
     let candidates = recherche.bornes.filter((b) => borneCompatible(b, connecteursAcceptes));
-    if (puissanceMinKw > 0) {
-      candidates = candidates.filter((b) => (b.puissance_max_kw || 0) >= puissanceMinKw);
-    }
-    if (!candidates.length) {
-      return { ok: false, erreur: `Aucune borne compatible (connecteur/puissance) trouvée à proximité du km ${Math.round(pointRechargeKm)}.`, ...base };
-    }
-
+    if (puissanceMinKw > 0) candidates = candidates.filter((b) => (b.puissance_max_kw || 0) >= puissanceMinKw);
+    if (!candidates.length) return { erreur: `Aucune borne compatible (connecteur/puissance) trouvée à proximité du km ${Math.round(km)}.` };
     if (options.enrichirBornes) await options.enrichirBornes(candidates);
     for (const b of candidates) b._score_info = calculerScoreBorne(b, profil, mode, !!options.preferCb);
     candidates.sort((a, b) => b._score_info.score - a._score_info.score);
+    return { candidates };
+  }
 
-    const borne = candidates[0];
-    const alternatives = candidates.slice(1, 4).map((b) => ({
+  // Recharge à cette borne si l'on s'y arrête au km `km` : batterie à
+  // l'arrivée, niveau de départ (juste le nécessaire au dernier arrêt),
+  // énergie, puissance reçue et durée selon la courbe de charge.
+  function planArret(borne, km) {
+    const pctArrivee = Math.round((chargePct - pctConsomme(distanceParcourue, km)) * 10) / 10;
+    // Dernier arrêt (la cible suffit pour finir) : charger jusqu'à la cible
+    // ferait arriver très chargé après une longue attente, souvent sur une
+    // borne lente près de l'arrivée.
+    const besoinFinPct = Math.ceil(margeSecuritePct + pctConsomme(km, distanceKm) + RESERVE_DERNIER_ARRET_PCT);
+    const pctDepart = atteignable(km, cibleRechargePct) >= distanceKm ? Math.min(cibleRechargePct, Math.max(pctArrivee + 1, besoinFinPct)) : cibleRechargePct;
+    const kwh = Math.max(0, (profil.capacite_kwh * (pctDepart - pctArrivee)) / 100);
+    // Puissance réellement reçue : borne rapide limitée par la voiture en
+    // courant continu, borne lente par son chargeur embarqué (alternatif).
+    const kwBorne = borne.puissance_max_kw || profil.puissance_dc_kw;
+    const rapide = kwBorne >= SEUIL_PUISSANCE_DC_KW;
+    const puissanceKw = Math.min(kwBorne, rapide ? profil.puissance_dc_kw : profil.puissance_ac_kw || kwBorne);
+    const tempsMin = calculerTempsCharge(kwh, kwBorne, { pctDebut: pctArrivee, profil });
+    return { km, pctArrivee, pctDepart, kwh, puissanceKw, tempsMin };
+  }
+
+  // « Coût » en minutes jusqu'à l'arrivée si l'on choisit cette borne :
+  // détour, recharge ici, recharges encore nécessaires ensuite (puissance
+  // moyenne prudente + ~12 min par arrêt en plus : sortir, se garer,
+  // brancher, repartir), prix converti en minutes selon le mode, et une
+  // pénalité selon la note de la borne (fiabilité, paiement).
+  // Mesuré sur Rennes → Bordeaux : sans le surcoût d'arrêt ni le prix, le
+  // calcul préférait deux arrêts à un seul (+5 min et +10 €).
+  const puissanceMoyenneFuture = Math.max(20, profil.puissance_dc_kw * 0.55);
+  const energieParArretKwh = Math.max(5, (profil.capacite_kwh * (cibleRechargePct - margeSecuritePct)) / 100);
+  const SURCOUT_ARRET_MIN = 12;
+  const MINUTES_PAR_EURO = { rapide: 0.3, economique: 3 }[mode] ?? 1;
+  function tempsEstime(borne, plan) {
+    const detourMin = ((borne.distance_km || 0) * 2 * 60) / 50;
+    const energieRestanteKwh = energie.energieA(distanceKm) - energie.energieA(plan.km) + margeKwh - (profil.capacite_kwh * plan.pctDepart) / 100;
+    const futurMin = energieRestanteKwh > 0 ? (energieRestanteKwh / puissanceMoyenneFuture) * 60 + SURCOUT_ARRET_MIN * Math.ceil(energieRestanteKwh / energieParArretKwh) : 0;
+    const euros = plan.kwh * (borne.prix_kwh_eur ?? PRIX_KWH_ESTIME_DEFAUT_EUR) + Math.max(0, energieRestanteKwh) * PRIX_KWH_ESTIME_DEFAUT_EUR;
+    const penaliteQualite = (100 - borne._score_info.score) * (mode === "rapide" ? 0.15 : 0.35);
+    return detourMin + plan.tempsMin + futurMin + euros * MINUTES_PAR_EURO + penaliteQualite;
+  }
+
+  // Endroits où chercher : à la limite de la batterie, puis un peu avant
+  // (une grande station rapide plus tôt fait souvent gagner du temps).
+  function positionsCandidates(limite) {
+    const ecart = limite - distanceParcourue;
+    if (options.optimiserArrets === false) return [limite];
+    return [limite, distanceParcourue + ecart * 0.8, distanceParcourue + ecart * 0.62].filter((km, i, t) => i === 0 || (km - distanceParcourue >= 30 && t[i - 1] - km >= 15));
+  }
+
+  while (true) {
+    const limite = atteignable(distanceParcourue, chargePct);
+    if (limite >= distanceKm) break;
+    if (limite - distanceParcourue <= 0) {
+      return { ok: false, erreur: "Autonomie insuffisante pour rejoindre une borne en sécurité à cette étape.", ...base };
+    }
+    if (arrets.length >= MAX_ARRETS) {
+      return { ok: false, erreur: "Trajet trop long pour ce planificateur (plus de 6 arrêts nécessaires).", ...base };
+    }
+
+    let choix = null;
+    let premiereErreur = null;
+    for (const km of positionsCandidates(limite)) {
+      const r = await candidatsAutour(km);
+      if (r.erreur) {
+        premiereErreur ??= r.erreur;
+        if (r.bloquant) return { ok: false, erreur: r.erreur, ...base };
+        continue;
+      }
+      for (const b of r.candidates.slice(0, 5)) {
+        const plan = planArret(b, km);
+        const t = tempsEstime(b, plan);
+        // À moins d'une demi-minute près, on garde le choix déjà fait (le
+        // plus loin : on roule d'abord).
+        if (!choix || t < choix.temps - 0.5) choix = { borne: b, plan, temps: t, candidates: r.candidates };
+      }
+    }
+    if (!choix) return { ok: false, erreur: premiereErreur, ...base };
+
+    const { borne, plan, candidates } = choix;
+    const pointRechargeKm = plan.km;
+    const alternatives = candidates.filter((b) => b !== borne).slice(0, 3).map((b) => ({
       nom: b.nom,
       adresse: b.adresse,
       lat: b.lat,
@@ -406,19 +463,11 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       score: b._score_info.score,
     }));
 
-    const chargeALaBornePct = Math.round(margeSecuritePct * 10) / 10;
-    // Dernier arrêt (la cible suffit pour finir) : charger jusqu'à la cible
-    // ferait arriver très chargé après une longue attente, souvent sur une
-    // borne lente près de l'arrivée.
-    const besoinFinPct = Math.ceil(margeSecuritePct + pctConsomme(pointRechargeKm, distanceKm) + RESERVE_DERNIER_ARRET_PCT);
-    const departBornePct = atteignable(pointRechargeKm, cibleRechargePct) >= distanceKm ? Math.min(cibleRechargePct, Math.max(chargeALaBornePct + 1, besoinFinPct)) : cibleRechargePct;
-    const kwhACharger = (profil.capacite_kwh * (departBornePct - chargeALaBornePct)) / 100;
-    // Puissance réellement reçue : borne rapide limitée par la voiture en
-    // courant continu, borne lente par son chargeur embarqué (alternatif).
-    const kwBorne = borne.puissance_max_kw || profil.puissance_dc_kw;
-    const rapide = kwBorne >= SEUIL_PUISSANCE_DC_KW;
-    const puissanceKw = Math.min(kwBorne, rapide ? profil.puissance_dc_kw : profil.puissance_ac_kw || kwBorne);
-    const tempsChargeMin = calculerTempsCharge(kwhACharger, kwBorne, { pctDebut: chargeALaBornePct, profil });
+    const chargeALaBornePct = plan.pctArrivee;
+    const departBornePct = plan.pctDepart;
+    const kwhACharger = plan.kwh;
+    const puissanceKw = plan.puissanceKw;
+    const tempsChargeMin = plan.tempsMin;
     const coutEstimeEur = Math.round(kwhACharger * borne.prix_kwh_eur * 100) / 100;
 
     arrets.push({
