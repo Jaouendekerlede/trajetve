@@ -3,7 +3,7 @@
 // suite, la copie ne sert que hors connexion. Les API externes (TomTom,
 // Open Charge Map, IRVE, Open-Meteo, cartes) ne passent jamais par ici.
 
-const CACHE_NOM = "trajetve-v6";
+const CACHE_NOM = "trajetve-v7";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -30,7 +30,10 @@ const FICHIERS_COQUILLE = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NOM).then((cache) => cache.addAll(FICHIERS_COQUILLE)).then(() => self.skipWaiting()),
+    caches
+      .open(CACHE_NOM)
+      .then((cache) => cache.addAll(FICHIERS_COQUILLE.map((f) => new Request(f, { cache: "reload" }))))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -47,8 +50,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
 
+  // "no-cache" : GitHub Pages autorise 10 min de cache navigateur, pendant
+  // lesquelles une version publiée n'arrivait pas. On revalide à chaque fois
+  // (réponse 304 légère si rien n'a changé).
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request.url, { cache: "no-cache" })
       .then((reponse) => {
         if (reponse.ok) {
           const copie = reponse.clone();
