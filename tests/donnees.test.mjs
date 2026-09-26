@@ -74,3 +74,14 @@ test("mise à jour des réglages enregistrés : marge 15 %, recharge 80 %, Kona 
   localStorage.setItem("trajetve_profil", JSON.stringify({ capacite_kwh: 64.8, puissance_dc_kw: 77 }));
   assert.equal(s.obtenirProfilVehicule().puissance_dc_kw, 89);
 });
+
+test("conso apprise par type de route (mesures surtout sur un type)", () => {
+  localStorage.clear();
+  s.enregistrerMesureConso(60, 12, { ville: 2, route: 3, autoroute: 55 }); // 20 kWh/100 sur autoroute
+  s.enregistrerMesureConso(40, 5.6, { ville: 32, route: 8, autoroute: 0 }); // 14 en ville
+  s.enregistrerMesureConso(30, 4.5, { ville: 10, route: 10, autoroute: 10 }); // mélangée : ignorée
+  const c = s.consoParType();
+  assert.equal(c.autoroute, 20);
+  assert.equal(c.ville, 14);
+  assert.equal(c.route, null);
+});

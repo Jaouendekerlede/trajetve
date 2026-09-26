@@ -4,7 +4,7 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
@@ -14,7 +14,7 @@ import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
-import { $, toast, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur } from "./ui-commun.js";
+import { $, toast, bandeau, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur } from "./ui-commun.js";
 import { rendreJournal, cablerJournal } from "./ui-journal.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
@@ -88,7 +88,7 @@ function majKmCurseurs() {
   // Autoroute : consommation de référence (90 km/h) × effet de la vitesse,
   // corrigée de la saison par rapport à la mi-saison (~20 kWh/100 à 130).
   const multSaison = (MULTIPLICATEURS_SAISON[p.saison] ?? 1) / (MULTIPLICATEURS_SAISON.mi_saison ?? 1);
-  const consoAutoroute = p.consommation_kwh_100km * multSaison * facteurVitesse(p, 130);
+  const consoAutoroute = consoParType().autoroute || p.consommation_kwh_100km * multSaison * facteurVitesse(p, 130);
   const km = (pct, c = conso) => Math.max(0, ((p.capacite_kwh * pct) / 100 / c) * 100);
   const deux = (pct) => `≈ ${nombre(km(pct))} km · ${nombre(km(pct, consoAutoroute))} km sur autoroute`;
   const depart = Number($("ev-charge-pct-input").value);
@@ -1040,6 +1040,8 @@ async function lancerTrajet() {
     sauverPrefsDepuis(options);
     oublierItineraires();
     const resultat = await planifierTrajet(options.depart, options.destination, { ...options, avec_alternatives: true });
+    // Départ prévu plus tard : conseil de recharge la veille au soir.
+    if (resultat.ok && options.depart_prevu) noterTrajetPrevu({ ts: new Date(options.depart_prevu).getTime(), destination: resultat.to_name, distance_km: resultat.distance_km, nb_arrets: resultat.nb_arrets });
     const bruts = resultat.itineraires_alternatifs || [];
     delete resultat.itineraires_alternatifs;
     if (!resultat.ok) return montrerErreurTrajet(resultat.erreur || "Calcul impossible.");
@@ -2018,6 +2020,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-meteo-route").checked = reglages.meteo_route !== false;
   $("ev-reglage-aires").checked = reglages.aires_autoroute !== false;
   $("ev-reglage-epure").checked = reglages.ecran_epure !== false;
+  $("ev-reglage-prechauffage").checked = reglages.prechauffage !== false;
   $("ev-reglage-vibration").checked = reglages.vibration === true;
   $("ev-reglage-nuit-douce").checked = reglages.nuit_douce !== false;
   $("ev-reglage-notif").checked = reglages.notif_guidage !== false;
@@ -2117,6 +2120,7 @@ function cablerProfil() {
       meteo_route: $("ev-reglage-meteo-route").checked,
       aires_autoroute: $("ev-reglage-aires").checked,
       ecran_epure: $("ev-reglage-epure").checked,
+      prechauffage: $("ev-reglage-prechauffage").checked,
       vibration: $("ev-reglage-vibration").checked,
       nuit_douce: $("ev-reglage-nuit-douce").checked,
       notif_guidage: $("ev-reglage-notif").checked,
@@ -2139,6 +2143,22 @@ function cablerProfil() {
 // ── Démarrage ──────────────────────────────────────────────────────────────
 
 // Raccourcis de l'icône de l'appli (appui long) : ?action=maison, bornes, voiture.
+// La veille (ou le jour même) d'un trajet prévu, le soir : « branchez ce soir ».
+export function proposerRechargeMaison() {
+  const t = trajetPrevu();
+  const maintenant = new Date();
+  if (!t || t.ts < Date.now() || t.ts - Date.now() > 36 * 3600000 || maintenant.getHours() < 17) return;
+  const jour = maintenant.toDateString();
+  if (lireReglages().conseil_recharge_vu === jour) return;
+  sauverReglages({ conseil_recharge_vu: jour });
+  const quand = new Date(t.ts).toLocaleString("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
+  bandeau({
+    id: "ev-conseil-recharge",
+    texte: `🔌 Trajet ${quand} vers ${nomCourt(t.destination || "").split(",")[0]} (${nombre(t.distance_km)} km) : branchez ce soir en heures creuses pour partir à 100 %.`,
+    boutons: [{ libelle: "OK", action: () => {} }],
+  });
+}
+
 export function executerAction(action) {
   if (action === "maison") {
     if (!lireReglages().adresse_domicile) {

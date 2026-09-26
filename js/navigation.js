@@ -7,6 +7,7 @@
 
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait } from "./storage.js";
+import { enrichirBornes } from "./irve.js";
 import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
@@ -19,7 +20,7 @@ import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe } from "./o
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
 import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
-import { formaterMinutes } from "./planner.js";
+import { formaterMinutes, calculerTempsCharge } from "./planner.js";
 import { escapeHtml, lienAPied, estNuit } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
 import { stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
@@ -444,7 +445,9 @@ function secondesRestantesJusqua(offsetCible) {
 function mesurerConso(pctReel) {
   const km = (etat.odometre - etat.batterie.refOdometre) / 1000;
   const kwh = ((etat.batterie.refPct - pctReel) / 100) * etat.capacite;
-  if (kwh > 0) enregistrerMesureConso(km, kwh);
+  const ref = etat.batterie.refTypes || { ville: 0, route: 0, autoroute: 0 };
+  const types = Object.fromEntries(Object.entries(etat.kmTypes).map(([t, v]) => [t, Math.round((v - (ref[t] || 0)) * 10) / 10]));
+  if (kwh > 0) enregistrerMesureConso(km, kwh, types);
 }
 
 function batterieEstimee() {
@@ -906,6 +909,7 @@ function annonces() {
   }
 
   const arret = etat.arretsRestants[0];
+  if (arret && !arret.pause) rappelsAvantBorne(arret);
   if (arret) {
     const reste = etat.route.troncons[0].fin - etat.offset;
     for (const seuil of [20000, 2000]) {
@@ -918,6 +922,77 @@ function annonces() {
 }
 
 // ── Arrivées ────────────────────────────────────────────────────────────────
+
+// ── Avant la borne : préchauffage de la batterie, état de la borne ────────────
+
+const AVANCE_PRECHAUFFAGE_S = 22 * 60;
+const DISTANCE_VERIF_BORNE_M = 20000;
+
+function rappelsAvantBorne(arret) {
+  const cle = `${arret.lat},${arret.lon}`;
+  const secondes = secondesRestantesJusqua(etat.route.troncons[0].fin);
+  // Recharge rapide dans ~20 min : batterie chaude = charge plus rapide.
+  if (etat.prefs.prechauffage && (arret.puissance_kw || 0) >= 50 && secondes <= AVANCE_PRECHAUFFAGE_S && secondes > 5 * 60 && !etat.rappelsFaits.has(`chauffe|${cle}`)) {
+    etat.rappelsFaits.add(`chauffe|${cle}`);
+    parler("Recharge rapide dans une vingtaine de minutes : pensez à préchauffer la batterie.");
+    const texte = "🌡️ Préchauffez la batterie : borne rapide dans ~20 min";
+    if ($("ev-nav-alerte").classList.contains("hidden")) {
+      afficherAlerte(texte);
+      setTimeout(() => etat && $("ev-nav-alerte").textContent === texte && afficherAlerte(null), 15000);
+    }
+  }
+  if (etat.route.troncons[0].fin - etat.offset <= DISTANCE_VERIF_BORNE_M && !etat.rappelsFaits.has(`etat|${cle}`)) {
+    etat.rappelsFaits.add(`etat|${cle}`);
+    verifierEtatBorne(arret);
+  }
+}
+
+// Dernier état connu de la borne (base nationale) : hors service ou
+// entièrement occupée → alerte avec « autre borne ».
+async function verifierEtatBorne(arret) {
+  const copie = { nom: arret.nom_borne, lat: arret.lat, lon: arret.lon, operateur: arret.operateur, officiel: arret.officiel };
+  try {
+    await enrichirBornes([copie], { attendreEtats: true });
+  } catch {
+    return;
+  }
+  const e = copie.etat_dynamique;
+  if (!etat || !e || etat.arretsRestants[0] !== arret) return;
+  const horsService = e.tous_hors_service || (e.total && e.hors_service >= e.total);
+  const occupee = !horsService && e.total && e.libres === 0 && e.occupes > 0;
+  if (!horsService && !occupee) return;
+  afficherAlerte(`⚠️ ${arret.nom_borne} : ${horsService ? "signalée hors service" : "toutes les places occupées (dernier état connu)"}`, { libelle: "🔌 Autre borne", action: afficherSecours });
+  parler(horsService ? "Attention, la borne prévue est signalée hors service. Touchez « Autre borne »." : "La borne prévue semble occupée. Une autre borne vous est proposée.");
+}
+
+// ── Minuteur de recharge (fin estimée, notification) ─────────────────────────
+
+function majMinuteurRecharge() {
+  const m = etat?.minuteurRecharge;
+  const el = $("ev-nav-minuteur");
+  if (!m || !el) return;
+  const reste = Math.round((m.fin - Date.now()) / 60000);
+  el.textContent = reste > 0 ? `⏱️ Fin estimée à ${heure(m.fin)} (dans ${formaterMinutes(reste)})` : "✅ Recharge terminée (estimation) : vous pouvez repartir";
+  if (reste <= 0 && !m.prevenu) {
+    m.prevenu = true;
+    parler("La recharge devrait être terminée. Vous pouvez repartir.", true);
+    navigator.serviceWorker?.getRegistration?.().then((reg) => reg?.showNotification("🔋 Recharge terminée (estimation)", { body: `${m.nom} : vous pouvez repartir.`, tag: "recharge", icon: "./icons/icon-192.png" }));
+  }
+}
+
+function demarrerMinuteurRecharge(arret, pctArrivee, pctDepart) {
+  clearInterval(etat.minuteurRechargeId);
+  const kwh = Math.max(0, ((pctDepart - pctArrivee) / 100) * etat.capacite);
+  const minutes = calculerTempsCharge(kwh, arret.puissance_kw || 50, { pctDebut: pctArrivee, profil: obtenirProfilVehicule() });
+  etat.minuteurRecharge = { fin: (etat.minuteurRecharge?.debut || Date.now()) + minutes * 60000, debut: etat.minuteurRecharge?.debut || Date.now(), nom: arret.nom_borne };
+  majMinuteurRecharge();
+  etat.minuteurRechargeId = setInterval(majMinuteurRecharge, 30000);
+}
+
+function arreterMinuteurRecharge() {
+  clearInterval(etat?.minuteurRechargeId);
+  if (etat) etat.minuteurRecharge = null;
+}
 
 // Étape ajoutée en route (café, boulangerie…) : pas de recharge.
 function arriveePause(arret) {
@@ -956,12 +1031,23 @@ function arriveeBorne(arret) {
     <label class="ev-champ">Batterie en repartant : <span id="ev-nav-reprise-val" class="ev-valeur">${arret.pct_depart_borne}</span> %
       <input type="range" min="5" max="100" value="${arret.pct_depart_borne}" id="ev-nav-reprise-input" class="ev-curseur">
     </label>
+    <div id="ev-nav-minuteur" class="ev-nav-carte-sous"></div>
     <button type="button" id="ev-nav-reprendre-btn" class="ev-btn-principal">▶ Reprendre la route</button>
     ${arret.alternatives?.length ? `<button type="button" id="ev-nav-indispo-btn" class="ev-btn">❌ Borne occupée ou en panne : une autre</button>` : ""}`;
   carteBorne.classList.remove("hidden");
   $("ev-nav-indispo-btn")?.addEventListener("click", afficherSecours);
-  $("ev-nav-reprise-input").addEventListener("input", (e) => ($("ev-nav-reprise-val").textContent = e.target.value));
-  $("ev-nav-arrivee-input").addEventListener("input", (e) => ($("ev-nav-arrivee-val").textContent = e.target.value));
+  // Minuteur : suit les curseurs (batterie à l'arrivée, niveau voulu).
+  const relancerMinuteur = () => demarrerMinuteurRecharge(arret, Number($("ev-nav-arrivee-input").value), Number($("ev-nav-reprise-input").value));
+  $("ev-nav-reprise-input").addEventListener("input", (e) => {
+    $("ev-nav-reprise-val").textContent = e.target.value;
+    relancerMinuteur();
+  });
+  $("ev-nav-arrivee-input").addEventListener("input", (e) => {
+    $("ev-nav-arrivee-val").textContent = e.target.value;
+    relancerMinuteur();
+  });
+  etat.minuteurRecharge = null;
+  relancerMinuteur();
   const pctEstime = batterieEstimee();
   $("ev-nav-reprendre-btn").addEventListener("click", () => {
     const pctRepart = Number($("ev-nav-reprise-input").value);
@@ -974,6 +1060,7 @@ function arriveeBorne(arret) {
     if (!etat.demo && kwh >= 0.5) {
       ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation" });
     }
+    arreterMinuteurRecharge();
     etat.batterie = { refPct: pctRepart, refOdometre: etat.odometre };
     noterBatterie(pctArrivee);
     noterBatterie(pctRepart);
@@ -1211,7 +1298,14 @@ function surPosition(p) {
   if (!Number.isFinite(p.cap) || (p.vitesse || 0) < 2) p.cap = m.d < 30 ? capRoute : precedent?.cap ?? capRoute;
 
   const avance = m.offset - etat.offset;
-  if (avance > 0 && avance < 20000) etat.odometre += avance;
+  if (avance > 0 && avance < 20000) {
+    etat.odometre += avance;
+    // Type de route (pour la conso apprise) d'après la vitesse.
+    const kmhType = (p.vitesse || 0) * 3.6;
+    etat.kmTypes[kmhType < 55 ? "ville" : kmhType < 95 ? "route" : "autoroute"] += avance / 1000;
+  }
+  // Nouveau repère de batterie : la répartition repart d'ici.
+  if (!etat.batterie.refTypes) etat.batterie.refTypes = { ...etat.kmTypes };
   etat.idx = m.i;
   etat.offset = m.offset;
   etat.pos = p;
@@ -2145,6 +2239,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     manoeuvresFeux: new Set(),
     carrefours: new Map(),
     mesuresBatterie: [{ km: 0, pct: chargeDepartPct ?? 80 }],
+    kmTypes: { ville: 0, route: 0, autoroute: 0 },
+    rappelsFaits: new Set(),
     alertesMeteo: new Set(),
     airesOsm: null,
     debut: Date.now(),
@@ -2173,6 +2269,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       vibration: reglages.vibration === true,
       nuitDouce: reglages.nuit_douce !== false,
       notifGuidage: reglages.notif_guidage !== false,
+      prechauffage: reglages.prechauffage !== false,
     },
     sensDeMarche: true,
     suivi: true,
@@ -2294,6 +2391,7 @@ export function navigationInterrompue() {
 export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
   clearInterval(etat.minuteurSauvegarde);
+  clearInterval(etat.minuteurRechargeId);
   window.removeEventListener("pagehide", sauverNavigation);
   oublierNavigationInterrompue();
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);

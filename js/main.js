@@ -1,4 +1,4 @@
-import { initialiserUI, executerAction } from "./ui.js";
+import { initialiserUI, executerAction, proposerRechargeMaison } from "./ui.js";
 import { navigationActive } from "./navigation.js";
 import { restaurerDepuisAdresse, proposerRappelSauvegarde } from "./ui-sauvegarde.js";
 import { proposerInstallation } from "./ui-installation.js";
@@ -14,6 +14,7 @@ if (restaures) {
   toast(`✅ Données restaurées (${restaures} éléments)`);
   proposerInstallation({ insister: true });
 } else setTimeout(proposerRappelSauvegarde, DELAI_RAPPEL_SAUVEGARDE_MS);
+setTimeout(proposerRechargeMaison, 3000);
 
 // Ouverte par un raccourci de l'icône (appui long sur l'icône du téléphone).
 const actionRaccourci = new URLSearchParams(location.search).get("action");

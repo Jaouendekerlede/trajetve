@@ -253,12 +253,13 @@ const MAX_MESURES = 60;
 const KM_MIN_MESURE = 20;
 const KM_MIN_TOTAL = 50;
 
-export function enregistrerMesureConso(km, kwh) {
+// types : km parcourus en ville, sur route et sur autoroute pendant la mesure.
+export function enregistrerMesureConso(km, kwh, types = null) {
   const kwh100 = (kwh / km) * 100;
   // Mesure trop courte ou invraisemblable (erreur de saisie) : ignorée.
   if (km < KM_MIN_MESURE || kwh100 < 6 || kwh100 > 45) return false;
   const mesures = lireJson(CLE_CONSO, []);
-  mesures.unshift({ ts: Date.now(), km: Math.round(km * 10) / 10, kwh: Math.round(kwh * 100) / 100 });
+  mesures.unshift({ ts: Date.now(), km: Math.round(km * 10) / 10, kwh: Math.round(kwh * 100) / 100, ...(types ? { types } : {}) });
   ecrireJson(CLE_CONSO, mesures.slice(0, MAX_MESURES));
   return true;
 }
@@ -358,4 +359,39 @@ export function listerTrajetsFaits() {
 
 export function ajouterTrajetFait(trajet) {
   ecrireJson(CLE_TRAJETS_FAITS, [{ date: Date.now(), ...trajet }, ...listerTrajetsFaits()].slice(0, MAX_TRAJETS_FAITS));
+}
+
+// Conso apprise par type de route : mesures faites surtout (70 % des km)
+// en ville, sur route ou sur autoroute. { ville, route, autoroute } en
+// kWh/100 km (null si pas assez de km pour ce type).
+const PART_DOMINANTE = 0.7;
+const KM_MIN_PAR_TYPE = 20;
+
+export function consoParType() {
+  const r = {};
+  for (const type of ["ville", "route", "autoroute"]) {
+    let km = 0;
+    let kwh = 0;
+    for (const m of lireJson(CLE_CONSO, [])) {
+      if (!m.types) continue;
+      const total = (m.types.ville || 0) + (m.types.route || 0) + (m.types.autoroute || 0);
+      if (total > 0 && (m.types[type] || 0) / total >= PART_DOMINANTE) {
+        km += m.km;
+        kwh += m.kwh;
+      }
+    }
+    r[type] = km >= KM_MIN_PAR_TYPE ? Math.round((kwh / km) * 1000) / 10 : null;
+  }
+  return r;
+}
+
+// Trajet prévu (départ différé) : conseil de recharge la veille au soir.
+const CLE_TRAJET_PREVU = "trajetve_trajet_prevu";
+
+export function noterTrajetPrevu(trajet) {
+  ecrireJson(CLE_TRAJET_PREVU, trajet);
+}
+
+export function trajetPrevu() {
+  return lireJson(CLE_TRAJET_PREVU, null);
 }
