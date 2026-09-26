@@ -6,7 +6,7 @@
 // prÃ©parÃ©es. Les autres services (TomTom, bornes, mÃ©tÃ©o) ne passent pas ici :
 // TomTom interdit de stocker ses cartes, et les autres doivent Ãªtre frais.
 
-const CACHE_NOM = "trajetve-v48";
+const CACHE_NOM = "trajetve-v49";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -90,7 +90,8 @@ self.addEventListener("activate", (event) => {
 
 const CACHE_CARTES = "trajetve-cartes";
 const HOTES_CARTES = ["tiles.openfreemap.org", "cdn.jsdelivr.net", "unpkg.com"];
-const MAX_ELEMENTS_CARTES = 6000;
+// Une région préparée (rayon 80 km) tient en ~3 500 tuiles, plus les trajets.
+const MAX_ELEMENTS_CARTES = 12000;
 let ajoutsDepuisMenage = 0;
 
 // Adresses versionnÃ©es (tuiles, polices, icÃ´nes, bibliothÃ¨ques) : elles ne

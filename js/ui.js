@@ -35,9 +35,10 @@ import { ouvrirSOS, cablerSOS } from "./ui-sos.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
-import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
+import { ageTexte } from "./reprise.js";
+import { estimerPreparation, preparerHorsLigne, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
 
 const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
 const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", favoris: "haut", outils: "haut", profil: "haut" };
@@ -1425,22 +1426,38 @@ function quitterTrajet() {
 // reprendre là où elle en était, avec la dernière batterie estimée.
 function proposerRepriseNavigation() {
   const s = navigationInterrompue();
-  if (!s) return;
+  if (!s || navigationActive()) return;
+  const AUTO_S = 8;
   const bandeau = document.createElement("div");
-  bandeau.className = "ev-maj";
-  bandeau.innerHTML = `<span>🧭 Navigation interrompue vers ${escapeHtml(nomCourt(s.destination || "ta destination"))}</span><span class="ev-maj-boutons"><button type="button" class="ev-btn" data-reprise="oui">Reprendre</button><button type="button" class="ev-lien" data-reprise="non">✕</button></span>`;
+  bandeau.className = "ev-maj ev-reprise";
+  bandeau.innerHTML = `<span>🧭 Navigation coupée ${ageTexte(s.age_ms)} vers <strong>${escapeHtml(nomCourt(s.destination || "ta destination").split(",")[0])}</strong>${s.automatique ? `<br><small>Reprise automatique dans <b data-compte>${AUTO_S}</b> s</small>` : ""}</span><span class="ev-maj-boutons"><button type="button" class="ev-btn" data-reprise="oui">Reprendre</button><button type="button" class="ev-lien" data-reprise="non">${s.automatique ? "Annuler" : "✕"}</button></span>`;
   document.body.appendChild(bandeau);
-  bandeau.querySelector('[data-reprise="oui"]').addEventListener("click", () => {
+  let minuteur = null;
+  const reprendre = () => {
+    clearInterval(minuteur);
     bandeau.remove();
     dernierTrajet = s.plan;
     dernierChargeDepartPct = s.batterie_pct;
     dernieresOptions = s.options;
     lancerNavigation(false);
-  });
+  };
+  bandeau.querySelector('[data-reprise="oui"]').addEventListener("click", reprendre);
   bandeau.querySelector('[data-reprise="non"]').addEventListener("click", () => {
+    clearInterval(minuteur);
     bandeau.remove();
     oublierNavigationInterrompue();
   });
+  // Coupure toute récente (appli fermée par le système en roulant) : la
+  // navigation repart seule, les mains restent sur le volant.
+  if (s.automatique) {
+    let reste = AUTO_S;
+    minuteur = setInterval(() => {
+      reste--;
+      const c = bandeau.querySelector("[data-compte]");
+      if (c) c.textContent = String(Math.max(0, reste));
+      if (reste <= 0) reprendre();
+    }, 1000);
+  }
 }
 
 function lancerNavigation(demo) {
@@ -2119,7 +2136,52 @@ function expliquerRefusTomTom(r) {
   return `erreur HTTP ${r.statut}${r.message ? ` (« ${r.message} »)` : ""}`;
 }
 
+// ── Carte de la région hors ligne (Profil) ──────────────────────────────────
+
+let regionEnCours = false;
+
+async function centreRegion() {
+  const domicile = lireReglages().adresse_domicile;
+  const lieu = await resoudreLieu(domicile ? "chez moi" : "ma position", domicile);
+  return lieu.erreur ? null : lieu;
+}
+
+function majInfoRegion() {
+  const r = regionPreparee();
+  $("ev-region-info").textContent = r
+    ? `✅ Région prête : ${r.rayon_km} km autour de ${new Date(r.date).toLocaleDateString("fr-FR")} (${Math.round((r.tuiles * 25) / 1024)} Mo environ).`
+    : "Pas encore de région téléchargée.";
+}
+
+async function telechargerRegion() {
+  if (regionEnCours) return;
+  const rayon = Number($("ev-region-rayon").value);
+  const centre = await centreRegion();
+  if (!centre) return toast("⚠️ Adresse du domicile introuvable : renseignez-la dans le Profil, ou autorisez la localisation.");
+  const { tuiles, mo } = estimerRegion(centre.lat, centre.lon, rayon);
+  if (!confirm(`Télécharger la carte de la région (${rayon} km autour de ${nomCourt(centre.nom).split(",")[0]}) ?\n\nEnviron ${tuiles} morceaux, ~${mo} Mo. À faire en Wi-Fi.`)) return;
+  regionEnCours = true;
+  const bouton = $("ev-region-btn");
+  bouton.disabled = true;
+  try {
+    const r = await preparerRegion(centre.lat, centre.lon, rayon, (fait, total) => {
+      if (fait % 50 === 0 || fait === total) bouton.textContent = `📥 ${Math.round((fait / total) * 100)} %`;
+    });
+    toast(r.tuiles >= r.total * 0.95 ? `✅ Région prête hors ligne (${r.tuiles}/${r.total} morceaux)` : `⚠️ Téléchargement incomplet (${r.tuiles}/${r.total}) : réessayez avec un meilleur réseau`);
+  } catch (e) {
+    toast(`⚠️ Téléchargement impossible : ${e.message}`);
+  } finally {
+    regionEnCours = false;
+    bouton.disabled = false;
+    bouton.textContent = "📥 Télécharger ma région";
+    majInfoRegion();
+  }
+}
+
 function cablerProfil() {
+  $("ev-region-rayon").innerHTML = RAYONS_REGION_KM.map((k) => `<option value="${k}"${k === 50 ? " selected" : ""}>${k} km</option>`).join("");
+  $("ev-region-btn").addEventListener("click", telechargerRegion);
+  majInfoRegion();
   cablerZonesEvitees(afficherVue);
   $("ev-export-donnees-btn").addEventListener("click", exporterSauvegarde);
   $("ev-lien-sauvegarde-btn").addEventListener("click", envoyerLienRestauration);

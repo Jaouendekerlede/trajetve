@@ -19,6 +19,7 @@ import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom, appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation } from "./zoom-nav.js";
+import { enregistrerReprise, oublierReprise, lireReprise } from "./reprise.js";
 import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitiale, capEntre, fleche, svgFleche, construireRoute, traceRestante, FLECHES_VOIE, dessinVoies } from "./nav-outils.js";
 // Réexportés pour les autres modules (ui.js, essais).
 export { traceRestante, dessinVoies } from "./nav-outils.js";
@@ -59,6 +60,23 @@ const NB_REESSAIS_BARREE = 6;
 const DISTANCE_ANNONCE_TRAVAUX_M = 1500;
 
 let etat = null;
+
+// Chrome refuse la synthèse vocale tant que l'utilisateur n'a pas touché la
+// page (cas d'une reprise automatique après coupure) : un premier toucher,
+// n'importe où, la débloque.
+document.addEventListener(
+  "pointerdown",
+  () => {
+    try {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      speechSynthesis.speak(u);
+    } catch {
+      // pas de synthèse vocale sur ce navigateur
+    }
+  },
+  { once: true, capture: true },
+);
 
 // ── Utilitaires ─────────────────────────────────────────────────────────────
 
@@ -2339,34 +2357,30 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
 // est gardée (hors clé « trajetve_ » : pas dans les sauvegardes), et proposée
 // à la réouverture pendant un moment.
 
-const CLE_NAVIGATION = "tve_navigation_en_cours";
 const INTERVALLE_SAUVEGARDE_MS = 15000;
-const DUREE_REPRISE_MS = 45 * 60 * 1000;
 
 function sauverNavigation() {
   if (!etat || etat.demo || etat.arrive) return;
-  try {
-    const arretsFaits = (etat.plan.arrets || []).length - etat.arretsRestants.length;
-    localStorage.setItem(CLE_NAVIGATION, JSON.stringify({ ts: Date.now(), plan: etat.plan, options: etat.options, arrets_faits: Math.max(0, arretsFaits), batterie_pct: Math.round(batterieEstimee()) }));
-  } catch {
-    // Stockage plein : la reprise ne sera simplement pas proposée.
-  }
+  // Ce qui reste vraiment à faire : bornes (remplacées ou ajoutées comprises)
+  // et destination actuelle.
+  enregistrerReprise({
+    plan: etat.plan,
+    options: etat.options,
+    arrets_restants: etat.arretsRestants,
+    destination: etat.destination,
+    destination_finale: etat.destinationFinale || null,
+    batterie_pct: Math.round(batterieEstimee()),
+  });
 }
 
 export function oublierNavigationInterrompue() {
-  localStorage.removeItem(CLE_NAVIGATION);
+  oublierReprise();
 }
 
-// { plan, options, batterie_pct, destination } si une navigation a été
-// interrompue récemment, sinon null.
+// { plan, options, batterie_pct, destination, age_ms, automatique } si une
+// navigation a été coupée récemment, sinon null.
 export function navigationInterrompue() {
-  try {
-    const s = JSON.parse(localStorage.getItem(CLE_NAVIGATION));
-    if (!s || Date.now() - s.ts > DUREE_REPRISE_MS) return null;
-    return { plan: { ...s.plan, arrets: (s.plan.arrets || []).slice(s.arrets_faits) }, options: s.options, batterie_pct: s.batterie_pct, destination: s.plan.to_name };
-  } catch {
-    return null;
-  }
+  return lireReprise();
 }
 
 export function arreterNavigation({ depuisRetour = false } = {}) {

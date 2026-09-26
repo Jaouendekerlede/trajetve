@@ -101,8 +101,8 @@ export function guidageHorsLigne(lat, lon, nbArrets) {
   }
 }
 
-// onProgres(fait, total) pendant le téléchargement.
-export async function preparerHorsLigne(plan, onProgres) {
+// Style, moteur, icônes et polices + adresses des tuiles (à télécharger).
+async function ressourcesCarte() {
   const style = await (await fetch(STYLE)).json();
   const tileJson = await (await fetch(style.sources.openmaptiles.url)).json();
   const modele = tileJson.tiles[0];
@@ -112,13 +112,73 @@ export async function preparerHorsLigne(plan, onProgres) {
     ...["", "@2x"].flatMap((d) => [`${style.sprite}${d}.json`, `${style.sprite}${d}.png`]),
     ...POLICES.flatMap((p) => PLAGES_GLYPHES.map((plage) => style.glyphs.replace("{fontstack}", encodeURIComponent(p)).replace("{range}", plage))),
   ];
-  const tuiles = tuilesDuTrace(plan.coords).map((t) => {
+  const adresse = (t) => {
     const [z, x, y] = t.split("/");
     return modele.replace("{z}", z).replace("{x}", x).replace("{y}", y);
-  });
+  };
+  return { annexes, adresse };
+}
+
+// onProgres(fait, total) pendant le téléchargement.
+export async function preparerHorsLigne(plan, onProgres) {
+  const { annexes, adresse } = await ressourcesCarte();
+  const tuiles = tuilesDuTrace(plan.coords).map(adresse);
   const total = annexes.length + tuiles.length;
   await telecharger(annexes, onProgres, 0, total);
   const tuilesOk = await telecharger(tuiles, onProgres, annexes.length, total);
   const guidage = await preparerGuidage(plan).catch(() => false);
   return { tuiles: tuilesOk, tuilesTotal: tuiles.length, guidage };
+}
+
+// ── Carte de la région (autour de la maison) ────────────────────────────────
+// Toutes les tuiles jusqu'au zoom 13 dans le rayon choisi, et le zoom 14
+// (détail des rues, ronds-points) tout près du centre. Le service worker
+// garde ces tuiles : la carte 3D s'affiche alors partout dans la région,
+// sans réseau (le guidage reste celui des trajets préparés).
+
+const ZOOM_REGION_MAX = 13;
+const RAYON_DETAIL_KM = 12;
+const CLE_REGION = "tve_region_hors_ligne";
+export const RAYONS_REGION_KM = [30, 50, 80];
+
+// Tuiles d'un carré de demi-côté rayonKm autour du centre, du zoom 6 à zoomMax.
+function tuilesCarre(lat, lon, rayonKm, zoomMax, zoomMin = ZOOM_MIN) {
+  const dLat = rayonKm / 110.54;
+  const dLon = rayonKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const liste = [];
+  for (let z = zoomMin; z <= zoomMax; z++) {
+    const [x0, y1] = tuile(lat - dLat, lon - dLon, z);
+    const [x1, y0] = tuile(lat + dLat, lon + dLon, z);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) liste.push(`${z}/${x}/${y}`);
+  }
+  return liste;
+}
+
+export function tuilesDeLaRegion(lat, lon, rayonKm) {
+  return [...tuilesCarre(lat, lon, rayonKm, ZOOM_REGION_MAX), ...tuilesCarre(lat, lon, RAYON_DETAIL_KM, ZOOM_MAX, ZOOM_REGION_MAX + 1)];
+}
+
+export function estimerRegion(lat, lon, rayonKm) {
+  const n = tuilesDeLaRegion(lat, lon, rayonKm).length;
+  return { tuiles: n, mo: Math.round((n * TAILLE_MOYENNE_TUILE_KO) / 1024) };
+}
+
+export function regionPreparee() {
+  try {
+    return JSON.parse(localStorage.getItem(CLE_REGION));
+  } catch {
+    return null;
+  }
+}
+
+export async function preparerRegion(lat, lon, rayonKm, onProgres) {
+  const { annexes, adresse } = await ressourcesCarte();
+  const tuiles = tuilesDeLaRegion(lat, lon, rayonKm).map(adresse);
+  const total = annexes.length + tuiles.length;
+  await telecharger(annexes, onProgres, 0, total);
+  const ok = await telecharger(tuiles, onProgres, annexes.length, total);
+  const region = { lat, lon, rayon_km: rayonKm, tuiles: ok, total: tuiles.length, date: Date.now() };
+  // Trop de tuiles manquées (réseau coupé en route) : pas « préparée ».
+  if (ok >= tuiles.length * 0.95) localStorage.setItem(CLE_REGION, JSON.stringify(region));
+  return region;
 }

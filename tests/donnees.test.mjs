@@ -107,3 +107,38 @@ test("temps de charge appris sur les recharges réelles (pauses trop longues éc
   assert.equal(s.facteurChargeAppris(), 1.1);
   assert.equal(s.obtenirProfilVehicule().facteur_charge_appris, 1.1);
 });
+
+test("reprise : bornes restantes et destination actuelle, coupure récente = automatique, ancienne = oubliée", async () => {
+  const r = await import("../js/reprise.js");
+  localStorage.clear();
+  const plan = { from_lat: 1, from_lon: 1, to_lat: 47.2, to_lon: -1.5, to_name: "Nantes", arrets: [{ nom_borne: "A" }, { nom_borne: "B" }] };
+  const t0 = Date.UTC(2026, 8, 27, 10);
+  r.enregistrerReprise({ plan, options: { mode: "confort" }, arrets_restants: [{ nom_borne: "B" }, { nom_borne: "Café", pause: true }], destination: { lat: 46.3, lon: -0.46, nom: "Parking Niort" }, batterie_pct: 41 }, t0);
+  const vite = r.lireReprise(t0 + 4 * 60000);
+  assert.deepEqual(vite.plan.arrets.map((a) => a.nom_borne), ["B", "Café"]);
+  assert.equal(vite.plan.to_name, "Parking Niort");
+  assert.equal(vite.plan.to_lat, 46.3);
+  assert.equal(vite.batterie_pct, 41);
+  assert.equal(vite.automatique, true);
+  assert.equal(r.lireReprise(t0 + 30 * 60000).automatique, false, "30 min : à confirmer");
+  assert.equal(r.lireReprise(t0 + 7 * 3600000), null, "au-delà de 6 h : oubliée");
+  assert.equal(r.ageTexte(4 * 60000), "il y a 4 min");
+  assert.equal(r.ageTexte(95 * 60000), "il y a 1 h 35");
+  r.oublierReprise();
+  assert.equal(r.lireReprise(t0), null);
+  // Ancien format (nombre d'arrêts faits)
+  localStorage.setItem("tve_navigation_en_cours", JSON.stringify({ ts: t0, plan, options: {}, arrets_faits: 1, batterie_pct: 50 }));
+  assert.deepEqual(r.lireReprise(t0 + 1000).plan.arrets.map((a) => a.nom_borne), ["B"]);
+});
+
+test("carte de la région : nombre de tuiles et poids raisonnables", async () => {
+  const h = await import("../js/hors-ligne.js");
+  const petit = h.estimerRegion(47.2, -1.55, 30);
+  const grand = h.estimerRegion(47.2, -1.55, 80);
+  assert.ok(petit.tuiles > 300 && petit.tuiles < 1500, `${petit.tuiles}`);
+  assert.ok(grand.tuiles > petit.tuiles && grand.mo < 120, `${grand.tuiles} tuiles, ${grand.mo} Mo`);
+  const t = h.tuilesDeLaRegion(47.2, -1.55, 30);
+  assert.ok(t.some((x) => x.startsWith("14/")), "détail zoom 14 près du centre");
+  assert.ok(!t.some((x) => x.startsWith("15/")));
+  assert.equal(new Set(t).size, t.length, "pas de doublon");
+});

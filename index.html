@@ -501,6 +501,15 @@
 
       <div class="ev-carte-bloc">
         <h3>Cartes</h3>
+        <div class="ev-region-bloc">
+          <div class="ev-champ-titre"><strong>📥 Carte hors ligne de ma région</strong></div>
+          <div class="ev-hint">Télécharge la carte 3D autour de chez vous : elle s'affichera partout dans la région sans réseau. À faire en Wi-Fi. (Le guidage sans réseau reste celui des trajets préparés avec « Hors ligne ».)</div>
+          <label class="ev-champ">Rayon autour de la maison
+            <select id="ev-region-rayon" class="ev-input"></select>
+          </label>
+          <button id="ev-region-btn" class="ev-btn ev-btn-plein" type="button">📥 Télécharger ma région</button>
+          <div id="ev-region-info" class="ev-hint"></div>
+        </div>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-jour-nuit"> 🌗 Carte de nuit / de jour automatique (au coucher et au lever du soleil)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-mode-voiture"> 🚗 Mode voiture : grands boutons et textes pendant la navigation</label>
         <label class="ev-champ">Fournisseur de la carte 3D
@@ -617,7 +626,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 48 : présentation, droits d'auteur</div>
+      <div class="ev-hint ev-lien-centre">Version 49 : reprise automatique après coupure, carte de la région hors ligne</div>
     </div>
   </div>
 </section>
