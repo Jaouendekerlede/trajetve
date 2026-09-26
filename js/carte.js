@@ -712,3 +712,12 @@ export function afficherTrafic(actif) {
   }
   c3d.afficherTrafic(actif, cle);
 }
+
+// 🚗 Voiture garée sur la carte des bornes (pos : { lat, lon } ou null).
+let marqueurGaree = null;
+
+export function marquerVoitureGaree(pos) {
+  marqueurGaree?.remove();
+  marqueurGaree = pos ? L.marker([pos.lat, pos.lon], { icon: L.divIcon({ className: "", iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="ev-garee">🚗</div>` }), interactive: false }).addTo(carte) : null;
+  c3d.exploVoitureGaree(pos);
+}

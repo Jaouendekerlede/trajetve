@@ -21,6 +21,8 @@ import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInf
 import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
 import { cablerZonesEvitees } from "./ui-zones.js";
 import { classeNumero } from "./panneau-nav.js";
+import { cablerSuggestions } from "./ui-suggestions.js";
+import { cablerVoitureGaree } from "./ui-voiture.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
@@ -554,6 +556,8 @@ function cablerCarte() {
   for (const f of reglages.filtres_carte || []) filtres.add(f);
   cablerParkings();
   cablerTrafic();
+  cablerVoitureGaree();
+  cablerSuggestions(["ev-depart-input", "ev-destination-input"]);
 
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
@@ -1952,6 +1956,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-fenetre-voies").checked = reglages.fenetre_voies !== false;
   $("ev-reglage-vue-carrefour").checked = reglages.vue_carrefour !== false;
   $("ev-reglage-icone").value = reglages.icone_voiture || "fleche_bleue";
+  $("ev-reglage-parking-arrivee").checked = reglages.parking_arrivee !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
@@ -2043,6 +2048,7 @@ function cablerProfil() {
       fenetre_voies: $("ev-reglage-fenetre-voies").checked,
       vue_carrefour: $("ev-reglage-vue-carrefour").checked,
       icone_voiture: $("ev-reglage-icone").value,
+      parking_arrivee: $("ev-reglage-parking-arrivee").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
     });

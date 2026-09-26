@@ -309,3 +309,19 @@ export function rectanglesZonesEvitees() {
     return { southWestCorner: { latitude: lat - dLat, longitude: lon - dLon }, northEastCorner: { latitude: lat + dLat, longitude: lon + dLon } };
   });
 }
+
+// ── Où est garée la voiture (enregistré à l'arrivée d'une navigation) ───────
+
+const CLE_VOITURE_GAREE = "trajetve_voiture_garee";
+
+export function garerVoiture(lat, lon, lieu = "") {
+  ecrireJson(CLE_VOITURE_GAREE, { lat, lon, lieu, date: Date.now() });
+}
+
+export function voitureGaree() {
+  return lireJson(CLE_VOITURE_GAREE, null);
+}
+
+export function oublierVoitureGaree() {
+  localStorage.removeItem(CLE_VOITURE_GAREE);
+}

@@ -42,6 +42,7 @@
     <button class="ev-chip" type="button" data-filtre="gratuit">🎁 Gratuit</button>
     <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
     <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
+    <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
   <div id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : ouvre l'onglet 🚗 Profil pour les ajouter.</div>
 </header>
@@ -405,6 +406,7 @@
           </select>
         </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-parking-arrivee"> 🅿️ Proposer des parkings à 2 km de l'arrivée</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-vue-carrefour"> 🗺️ Dessin du vrai carrefour dans le panneau (ronds-points, carrefours à plusieurs routes)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-fenetre-voies"> 🛣️ Fenêtre des voies (comme Sygic) quand il faut choisir sa file</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-feux"> 🚦 « Au feu, tournez… » (feux d'OpenStreetMap)</label>
@@ -466,7 +468,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 23 : itinéraire plus rapide proposé, trafic en couleur, frise, tête haute</div>
+      <div class="ev-hint ev-lien-centre">Version 24 : suggestions d'adresses, le long du trajet, parking à l'arrivée, ma voiture</div>
     </div>
   </div>
 </section>
@@ -535,6 +537,8 @@
     <div class="ev-nav-menu-grille">
       <button id="ev-nav-apercu-btn" type="button">🗺️<span>Aperçu du trajet</span></button>
       <button type="button" data-nav-action="hud">🪞<span>Tête haute</span></button>
+      <button type="button" data-nav-action="recherche">🔍<span>Le long du trajet</span></button>
+      <button type="button" data-nav-action="parkings">🅿️<span>Parkings à l'arrivée</span></button>
     </div>
   </div>
 
@@ -548,6 +552,17 @@
   </div>
 
   <div id="ev-nav-frise" class="ev-nav-frise hidden" aria-label="Trajet restant"></div>
+
+  <div id="ev-nav-recherche" class="ev-nav-carte hidden">
+    <div class="ev-nav-carte-titre ev-titre-fermer">🔍 Le long du trajet <button type="button" class="ev-fermer" data-fermer aria-label="Fermer">✕</button></div>
+    <div id="ev-nav-recherche-cats" class="ev-nav-menu-grille"></div>
+    <div id="ev-nav-recherche-res" class="ev-nav-resultats"></div>
+  </div>
+
+  <div id="ev-nav-parkings" class="ev-nav-carte hidden">
+    <div class="ev-nav-carte-titre ev-titre-fermer">🅿️ Parkings près de l'arrivée <button type="button" class="ev-fermer" data-fermer aria-label="Fermer">✕</button></div>
+    <div id="ev-nav-parkings-liste" class="ev-nav-resultats"></div>
+  </div>
 
   <div id="ev-nav-batterie-panneau" class="ev-nav-carte hidden">
     <div class="ev-nav-carte-titre">🔋 Batterie réelle</div>

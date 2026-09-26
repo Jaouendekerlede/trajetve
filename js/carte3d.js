@@ -1074,3 +1074,15 @@ export function montrerBornes(visible) {
     else m.remove();
   }
 }
+
+let marqueurGaree = null;
+
+export function exploVoitureGaree(pos) {
+  marqueurGaree?.remove();
+  marqueurGaree = null;
+  if (!pos || !carte) return;
+  const el = document.createElement("div");
+  el.className = "ev-garee";
+  el.textContent = "🚗";
+  marqueurGaree = marqueur(el, pos.lat, pos.lon).addTo(carte);
+}

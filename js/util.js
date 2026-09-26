@@ -57,3 +57,7 @@ export function lienGoogleMaps(lat, lon) {
 export function lienWaze(lat, lon) {
   return `https://waze.com/ul?ll=${lat},${lon}&navigate=yes`;
 }
+
+export function lienAPied(lat, lon) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=walking`;
+}

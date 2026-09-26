@@ -25,6 +25,39 @@ export async function geocodeLieu(nomLieu) {
 }
 
 const MOTS_POSITION = ["ma position", "position actuelle", "ici", "gps"];
+
+// Suggestions pendant la saisie : Photon (OpenStreetMap, fait pour ça ;
+// Nominatim l'interdit). pres : { lat, lon } pour favoriser les lieux proches.
+const lieuxChoisis = new Map();
+
+export function memoriserLieu(libelle, lat, lon) {
+  lieuxChoisis.set(libelle.trim().toLowerCase(), { lat, lon, nom: libelle });
+}
+
+export async function suggestionsLieux(texte, pres) {
+  const p = new URLSearchParams({ q: texte, lang: "fr", limit: "6" });
+  if (pres && Number.isFinite(pres.lat)) {
+    p.set("lat", pres.lat.toFixed(3));
+    p.set("lon", pres.lon.toFixed(3));
+  }
+  try {
+    const r = await fetch(`https://photon.komoot.io/api/?${p}`);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.features || [])
+      .map((f) => {
+        const q = f.properties || {};
+        const [lon, lat] = f.geometry?.coordinates || [];
+        const rue = [q.housenumber, q.street].filter(Boolean).join(" ");
+        const nom = q.name || rue || q.city || "";
+        const detail = [q.name && rue ? rue : "", q.postcode, q.city && q.city !== nom ? q.city : "", q.country && q.country !== "France" ? q.country : ""].filter(Boolean).join(", ");
+        return { nom, detail, libelle: [nom, detail].filter(Boolean).join(", "), lat, lon };
+      })
+      .filter((s) => s.nom && Number.isFinite(s.lat));
+  } catch {
+    return [];
+  }
+}
 const MOTS_DOMICILE = ["chez moi", "maison", "domicile", "à la maison", "a la maison"];
 
 function positionGps() {
@@ -55,6 +88,9 @@ export async function resoudreLieu(nomLieu, adresseDomicile) {
   if (!brut || MOTS_POSITION.includes(cle)) return positionGps();
   const coordonnees = /^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/.exec(brut);
   if (coordonnees) return { lat: parseFloat(coordonnees[1]), lon: parseFloat(coordonnees[2]), nom: "Position actuelle" };
+  // Adresse choisie dans les suggestions : position déjà connue.
+  const choisi = lieuxChoisis.get(cle);
+  if (choisi) return choisi;
   if (MOTS_DOMICILE.includes(cle)) {
     if (!adresseDomicile) {
       return { erreur: "Adresse du domicile non renseignée. Ajoute-la dans 🚗 Profil véhicule, ou utilise « Ma position »." };

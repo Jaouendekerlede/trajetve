@@ -6,16 +6,18 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture } from "./storage.js";
+import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
+import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
-import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente } from "./alertes-route.js";
+import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
-import { escapeHtml } from "./util.js";
+import { escapeHtml, lienAPied } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
 import { stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import * as carte2D from "./carte.js";
@@ -540,8 +542,8 @@ function majEcran() {
     $("ev-nav-distance").textContent = "Arrivé";
     $("ev-nav-instruction").textContent = etat.destination.nom || "Destination";
   } else if (etat.aLaBorne) {
-    flecheBandeau(`<span class="ev-nav-fleche-emoji">🔌</span>`);
-    $("ev-nav-distance").textContent = "Recharge";
+    flecheBandeau(`<span class="ev-nav-fleche-emoji">${etat.aLaBorne.pause ? "📍" : "🔌"}</span>`);
+    $("ev-nav-distance").textContent = etat.aLaBorne.pause ? "Étape" : "Recharge";
     $("ev-nav-instruction").textContent = etat.aLaBorne.nom_borne;
   } else if (instr) {
     const d = instr.offset - etat.offset;
@@ -596,9 +598,9 @@ function majEcran() {
     const reste = Math.max(0, offsetBorne - etat.offset);
     const pctBorne = pctMaintenant - (reste / 1000) * (etat.consoKwhKm / etat.capacite) * 100;
     const heureBorne = Date.now() + secondesRestantesJusqua(offsetBorne) * 1000;
-    $("ev-nav-borne").innerHTML = `🔋 <strong>${escapeHtml(arret.nom_borne)}</strong> dans ${distanceAffichee(reste)} · ${heure(heureBorne)} · batterie ~${Math.round(pctBorne)} %`;
+    $("ev-nav-borne").innerHTML = `${arret.pause ? "📍" : "🔋"} <strong>${escapeHtml(arret.nom_borne)}</strong> dans ${distanceAffichee(reste)} · ${heure(heureBorne)} · batterie ~${Math.round(pctBorne)} %`;
     $("ev-nav-borne").classList.remove("hidden");
-    if (pctBorne < etat.margePct - 3 && !etat.alerteBatterieAffichee) {
+    if (!arret.pause && pctBorne < etat.margePct - 3 && !etat.alerteBatterieAffichee) {
       etat.alerteBatterieAffichee = true;
       afficherAlerte("⚠️ Batterie trop juste pour atteindre la borne prévue.", { libelle: "🔄 Recalculer", action: replanifier });
       parler("Attention, la batterie risque d'être trop juste pour atteindre la prochaine borne.");
@@ -829,7 +831,7 @@ function annonces() {
     for (const seuil of [20000, 2000]) {
       if (reste <= seuil && reste > seuil / 4 && !etat.annoncesBornes.has(seuil)) {
         etat.annoncesBornes.add(seuil);
-        if (etat.prefs.voixBornes) parler(`Borne de recharge ${arret.nom_borne} dans ${distanceParlee(reste)}.`);
+        if (etat.prefs.voixBornes || arret.pause) parler(`${arret.pause ? "Étape" : "Borne de recharge"} ${arret.nom_borne} dans ${distanceParlee(reste)}.`);
       }
     }
   }
@@ -837,7 +839,27 @@ function annonces() {
 
 // ── Arrivées ────────────────────────────────────────────────────────────────
 
+// Étape ajoutée en route (café, boulangerie…) : pas de recharge.
+function arriveePause(arret) {
+  etat.aLaBorne = arret;
+  parler(`Vous êtes arrivé à votre étape, ${arret.nom_borne}.`, true);
+  const carte = $("ev-nav-etape-borne");
+  carte.innerHTML = `<div class="ev-nav-carte-titre">📍 ${escapeHtml(arret.nom_borne)}</div><div class="ev-nav-carte-sous">${escapeHtml(arret.adresse || "")}</div><button type="button" id="ev-nav-reprendre-btn" class="ev-btn-principal">▶ Reprendre la route</button>`;
+  carte.classList.remove("hidden");
+  $("ev-nav-reprendre-btn").addEventListener("click", () => {
+    etat.arretsRestants.shift();
+    etat.route.troncons.shift();
+    etat.aLaBorne = null;
+    etat.annoncesBornes = new Set();
+    carte.classList.add("hidden");
+    parler("C'est reparti.", true);
+    majEcran();
+  });
+  majEcran();
+}
+
 function arriveeBorne(arret) {
+  if (arret.pause) return arriveePause(arret);
   etat.aLaBorne = arret;
   parler(
     `Vous êtes arrivé à la borne ${arret.nom_borne}. Rechargez jusqu'à ${arret.pct_depart_borne} pour cent, environ ${arret.temps_charge_min} minutes.`,
@@ -889,11 +911,19 @@ function arriveeDestination() {
   if (etat.arrive) return;
   etat.arrive = true;
   parler(`Vous êtes arrivé à destination. Batterie estimée : ${Math.round(batterieEstimee())} pour cent.`, true);
+  // Où la voiture est garée (onglet Carte › 🚗 Ma voiture).
+  const finale = etat.destinationFinale;
+  if (!etat.demo && etat.pos) {
+    garerVoiture(etat.pos.lat, etat.pos.lon, (finale || etat.destination).nom || "");
+    document.dispatchEvent(new Event("ev-voiture-garee"));
+  }
   const carteFin = $("ev-nav-etape-borne");
   carteFin.innerHTML = `
     <div class="ev-nav-carte-titre">🏁 Vous êtes arrivé</div>
     <div>${escapeHtml(etat.destination.nom || "")}</div>
     <div>Batterie estimée : <strong>${Math.round(batterieEstimee())} %</strong></div>
+    ${etat.demo ? "" : `<div class="ev-nav-carte-sous">🚗 Position de la voiture enregistrée (Carte › 🚗 Ma voiture)</div>`}
+    ${finale ? `<a class="ev-btn" href="${escapeHtml(lienAPied(finale.lat, finale.lon))}" target="_blank" rel="noopener">🚶 Finir à pied jusqu'à ${escapeHtml(finale.nom || "la destination")}</a>` : ""}
     <button type="button" id="ev-nav-terminer-btn" class="ev-btn-principal">Terminer</button>`;
   carteFin.classList.remove("hidden");
   $("ev-nav-terminer-btn").addEventListener("click", () => arreterNavigation());
@@ -1129,6 +1159,9 @@ function surPosition(p) {
   majEcran();
   rafraichirBornesProches();
   preparerCarrefours();
+  if (etat.prefs.parkingArrivee && !etat.parkingsProposes && !etat.arretsRestants.length && !etat.destinationFinale && etat.odometre > 500 && etat.route.total - etat.offset < DISTANCE_PROPOSITION_PARKING_M) {
+    proposerParkings();
+  }
 }
 
 // ── Animation fluide de la voiture ──────────────────────────────────────────
@@ -1331,6 +1364,19 @@ function cablerBoutons() {
     actionMenu(b.dataset.navAction);
   });
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
+  $("ev-nav-recherche-cats").innerHTML = CATEGORIES_TRAJET.map((c) => `<button type="button" data-requete="${escapeHtml(c.requete)}">${c.icone}<span>${escapeHtml(c.nom)}</span></button>`).join("");
+  $("ev-nav-recherche").addEventListener("click", (e) => {
+    if (e.target.closest("[data-fermer]")) return $("ev-nav-recherche").classList.add("hidden");
+    const q = e.target.closest("[data-requete]")?.dataset.requete;
+    if (q) return chercherLeLongDuTrajet(q);
+    const i = e.target.closest("[data-etape]")?.dataset.etape;
+    if (i !== undefined && etat?.lieuxTrouves?.[i]) ajouterEtape(etat.lieuxTrouves[i]);
+  });
+  $("ev-nav-parkings").addEventListener("click", (e) => {
+    if (e.target.closest("[data-fermer]")) return $("ev-nav-parkings").classList.add("hidden");
+    const i = e.target.closest("[data-parking]")?.dataset.parking;
+    if (i !== undefined && etat?.parkingsTrouves?.[i]) allerAuParking(etat.parkingsTrouves[i]);
+  });
   $("ev-nav-apercu-btn").addEventListener("click", () => {
     etat.suivi = false;
     $("ev-nav-recentrer-btn").classList.remove("hidden");
@@ -1377,6 +1423,98 @@ function cablerBoutons() {
 function actionMenu(action) {
   if (!etat) return;
   if (action === "hud") basculerHud(true);
+  else if (action === "recherche") $("ev-nav-recherche").classList.remove("hidden");
+  else if (action === "parkings") proposerParkings(true);
+}
+
+// ── Le long du trajet : café, boulangerie… ajoutés comme étape ──────────────
+
+async function chercherLeLongDuTrajet(requete) {
+  const zone = $("ev-nav-recherche-res");
+  zone.innerHTML = `<div class="ev-nav-carte-sous">⏳ Recherche…</div>`;
+  const restant = etat.route.coords.slice(etat.idx);
+  const r = await rechercherLeLongDu(getApiKeys().tomtom, restant, requete);
+  if (!etat) return;
+  if (!r.ok) {
+    zone.innerHTML = `<div class="ev-nav-carte-sous">⚠️ ${escapeHtml(r.erreur)}</div>`;
+    return;
+  }
+  const lieux = r.lieux
+    .map((l) => ({ ...l, devant_m: projeterSurTrace(l.lat, l.lon, etat.route.coords, etat.route.cum).offset - etat.offset }))
+    .filter((l) => l.devant_m > 0)
+    .slice(0, 8);
+  etat.lieuxTrouves = lieux;
+  zone.innerHTML = lieux.length
+    ? lieux
+        .map((l, i) => `<div class="ev-nav-resultat"><div><strong>${escapeHtml(l.nom)}</strong><div class="ev-nav-carte-sous">dans ${distanceAffichee(l.devant_m)} · détour +${l.detour_min} min</div></div><button type="button" class="ev-btn" data-etape="${i}">➕ Étape</button></div>`)
+        .join("")
+    : `<div class="ev-nav-carte-sous">Rien de trouvé devant, à moins de 15 min de détour.</div>`;
+}
+
+async function ajouterEtape(lieu) {
+  $("ev-nav-recherche").classList.add("hidden");
+  const arret = { lat: lieu.lat, lon: lieu.lon, nom_borne: lieu.nom, adresse: lieu.adresse, pause: true, temps_charge_min: 0 };
+  const offset = projeterSurTrace(lieu.lat, lieu.lon, etat.route.coords, etat.route.cum).offset;
+  // Avant la première borne dont le tronçon se termine après le lieu.
+  let k = etat.route.troncons.findIndex((t) => t.fin >= offset);
+  if (k < 0 || k > etat.arretsRestants.length) k = etat.arretsRestants.length;
+  etat.arretsRestants.splice(k, 0, arret);
+  afficherAlerte(`📍 Ajout de l'étape ${lieu.nom}…`);
+  const route = await calculerRouteNav(etat.pos, etat.pos.cap, { sansSecours: true });
+  if (!etat) return;
+  if (!route) {
+    etat.arretsRestants.splice(etat.arretsRestants.indexOf(arret), 1);
+    afficherAlerte("⚠️ Étape impossible à ajouter pour le moment (réseau ?).");
+    return;
+  }
+  installerRoute(route);
+  afficherAlerte(null);
+  parler(`Étape ajoutée : ${lieu.nom}.`, true);
+  majEcran();
+}
+
+// ── Parking à l'arrivée ─────────────────────────────────────────────────────
+
+const DISTANCE_PROPOSITION_PARKING_M = 2000;
+const DISTANCE_MAX_PARKING_M = 800;
+
+async function proposerParkings(manuel = false) {
+  if (!etat || (etat.parkingsProposes && !manuel)) return;
+  etat.parkingsProposes = true;
+  const d = etat.destinationFinale || etat.destination;
+  const r = await rechercherParkings({ sud: d.lat - 0.008, nord: d.lat + 0.008, ouest: d.lon - 0.012, est: d.lon + 0.012 });
+  if (!etat) return;
+  const liste = (r.ok ? r.parkings : [])
+    .map((p) => ({ ...p, distM: Math.round(haversineKm(d.lat, d.lon, p.lat, p.lon) * 1000) }))
+    .filter((p) => p.distM <= DISTANCE_MAX_PARKING_M)
+    .sort((a, b) => a.distM - b.distM)
+    .slice(0, 3);
+  if (!liste.length) {
+    if (manuel) afficherAlerte(r.ok ? "🅿️ Aucun parking connu près de l'arrivée." : `⚠️ Parkings : ${r.erreur}`);
+    return;
+  }
+  etat.parkingsTrouves = liste;
+  $("ev-nav-parkings-liste").innerHTML = liste
+    .map((p, i) => {
+      const infos = [`à ${p.distM} m à pied`, p.places != null ? `${p.places} places` : "", p.payant === "oui" ? "payant" : p.payant === "non" ? "gratuit" : "", p.places_recharge ? `⚡ ${p.places_recharge} bornes` : ""].filter(Boolean).join(" · ");
+      return `<div class="ev-nav-resultat"><div><strong>🅿️ ${escapeHtml(p.nom)}</strong><div class="ev-nav-carte-sous">${escapeHtml(infos)}</div></div><button type="button" class="ev-btn" data-parking="${i}">Y aller</button></div>`;
+    })
+    .join("");
+  $("ev-nav-parkings").classList.remove("hidden");
+  if (!manuel) parler("Vous approchez de l'arrivée. Des parkings sont proposés à l'écran.");
+}
+
+async function allerAuParking(p) {
+  $("ev-nav-parkings").classList.add("hidden");
+  etat.destinationFinale ??= etat.destination;
+  etat.destination = { lat: p.lat, lon: p.lon, nom: `🅿️ ${p.nom}` };
+  afficherAlerte("🅿️ Direction le parking…");
+  const route = await calculerRouteNav(etat.pos, etat.pos.cap, { sansSecours: true });
+  if (!etat) return;
+  if (route) installerRoute(route);
+  afficherAlerte(null);
+  parler(`Direction le parking ${p.nom}.`, true);
+  majEcran();
 }
 
 // Tête haute (HUD) : téléphone posé sous le pare-brise la nuit, l'essentiel
@@ -1571,6 +1709,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       feux: reglages.feux !== false,
       fenetreVoies: reglages.fenetre_voies !== false,
       vueCarrefour: reglages.vue_carrefour !== false,
+      parkingArrivee: reglages.parking_arrivee !== false,
     },
     sensDeMarche: true,
     suivi: true,
@@ -1583,6 +1722,9 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   carte3D.definirIconeVoiture(reglages.icone_voiture);
   $("ev-nav-menu").classList.add("hidden");
   $("ev-nav-frise").classList.add("hidden");
+  $("ev-nav-recherche").classList.add("hidden");
+  $("ev-nav-parkings").classList.add("hidden");
+  $("ev-nav-recherche-res").innerHTML = "";
   $("ev-navigation").classList.remove("hidden");
   $("ev-nav-etape-borne").classList.add("hidden");
   $("ev-nav-batterie-panneau").classList.add("hidden");
