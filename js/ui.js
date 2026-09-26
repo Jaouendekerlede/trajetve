@@ -1971,7 +1971,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-relief").checked = reglages.relief_3d === true;
   $("ev-reglage-jour-nuit").checked = reglages.jour_nuit_auto !== false;
   $("ev-reglage-mode-voiture").checked = reglages.mode_voiture === true;
-  $("ev-reglage-grand-bandeau").checked = reglages.grand_bandeau !== false;
+  $("ev-reglage-taille-bandeau").value = reglages.taille_bandeau === "grand" ? "grand" : "compact";
   $("ev-reglage-zoom-renforce").checked = reglages.zoom_renforce !== false;
   $("ev-reglage-voix").checked = reglages.voix_guidage !== false;
   $("ev-reglage-voix-voies").checked = reglages.voix_voies !== false;
@@ -2066,7 +2066,7 @@ function cablerProfil() {
       relief_3d: $("ev-reglage-relief").checked,
       jour_nuit_auto: $("ev-reglage-jour-nuit").checked,
       mode_voiture: $("ev-reglage-mode-voiture").checked,
-      grand_bandeau: $("ev-reglage-grand-bandeau").checked,
+      taille_bandeau: $("ev-reglage-taille-bandeau").value,
       zoom_renforce: $("ev-reglage-zoom-renforce").checked,
       voix_guidage: $("ev-reglage-voix").checked,
       voix_voies: $("ev-reglage-voix-voies").checked,

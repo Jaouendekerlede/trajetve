@@ -636,15 +636,35 @@ body.ev-mode-navigation .ev-carte { left: 0; }
 .ev-nav-distance { font-size: 40px; font-weight: 900; line-height: 1; white-space: nowrap; }
 .ev-nav-rue { font-size: 30px; font-weight: 800; line-height: 1.12; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ev-nav-instruction { font-size: 16px; font-weight: 600; line-height: 1.25; opacity: 0.92; margin-top: 4px; }
-.ev-nav-rue.hidden + .ev-nav-instruction { font-size: 24px; font-weight: 800; opacity: 1; margin-top: 0; }
+.ev-nav-rue.hidden ~ .ev-nav-instruction { font-size: 24px; font-weight: 800; opacity: 1; margin-top: 0; }
 .ev-nav-ensuite-fleche svg { width: 22px; height: 22px; vertical-align: -5px; }
-/* Bandeau compact (réglage) */
-body.ev-bandeau-compact .ev-nav-manoeuvre-gauche { min-width: 64px; }
-body.ev-bandeau-compact .ev-nav-fleche svg { width: 54px; height: 54px; }
-body.ev-bandeau-compact .ev-nav-fleche-emoji { font-size: 40px; line-height: 54px; }
-body.ev-bandeau-compact .ev-nav-distance { font-size: 26px; }
-body.ev-bandeau-compact .ev-nav-rue { font-size: 20px; }
-body.ev-bandeau-compact .ev-nav-rue.hidden + .ev-nav-instruction { font-size: 17px; }
+/* Affichage compact (par défaut) : pensé pour le cas où tout s'affiche en
+   même temps. Bandeau bas, « Puis… » accroché dessous, une seule info
+   secondaire à la fois (voir navigation.js), pastilles et tuiles discrètes. */
+body.ev-bandeau-compact .ev-nav-haut { gap: 6px; }
+body.ev-bandeau-compact .ev-nav-manoeuvre { order: 0; padding: 8px 12px; gap: 10px; border-radius: 16px; }
+body.ev-bandeau-compact .ev-nav-manoeuvre-gauche { min-width: 58px; }
+body.ev-bandeau-compact .ev-nav-fleche svg { width: 50px; height: 50px; }
+body.ev-bandeau-compact .ev-nav-fleche-emoji { font-size: 36px; line-height: 50px; }
+body.ev-bandeau-compact .ev-nav-distance { font-size: 23px; }
+body.ev-bandeau-compact .ev-nav-rue { font-size: 21px; -webkit-line-clamp: 1; }
+body.ev-bandeau-compact .ev-nav-instruction { font-size: 13.5px; margin-top: 2px; }
+body.ev-bandeau-compact .ev-nav-rue.hidden ~ .ev-nav-instruction { font-size: 17px; }
+body.ev-bandeau-compact .ev-nav-panneau { margin-top: 3px; gap: 4px; }
+body.ev-bandeau-compact .ev-num { font-size: 13px; padding: 0 6px; border-width: 1.5px; }
+body.ev-bandeau-compact .ev-nav-direction { font-size: 15px; }
+body.ev-bandeau-compact .ev-nav-ensuite { order: 1; margin: -10px 0 0 14px; padding: 7px 12px 5px; border-radius: 0 0 12px 12px; font-size: 13px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35); }
+body.ev-bandeau-compact .ev-nav-alerte { order: 2; padding: 7px 12px; font-size: 13.5px; }
+body.ev-bandeau-compact .ev-nav-danger { order: 3; padding: 4px 10px; font-size: 13.5px; }
+body.ev-bandeau-compact .ev-nav-voies { order: 4; }
+body.ev-bandeau-compact .ev-nav-vue-voies { order: 5; align-self: flex-start; width: 100px; padding: 4px; border-radius: 12px; }
+body.ev-bandeau-compact .ev-nav-vue-voies-distance { font-size: 14px; margin-bottom: 0; }
+body.ev-bandeau-compact .ev-nav-borne { order: 6; align-self: flex-start; max-width: 100%; padding: 5px 10px; border-radius: 12px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 28, 40, 0.82); color: #e8eef7; }
+body.ev-bandeau-compact .ev-aire { width: 50px; padding: 4px 2px 3px; border-width: 1.5px; border-radius: 10px; }
+body.ev-bandeau-compact .ev-aire span { font-size: 15px; }
+body.ev-bandeau-compact .ev-aire strong { font-size: 11px; }
+body.ev-bandeau-compact .ev-aire small { font-size: 10px; }
+body.ev-bandeau-compact .ev-nav-aires { gap: 4px; }
 .ev-nav-voies { align-self: center; display: flex; gap: 0; padding: 6px 8px; border-radius: 14px; background: #0b4a35; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 .ev-nav-voie { min-width: 46px; height: 46px; padding: 0 6px; display: flex; align-items: center; justify-content: center; gap: 1px; font-size: 30px; font-weight: 900; line-height: 1; color: rgba(255, 255, 255, 0.3); border-left: 2px dashed rgba(255, 255, 255, 0.35); }
 .ev-nav-voie:first-child { border-left: none; }
@@ -924,3 +944,7 @@ body.ev-hud .ev-nav-hud { display: flex; position: fixed; inset: 0; z-index: 500
 .ev-aire-recharge { background: #0f8a5f; }
 body.ev-mode-voiture .ev-aire { width: 78px; }
 body.ev-mode-voiture .ev-aire strong { font-size: 15px; }
+
+/* Boutons de droite estompés après quelques secondes sans toucher l'écran. */
+.ev-nav-boutons { transition: opacity 0.5s; }
+body.ev-nav-calme .ev-nav-boutons { opacity: 0.35; }

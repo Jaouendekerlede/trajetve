@@ -582,6 +582,14 @@ function majEcran() {
   majZoneDanger();
   majFrise();
   majAires();
+  // Affichage compact : une seule info sous le bandeau (alerte, sinon voies,
+  // sinon prochaine borne) pour garder la carte visible.
+  if (document.body.classList.contains("ev-bandeau-compact")) {
+    const alerte = !$("ev-nav-alerte").classList.contains("hidden");
+    const voies = !$("ev-nav-vue-voies").classList.contains("hidden");
+    if (alerte || voies) $("ev-nav-borne").classList.add("hidden");
+    if (alerte) $("ev-nav-vue-voies").classList.add("hidden");
+  }
 
   afficherVoies(instr);
 
@@ -603,7 +611,7 @@ function majEcran() {
     const reste = Math.max(0, offsetBorne - etat.offset);
     const pctBorne = pctMaintenant - (reste / 1000) * (etat.consoKwhKm / etat.capacite) * 100;
     const heureBorne = Date.now() + secondesRestantesJusqua(offsetBorne) * 1000;
-    $("ev-nav-borne").innerHTML = `${arret.pause ? "📍" : "🔋"} <strong>${escapeHtml(arret.nom_borne)}</strong> dans ${distanceAffichee(reste)} · ${heure(heureBorne)} · batterie ~${Math.round(pctBorne)} %`;
+    $("ev-nav-borne").innerHTML = `${arret.pause ? "📍" : "🔋"} <strong>${escapeHtml(arret.nom_borne)}</strong> · ${distanceAffichee(reste)} · ${heure(heureBorne)} · ~${Math.round(pctBorne)} %`;
     $("ev-nav-borne").classList.remove("hidden");
     if (!arret.pause && pctBorne < etat.margePct - 3 && !etat.alerteBatterieAffichee) {
       etat.alerteBatterieAffichee = true;
@@ -692,7 +700,7 @@ function majAires() {
   const surRapide = (route.autoroutes || []).some(([a, b]) => etat.offset >= a - 200 && etat.offset <= b);
   const devant = surRapide && etat.prefs.aires && !etat.aLaBorne ? (route.aires || []).filter((x) => x.offset > etat.offset && x.offset - etat.offset < HORIZON_AIRES_M) : [];
   const borne = devant.find((x) => x.type === "recharge");
-  const aires = devant.filter((x) => x.type !== "recharge").slice(0, 2);
+  const aires = devant.filter((x) => x.type !== "recharge").slice(0, document.body.classList.contains("ev-bandeau-compact") ? 1 : 2);
   const liste = [borne, ...aires].filter(Boolean).sort((a, b) => a.offset - b.offset);
   const html = liste
     .map((x) => {
@@ -1435,6 +1443,7 @@ function cablerBoutons() {
   });
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
   $("ev-nav-micro-btn").addEventListener("click", commandeVocale);
+  document.addEventListener("pointerdown", () => etat && reveillerBoutons(), true);
   // Valeurs au toucher du graphique de batterie (crosshair).
   $("ev-nav-batt-graph").addEventListener("pointermove", toucherGraphique);
   $("ev-nav-batt-graph").addEventListener("pointerdown", toucherGraphique);
@@ -1499,6 +1508,17 @@ function cablerBoutons() {
     if (etat) arreterNavigation({ depuisRetour: true });
   });
   document.addEventListener("visibilitychange", surVisibilite);
+}
+
+// Boutons de droite estompés après 8 s sans toucher l'écran (la carte
+// reste dégagée) ; nets à nouveau au moindre toucher.
+const DELAI_CALME_MS = 8000;
+let minuteurCalme = null;
+
+function reveillerBoutons() {
+  document.body.classList.remove("ev-nav-calme");
+  clearTimeout(minuteurCalme);
+  minuteurCalme = setTimeout(() => etat && document.body.classList.add("ev-nav-calme"), DELAI_CALME_MS);
 }
 
 // Menu « ⋯ » : les actions moins fréquentes.
@@ -2037,7 +2057,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
 
   document.body.classList.add("ev-mode-navigation");
   document.body.classList.toggle("ev-mode-voiture", reglages.mode_voiture === true);
-  document.body.classList.toggle("ev-bandeau-compact", reglages.grand_bandeau === false);
+  document.body.classList.toggle("ev-bandeau-compact", reglages.taille_bandeau !== "grand");
+  reveillerBoutons();
   carte2D.definirIconeVoiture(reglages.icone_voiture);
   carte3D.definirIconeVoiture(reglages.icone_voiture);
   $("ev-nav-menu").classList.add("hidden");
@@ -2167,7 +2188,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   etat = null;
   vue.montrerBornes(false);
   vue.quitterNavigation();
-  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud");
+  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud", "ev-nav-calme");
   $("ev-navigation").classList.add("hidden");
   if (!depuisRetour && history.state?.navigation) {
     retourEnCours = true;

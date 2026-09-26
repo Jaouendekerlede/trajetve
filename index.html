@@ -413,7 +413,12 @@
 
       <div class="ev-carte-bloc">
         <h3>🧭 Navigation</h3>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-grand-bandeau"> 🪧 Grand bandeau de direction (flèche et nom de rue en gros)</label>
+        <label class="ev-champ">🪧 Affichage en navigation
+          <select id="ev-reglage-taille-bandeau" class="ev-input">
+            <option value="compact">Compact : la carte reste bien visible (conseillé)</option>
+            <option value="grand">Grand : flèche, rue et infos en très gros</option>
+          </select>
+        </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-zoom-renforce"> 🔍 Zoom renforcé aux ronds-points, grands carrefours, sorties et entrées de voie rapide</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix"> 🔊 Guidage vocal (on peut aussi le couper en route avec 🔊)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-voies"> 🛣️ Dire quelle voie prendre (« prenez la voie de droite »)</label>
@@ -495,7 +500,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 29 : bornes et aires sur autoroute, en bas à gauche</div>
+      <div class="ev-hint ev-lien-centre">Version 30 : affichage compact en navigation</div>
     </div>
   </div>
 </section>
