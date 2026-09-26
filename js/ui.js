@@ -1968,6 +1968,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-vue-carrefour").checked = reglages.vue_carrefour !== false;
   $("ev-reglage-icone").value = reglages.icone_voiture || "fleche_bleue";
   $("ev-reglage-parking-arrivee").checked = reglages.parking_arrivee !== false;
+  $("ev-reglage-privilegier-abos").checked = reglages.privilegier_abonnements !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
@@ -2060,6 +2061,7 @@ function cablerProfil() {
       vue_carrefour: $("ev-reglage-vue-carrefour").checked,
       icone_voiture: $("ev-reglage-icone").value,
       parking_arrivee: $("ev-reglage-parking-arrivee").checked,
+      privilegier_abonnements: $("ev-reglage-privilegier-abos").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
     });

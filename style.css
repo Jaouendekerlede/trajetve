@@ -882,3 +882,24 @@ body.ev-hud .ev-nav-hud { display: flex; position: fixed; inset: 0; z-index: 500
 .ev-nav-resultat { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--chip); }
 .ev-nav-resultat .ev-btn { flex-shrink: 0; }
 .ev-garee { font-size: 26px; line-height: 40px; width: 40px; height: 40px; text-align: center; border-radius: 50%; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
+
+/* Graphique batterie prévue / réelle (palette validée : bleu / orange) */
+.ev-batt-graph { --serie-1: #3987e5; --serie-2: #d95926; margin-top: 6px; touch-action: none; }
+:root[data-theme="clair"] .ev-batt-graph, :root[data-theme="clair"] .ev-batt-legende { --serie-1: #2a78d6; --serie-2: #eb6834; }
+.ev-batt-legende { --serie-1: #3987e5; --serie-2: #d95926; display: flex; gap: 16px; font-size: 13px; color: var(--texte-att); margin-top: 6px; }
+.ev-batt-legende span { display: inline-flex; align-items: center; gap: 6px; }
+.ev-batt-legende .trait-prevue { width: 18px; height: 2px; background: var(--serie-1); }
+.ev-batt-legende .point-reelle { width: 9px; height: 9px; border-radius: 50%; background: var(--serie-2); }
+.ev-batt-graph svg { display: block; width: 100%; height: auto; }
+.ev-batt-graph .grille { stroke: var(--bordure); stroke-width: 1; }
+.ev-batt-graph .axe { fill: var(--texte-att); font-size: 11px; }
+.ev-batt-graph .borne { stroke: var(--texte-att); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; }
+.ev-batt-graph .maintenant { stroke: var(--texte); stroke-width: 1; opacity: 0.5; }
+.ev-batt-graph .prevue { fill: none; stroke: var(--serie-1); stroke-width: 2; stroke-linejoin: round; }
+.ev-batt-graph .reelle { fill: none; stroke: var(--serie-2); stroke-width: 2; stroke-linejoin: round; }
+.ev-batt-graph .point-reel { fill: var(--serie-2); stroke: var(--panneau); stroke-width: 2; }
+.ev-batt-graph .curseur { stroke: var(--texte); stroke-width: 1; }
+.ev-batt-details summary { font-size: 13px; color: var(--texte-att); cursor: pointer; margin-top: 4px; }
+.ev-batt-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.ev-batt-table th, .ev-batt-table td { padding: 3px 6px; text-align: right; border-bottom: 1px solid var(--bordure); }
+#ev-nav-batterie-panneau { max-height: calc(100vh - 220px); overflow-y: auto; }

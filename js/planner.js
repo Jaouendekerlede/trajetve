@@ -399,7 +399,10 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     const futurMin = energieRestanteKwh > 0 ? (energieRestanteKwh / puissanceMoyenneFuture) * 60 + SURCOUT_ARRET_MIN * Math.ceil(energieRestanteKwh / energieParArretKwh) : 0;
     const euros = plan.kwh * (borne.prix_kwh_eur ?? PRIX_KWH_ESTIME_DEFAUT_EUR) + Math.max(0, energieRestanteKwh) * PRIX_KWH_ESTIME_DEFAUT_EUR;
     const penaliteQualite = (100 - borne._score_info.score) * (mode === "rapide" ? 0.15 : 0.35);
-    return detourMin + plan.tempsMin + futurMin + euros * MINUTES_PAR_EURO + penaliteQualite;
+    // Réseau d'abonnement (réglage « privilégier mes réseaux ») : préféré à
+    // temps à peu près égal.
+    const bonusReseau = borne.abonnement ? options.bonusAbonnementMin || 0 : 0;
+    return detourMin + plan.tempsMin + futurMin + euros * MINUTES_PAR_EURO + penaliteQualite - bonusReseau;
   }
 
   // Endroits où chercher : à la limite de la batterie, puis un peu avant

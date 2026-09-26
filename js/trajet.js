@@ -77,6 +77,8 @@ async function calculerItineraire(depart, destination, opts) {
 }
 
 const MAX_ALTERNATIVES = 2;
+// Préférence pour les réseaux d'abonnement : vaut 8 minutes de trajet.
+const BONUS_ABONNEMENT_MIN = 8;
 
 function kmSurSections(coords, sections, type) {
   let km = 0;
@@ -186,6 +188,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     enrichirBornes: async (bornes) => appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true })),
     preferCb: opts.preferer_cb,
     optimiserArrets: opts.optimiser_arrets !== false,
+    bonusAbonnementMin: lireReglages().privilegier_abonnements === false ? 0 : BONUS_ABONNEMENT_MIN,
     fusionner: fusionnerBornes,
     bornesSupplementaires: async (lat, lon) => {
       const r = await stationsOfficiellesZone(lat, lon, 20, { puissanceMin: Math.max(40, opts.puissance_min_kw || 0), maxLignes: 300 });

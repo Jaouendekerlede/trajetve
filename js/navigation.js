@@ -9,6 +9,7 @@ import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture } from "./storage.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
+import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
@@ -877,8 +878,10 @@ function arriveeBorne(arret) {
     <label class="ev-champ">Batterie en repartant : <span id="ev-nav-reprise-val" class="ev-valeur">${arret.pct_depart_borne}</span> %
       <input type="range" min="5" max="100" value="${arret.pct_depart_borne}" id="ev-nav-reprise-input" class="ev-curseur">
     </label>
-    <button type="button" id="ev-nav-reprendre-btn" class="ev-btn-principal">▶ Reprendre la route</button>`;
+    <button type="button" id="ev-nav-reprendre-btn" class="ev-btn-principal">▶ Reprendre la route</button>
+    ${arret.alternatives?.length ? `<button type="button" id="ev-nav-indispo-btn" class="ev-btn">❌ Borne occupée ou en panne : une autre</button>` : ""}`;
   carteBorne.classList.remove("hidden");
+  $("ev-nav-indispo-btn")?.addEventListener("click", afficherSecours);
   $("ev-nav-reprise-input").addEventListener("input", (e) => ($("ev-nav-reprise-val").textContent = e.target.value));
   $("ev-nav-arrivee-input").addEventListener("input", (e) => ($("ev-nav-arrivee-val").textContent = e.target.value));
   const pctEstime = batterieEstimee();
@@ -894,6 +897,8 @@ function arriveeBorne(arret) {
       ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation" });
     }
     etat.batterie = { refPct: pctRepart, refOdometre: etat.odometre };
+    noterBatterie(pctArrivee);
+    noterBatterie(pctRepart);
     etat.arretsRestants.shift();
     etat.route.troncons.shift();
     etat.aLaBorne = null;
@@ -1030,6 +1035,9 @@ async function replanifier() {
   etat.indiceTrace = 0;
   etat.arretsRestants = [...(nouveauPlan.arrets || [])];
   etat.batterie = { refPct: pct, refOdometre: etat.odometre };
+  // Le nouveau plan part d'ici : ses kilomètres sont décalés d'autant.
+  etat.kmPlan = etat.odometre / 1000;
+  etat.pctDepartPlan = pct;
   etat.alerteBatterieAffichee = false;
   const route = await calculerRouteNav(etat.pos, etat.pos.cap);
   if (route) {
@@ -1366,6 +1374,14 @@ function cablerBoutons() {
   });
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
   $("ev-nav-micro-btn").addEventListener("click", commandeVocale);
+  // Valeurs au toucher du graphique de batterie (crosshair).
+  $("ev-nav-batt-graph").addEventListener("pointermove", toucherGraphique);
+  $("ev-nav-batt-graph").addEventListener("pointerdown", toucherGraphique);
+  $("ev-nav-secours").addEventListener("click", (e) => {
+    if (e.target.closest("[data-fermer]")) return $("ev-nav-secours").classList.add("hidden");
+    const i = e.target.closest("[data-secours]")?.dataset.secours;
+    if (i !== undefined) remplacerBorne(Number(i));
+  });
   $("ev-nav-recherche-cats").innerHTML = CATEGORIES_TRAJET.map((c) => `<button type="button" data-requete="${escapeHtml(c.requete)}">${c.icone}<span>${escapeHtml(c.nom)}</span></button>`).join("");
   $("ev-nav-recherche").addEventListener("click", (e) => {
     if (e.target.closest("[data-fermer]")) return $("ev-nav-recherche").classList.add("hidden");
@@ -1400,11 +1416,13 @@ function cablerBoutons() {
     $("ev-nav-batt-input").value = String(pct);
     $("ev-nav-batt-val").textContent = String(pct);
     panneau.classList.remove("hidden");
+    majGraphiqueBatterie();
   });
   $("ev-nav-batt-input").addEventListener("input", (e) => ($("ev-nav-batt-val").textContent = e.target.value));
   $("ev-nav-batt-ok").addEventListener("click", () => {
     if (!etat.demo) mesurerConso(Number($("ev-nav-batt-input").value));
     etat.batterie = { refPct: Number($("ev-nav-batt-input").value), refOdometre: etat.odometre };
+    noterBatterie(Number($("ev-nav-batt-input").value));
     etat.alerteBatterieAffichee = false;
     $("ev-nav-batterie-panneau").classList.add("hidden");
     majEcran();
@@ -1412,6 +1430,7 @@ function cablerBoutons() {
   $("ev-nav-replan-btn").addEventListener("click", () => {
     if (!etat.demo) mesurerConso(Number($("ev-nav-batt-input").value));
     etat.batterie = { refPct: Number($("ev-nav-batt-input").value), refOdometre: etat.odometre };
+    noterBatterie(Number($("ev-nav-batt-input").value));
     $("ev-nav-batterie-panneau").classList.add("hidden");
     replanifier();
   });
@@ -1428,6 +1447,114 @@ function actionMenu(action) {
   else if (action === "recherche") $("ev-nav-recherche").classList.remove("hidden");
   else if (action === "parkings") proposerParkings(true);
   else if (action === "partage") partagerArrivee();
+  else if (action === "secours") afficherSecours();
+  else if (action === "batterie") $("ev-nav-batt-btn").click();
+}
+
+// ── Batterie prévue / réelle ────────────────────────────────────────────────
+
+function noterBatterie(pct) {
+  etat.mesuresBatterie.push({ km: etat.odometre / 1000, pct });
+}
+
+function pointsPrevus() {
+  const p = etat.plan;
+  const d0 = etat.kmPlan || 0;
+  const pts = [{ km: d0, pct: etat.pctDepartPlan }];
+  for (const a of p.arrets || []) pts.push({ km: d0 + a.km_depuis_depart, pct: a.pct_arrivee_borne }, { km: d0 + a.km_depuis_depart, pct: a.pct_depart_borne });
+  pts.push({ km: d0 + (p.distance_km || 0), pct: p.pct_batterie_arrivee ?? 0 });
+  return pts;
+}
+
+function majGraphiqueBatterie() {
+  const prevus = pointsPrevus();
+  const reels = etat.mesuresBatterie;
+  const bornes = (etat.plan.arrets || []).map((a) => ({ km: (etat.kmPlan || 0) + a.km_depuis_depart, nom: a.nom_borne }));
+  $("ev-nav-batt-graph").innerHTML = svgBatterie(prevus, reels, bornes, etat.odometre / 1000);
+  $("ev-nav-batt-table").innerHTML = tableauBatterie(prevus, reels);
+  const kmNow = etat.odometre / 1000;
+  const ecart = Math.round(batterieEstimee() - pctPrevuA(prevus, kmNow));
+  $("ev-nav-batt-info").textContent = `Maintenant : ~${Math.round(batterieEstimee())} % (prévu ${Math.round(pctPrevuA(prevus, kmNow))} %, ${ecart >= 0 ? "+" : ""}${ecart})`;
+}
+
+function toucherGraphique(e) {
+  const svg = $("ev-nav-batt-graph").querySelector("svg");
+  if (!svg) return;
+  const r = svg.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width) * 340;
+  const maxKm = Number(svg.dataset.maxKm);
+  const km = Math.max(0, Math.min(maxKm, ((x - 36) / (328 - 36)) * maxKm));
+  const curseur = svg.querySelector(".curseur");
+  curseur.setAttribute("x1", String(36 + (km / maxKm) * (328 - 36)));
+  curseur.setAttribute("x2", curseur.getAttribute("x1"));
+  curseur.setAttribute("visibility", "visible");
+  const reel = etat.mesuresBatterie.reduce((m, p) => (Math.abs(p.km - km) < Math.abs((m?.km ?? Infinity) - km) ? p : m), null);
+  const reelTxt = reel && Math.abs(reel.km - km) <= maxKm * 0.03 ? ` · réelle ${Math.round(reel.pct)} %` : "";
+  $("ev-nav-batt-info").textContent = `km ${Math.round(km)} · prévue ${Math.round(pctPrevuA(pointsPrevus(), km))} %${reelTxt}`;
+}
+
+// ── Borne de secours : occupée ou en panne → une autre, en un appui ────────
+
+function prochaineBorne() {
+  const k = etat.arretsRestants.findIndex((a) => !a.pause);
+  return k < 0 ? null : { k, arret: etat.arretsRestants[k] };
+}
+
+function afficherSecours() {
+  const b = prochaineBorne();
+  const alts = b?.arret.alternatives || [];
+  $("ev-nav-secours-liste").innerHTML = !b
+    ? `<div class="ev-nav-carte-sous">Plus aucune recharge prévue.</div>`
+    : alts.length
+      ? `<div class="ev-nav-carte-sous">À la place de ${escapeHtml(b.arret.nom_borne)} :</div>` +
+        alts
+          .map((a, i) => {
+            const infos = [a.puissance_max_kw ? `${Math.round(a.puissance_max_kw)} kW` : "", a.operateur || "", a.prix_kwh_eur != null ? `${a.prix_kwh_eur.toFixed(2).replace(".", ",")} €/kWh` : "", a.distance_km != null ? `${a.distance_km.toFixed(1).replace(".", ",")} km de la route` : ""].filter(Boolean).join(" · ");
+            return `<div class="ev-nav-resultat"><div><strong>🔌 ${escapeHtml(a.nom)}</strong><div class="ev-nav-carte-sous">${escapeHtml(infos)}</div></div><button type="button" class="ev-btn" data-secours="${i}">Y aller</button></div>`;
+          })
+          .join("")
+      : `<div class="ev-nav-carte-sous">Pas d'autre borne connue près de celle-ci : « 🔄 Recalculer les recharges » (touchez la batterie) en cherchera une.</div>`;
+  $("ev-nav-secours").classList.remove("hidden");
+}
+
+async function remplacerBorne(i) {
+  const b = prochaineBorne();
+  const alt = b?.arret.alternatives?.[i];
+  if (!alt) return;
+  $("ev-nav-secours").classList.add("hidden");
+  const ancien = b.arret;
+  const puissanceVoiture = obtenirProfilVehicule().puissance_dc_kw || alt.puissance_max_kw || ancien.puissance_kw;
+  const puissance = Math.round(Math.min(alt.puissance_max_kw || ancien.puissance_kw, puissanceVoiture)) || ancien.puissance_kw;
+  const ancienneAlt = { nom: ancien.nom_borne, adresse: ancien.adresse, lat: ancien.lat, lon: ancien.lon, distance_km: ancien.distance_borne_km, puissance_max_kw: ancien.puissance_kw, operateur: ancien.operateur, prix_kwh_eur: ancien.prix_kwh_eur };
+  const nouvel = {
+    ...ancien,
+    nom_borne: alt.nom,
+    adresse: alt.adresse,
+    lat: alt.lat,
+    lon: alt.lon,
+    operateur: alt.operateur,
+    prix_kwh_eur: alt.prix_kwh_eur ?? ancien.prix_kwh_eur,
+    puissance_kw: puissance,
+    temps_charge_min: Math.round((ancien.temps_charge_min * ancien.puissance_kw) / Math.max(1, puissance)),
+    alternatives: [...ancien.alternatives.filter((x) => x !== alt), ancienneAlt],
+  };
+  etat.arretsRestants[b.k] = nouvel;
+  if (etat.aLaBorne === ancien) {
+    etat.aLaBorne = null;
+    $("ev-nav-etape-borne").classList.add("hidden");
+  }
+  afficherAlerte(`🔌 Direction ${alt.nom}…`);
+  const route = await calculerRouteNav(etat.pos, etat.pos.cap, { sansSecours: true });
+  if (!etat) return;
+  if (!route) {
+    etat.arretsRestants[b.k] = ancien;
+    afficherAlerte("⚠️ Changement impossible pour le moment (réseau ?).");
+    return;
+  }
+  installerRoute(route);
+  afficherAlerte(null);
+  parler(`Nouvelle borne : ${alt.nom}.`, true);
+  majEcran();
 }
 
 function majBoutonOrientation() {
@@ -1786,6 +1913,9 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     feuxConnus: new Map(),
     manoeuvresFeux: new Set(),
     carrefours: new Map(),
+    mesuresBatterie: [{ km: 0, pct: chargeDepartPct ?? 80 }],
+    kmPlan: 0,
+    pctDepartPlan: chargeDepartPct ?? 80,
     carrefoursDemandes: new Set(),
     capacite: obtenirProfilVehicule().capacite_kwh,
     consoKwhKm: (plan.energie_totale_necessaire_kwh || 13) / Math.max(1, plan.distance_km),
@@ -1817,6 +1947,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-frise").classList.add("hidden");
   $("ev-nav-recherche").classList.add("hidden");
   $("ev-nav-parkings").classList.add("hidden");
+  $("ev-nav-secours").classList.add("hidden");
   $("ev-nav-recherche-res").innerHTML = "";
   $("ev-navigation").classList.remove("hidden");
   $("ev-nav-etape-borne").classList.add("hidden");
