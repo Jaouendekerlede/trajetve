@@ -112,3 +112,8 @@ export const MODES_TRAJET = {
   confort: { marge_pct: 15, cible_pct: 80, poids_puissance: 1.0, poids_cout: 0.8 },
   prudent: { marge_pct: 20, cible_pct: 90, poids_puissance: 1.0, poids_cout: 1.0 },
 };
+
+// Identifiant client Google (Drive) : public par conception (visible dans
+// toute appli web qui se connecte à Google), pas un secret. Projet Google
+// Cloud « Jarvis », origine autorisée https://jaouendekerlede.github.io.
+export const DRIVE_CLIENT_ID = "16168336159-n7r2565mgglc1p43ebg3isc63cif8uam.apps.googleusercontent.com";

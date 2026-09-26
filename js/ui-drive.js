@@ -5,6 +5,10 @@ import { $, toast, bandeau } from "./ui-commun.js";
 import { exporterDonnees, importerDonnees, lireReglages, sauverReglages } from "./storage.js";
 import { obtenirJeton, envoyerSauvegarde, lireSauvegarde } from "./drive.js";
 import { empreinteDonnees } from "./restauration.js";
+import { DRIVE_CLIENT_ID } from "./config.js";
+
+// Identifiant choisi dans le Profil (avancé), sinon celui de l'appli.
+const clientId = () => lireReglages().drive_client_id || DRIVE_CLIENT_ID;
 
 // Suivi (hors sauvegarde, propre à ce téléphone).
 const CLE_SUIVI = "tve_drive";
@@ -22,13 +26,12 @@ function majInfo() {
   const s = suivi();
   const el = $("ev-drive-info");
   if (!el) return;
-  el.textContent = s.le ? `Dernière sauvegarde sur Drive : ${new Date(s.le).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : lireReglages().drive_client_id ? "Pas encore de sauvegarde sur Drive." : "Collez d'abord l'identifiant client Google (voir l'aide).";
+  el.textContent = s.le ? `Dernière sauvegarde sur Drive : ${new Date(s.le).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "Pas encore de sauvegarde sur Drive : touchez « Sauvegarder maintenant ».";
 }
 
 export async function sauvegarderSurDrive({ silencieux = false } = {}) {
-  const clientId = lireReglages().drive_client_id;
   try {
-    const jeton = await obtenirJeton(clientId, { silencieux });
+    const jeton = await obtenirJeton(clientId(), { silencieux });
     const donnees = exporterDonnees();
     await envoyerSauvegarde(jeton, donnees);
     localStorage.setItem(CLE_SUIVI, JSON.stringify({ le: Date.now(), empreinte: empreinteDonnees(donnees.donnees) }));
@@ -44,15 +47,14 @@ export async function sauvegarderSurDrive({ silencieux = false } = {}) {
 
 async function restaurerDepuisDrive() {
   try {
-    const jeton = await obtenirJeton(lireReglages().drive_client_id);
+    const jeton = await obtenirJeton(clientId());
     const r = await lireSauvegarde(jeton);
     if (!r) return toast("☁️ Aucune sauvegarde trouvée sur ce compte Google.");
     const quand = new Date(r.date).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
     if (!confirm(`Restaurer la sauvegarde Drive du ${quand} ? Les données de ce téléphone seront remplacées.`)) return;
-    const idClient = lireReglages().drive_client_id;
     const n = importerDonnees(r.sauvegarde);
-    // L'identifiant client reste, même si la sauvegarde n'en avait pas.
-    if (!lireReglages().drive_client_id) sauverReglages({ drive_client_id: idClient, drive_actif: true });
+    // Sauvegarde Drive gardée active sur ce téléphone après la restauration.
+    sauverReglages({ drive_actif: true });
     toast(`✅ ${n} éléments restaurés : redémarrage…`);
     setTimeout(() => location.reload(), 1200);
   } catch (e) {
@@ -63,7 +65,7 @@ async function restaurerDepuisDrive() {
 // Fin de trajet (appui sur « Terminer ») : sauvegarde si les données ont
 // changé et que la dernière a plus d'un jour.
 export function sauvegardeApresTrajet() {
-  if (!lireReglages().drive_actif || !lireReglages().drive_client_id) return;
+  if (!lireReglages().drive_actif) return;
   const s = suivi();
   if (s.le && Date.now() - s.le < JOUR_MS && s.empreinte === empreinteDonnees(exporterDonnees().donnees)) return;
   sauvegarderSurDrive({ silencieux: true });
@@ -80,6 +82,7 @@ export function proposerSauvegardeDrive() {
 
 export function cablerDrive() {
   $("ev-drive-client").value = lireReglages().drive_client_id || "";
+  $("ev-drive-client").placeholder = "Identifiant de l'appli (laisser vide)";
   $("ev-drive-client").addEventListener("change", (e) => {
     sauverReglages({ drive_client_id: e.target.value.trim() });
     majInfo();
