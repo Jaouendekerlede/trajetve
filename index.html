@@ -516,6 +516,18 @@
         <button id="ev-lien-sauvegarde-btn" class="ev-btn-principal" type="button">📧 M'envoyer le lien de restauration</button>
         <div id="ev-lien-sauvegarde-info" class="ev-hint ev-lien-centre"></div>
         <button id="ev-installer-btn" class="ev-btn ev-btn-plein hidden" type="button">📲 Installer l'appli sur ce téléphone</button>
+        <details class="ev-details" id="ev-drive-bloc">
+          <summary>☁️ Google Drive (sauvegarde automatique)</summary>
+          <div class="ev-hint">Compte Google gratuit suffisant. La sauvegarde va dans un dossier caché réservé à l'appli ; elle se refait seule en fin de trajet. Sur un nouveau téléphone : « Restaurer depuis Drive ».</div>
+          <label class="ev-champ">Identifiant client Google (créé une fois, voir l'aide)
+            <input type="text" id="ev-drive-client" class="ev-input" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="ev-grille-2">
+            <button id="ev-drive-sauver-btn" class="ev-btn" type="button">☁️ Sauvegarder maintenant</button>
+            <button id="ev-drive-restaurer-btn" class="ev-btn" type="button">⬇️ Restaurer depuis Drive</button>
+          </div>
+          <div id="ev-drive-info" class="ev-hint"></div>
+        </details>
         <div class="ev-hint">Ou avec un fichier :</div>
         <div class="ev-grille-2">
           <button id="ev-export-donnees-btn" class="ev-btn" type="button">⬆️ Exporter mes données</button>
@@ -524,7 +536,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 35 : téléphone faible, zones blanches, taille du texte</div>
+      <div class="ev-hint ev-lien-centre">Version 36 : sauvegarde sur Google Drive</div>
     </div>
   </div>
 </section>

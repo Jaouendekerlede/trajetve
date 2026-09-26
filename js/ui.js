@@ -28,6 +28,7 @@ import { rendreStats, cablerStats } from "./ui-stats.js";
 import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
 import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { boutonPartage, partagerTrajet } from "./ui-partage.js";
+import { cablerDrive } from "./ui-drive.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -596,6 +597,7 @@ function cablerCarte() {
   cablerTrafic();
   cablerVoitureGaree();
   cablerStats();
+  cablerDrive();
   // Raccourcis de destination (Chez moi, Travail, trajet habituel).
   document.querySelector(".ev-raccourcis-dest").addEventListener("click", (e) => {
     const b = e.target.closest("[data-dest]");

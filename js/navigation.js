@@ -8,6 +8,7 @@
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace } from "./storage.js";
 import { enrichirBornes } from "./irve.js";
+import { sauvegardeApresTrajet } from "./ui-drive.js";
 import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
@@ -1116,7 +1117,11 @@ function arriveeDestination() {
     ${finale ? `<a class="ev-btn" href="${escapeHtml(lienAPied(finale.lat, finale.lon))}" target="_blank" rel="noopener">🚶 Finir à pied jusqu'à ${escapeHtml(finale.nom || "la destination")}</a>` : ""}
     <button type="button" id="ev-nav-terminer-btn" class="ev-btn-principal">Terminer</button>`;
   carteFin.classList.remove("hidden");
-  $("ev-nav-terminer-btn").addEventListener("click", () => arreterNavigation());
+  $("ev-nav-terminer-btn").addEventListener("click", () => {
+    // Appui de l'utilisateur : Google autorise alors la sauvegarde Drive.
+    if (!etat.demo) sauvegardeApresTrajet();
+    arreterNavigation();
+  });
 }
 
 // ── Bornes affichées pendant la conduite ────────────────────────────────────
