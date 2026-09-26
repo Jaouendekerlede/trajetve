@@ -168,7 +168,8 @@ export function calculerTempsCharge(kwhAAjouter, puissanceBorneKw, { pctDebut, p
     restant -= kwh;
     pct += (kwh / capacite) * 100;
   }
-  return minutes;
+  // Appris sur vos recharges (durée réelle / durée calculée).
+  return minutes * (profil.facteur_charge_appris || 1);
 }
 
 export function comparerCoutDomicilePublic(kwhACharger, profil, prixPublicEurKwh) {

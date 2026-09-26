@@ -6,7 +6,7 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType } from "./storage.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
 import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
@@ -16,7 +16,7 @@ import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js
 import { icone } from "./icones.js";
 import { ouvrirSOS } from "./ui-sos.js";
 import { rechercherParkings } from "./parkings.js";
-import { calculerItineraireTomTom } from "./tomtom.js";
+import { calculerItineraireTomTom, appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe } from "./osm-route.js";
@@ -470,8 +470,12 @@ function mesurerConso(pctReel) {
   if (kwh > 0) enregistrerMesureConso(km, kwh, types);
 }
 
+// Énergie consommée depuis le dernier repère : conso apprise pour le type
+// de route roulé (ville, route, autoroute) quand elle existe, sinon la
+// moyenne du plan.
 function batterieEstimee() {
   const b = etat.batterie;
+  if (b.refEnergie !== undefined) return b.refPct - ((etat.energieCumulee - b.refEnergie) / etat.capacite) * 100;
   return b.refPct - ((etat.odometre - b.refOdometre) / 1000) * (etat.consoKwhKm / etat.capacite) * 100;
 }
 
@@ -1121,7 +1125,10 @@ function arriveeBorne(arret) {
     etat.tempsRechargeMs += Date.now() - (etat.debutBorne || Date.now());
     if (!etat.demo && kwh >= 0.5) {
       etat.coutRecharges += Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100;
-      ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation" });
+      // Durée réelle et calculée (sans l'apprentissage) : apprend le temps de charge.
+      const dureeReelle = Math.round((Date.now() - (etat.debutBorne || Date.now())) / 60000);
+      const dureePrevue = Math.round(calculerTempsCharge(kwh, arret.puissance_kw || 50, { pctDebut: pctArrivee, profil: { ...obtenirProfilVehicule(), facteur_charge_appris: 1 } }));
+      ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation", duree_reelle_min: dureeReelle, duree_prevue_min: dureePrevue, puissance_kw: arret.puissance_kw });
     }
     arreterMinuteurRecharge();
     etat.batterie = { refPct: pctRepart, refOdometre: etat.odometre };
@@ -1213,6 +1220,9 @@ async function rafraichirBornesProches() {
 
 async function recalculer(raison) {
   if (!etat || etat.recalculEnCours || etat.demo) return;
+  // Quota TomTom presque atteint : plus de mise à jour du trafic toutes les
+  // 5 min (les recalculs hors itinéraire restent possibles).
+  if (raison === "trafic" && appelsTomTomDuJour() > QUOTA_TOMTOM_JOUR * 0.9) return;
   etat.recalculEnCours = true;
   etat.dernierRecalcul = Date.now();
   if (raison === "hors_route") {
@@ -1392,13 +1402,17 @@ function surPosition(p) {
     etat.odometre += avance;
     // Type de route (pour la conso apprise) d'après la vitesse.
     const kmhType = (p.vitesse || 0) * 3.6;
-    etat.kmTypes[kmhType < 55 ? "ville" : kmhType < 95 ? "route" : "autoroute"] += avance / 1000;
+    const type = kmhType < 55 ? "ville" : kmhType < 95 ? "route" : "autoroute";
+    etat.kmTypes[type] += avance / 1000;
+    const appris = etat.consoAppriseParType?.[type];
+    etat.energieCumulee += (avance / 1000) * (appris ? appris / 100 : etat.consoKwhKm);
   }
   // Tracé réellement roulé (« Revoir mes trajets ») : un point tous les 150 m.
   const dernier = etat.traceRoulee[etat.traceRoulee.length - 1];
   if (!etat.demo && (!dernier || haversineKm(dernier[1], dernier[0], p.lat, p.lon) > 0.15)) etat.traceRoulee.push([Math.round(p.lon * 1e5) / 1e5, Math.round(p.lat * 1e5) / 1e5]);
   // Nouveau repère de batterie : la répartition repart d'ici.
   if (!etat.batterie.refTypes) etat.batterie.refTypes = { ...etat.kmTypes };
+  if (etat.batterie.refEnergie === undefined) etat.batterie.refEnergie = etat.energieCumulee;
   etat.idx = m.i;
   etat.offset = m.offset;
   etat.pos = p;
@@ -2445,6 +2459,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     carrefours: new Map(),
     mesuresBatterie: [{ km: 0, pct: chargeDepartPct ?? 80 }],
     kmTypes: { ville: 0, route: 0, autoroute: 0 },
+    energieCumulee: 0,
+    consoAppriseParType: consoParType(),
     traceRoulee: [],
     tempsRechargeMs: 0,
     coutRecharges: 0,

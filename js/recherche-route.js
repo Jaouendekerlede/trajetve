@@ -1,3 +1,5 @@
+import { compterAppelTomTom } from "./tomtom.js";
+
 // Recherche « le long du trajet » (café, boulangerie, toilettes…) : service
 // TomTom qui renvoie les lieux proches de la route avec le détour en temps.
 
@@ -22,6 +24,7 @@ export async function rechercherLeLongDu(cle, coords, requete) {
   if (points.length < 2) return { ok: true, lieux: [] };
   const url = `https://api.tomtom.com/search/2/searchAlongRoute/${encodeURIComponent(requete)}.json?key=${encodeURIComponent(cle)}&maxDetourTime=${DETOUR_MAX_S}&limit=10&language=fr-FR`;
   try {
+    compterAppelTomTom();
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ route: { points } }) });
     if (!r.ok) return { ok: false, erreur: `HTTP ${r.status}` };
     const j = await r.json();

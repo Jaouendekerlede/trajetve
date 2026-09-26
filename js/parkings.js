@@ -10,6 +10,7 @@ import { avecMemoire } from "./util.js";
 const SERVEURS = [
   { url: "https://overpass-api.de/api/interpreter", delaiMs: 10000 },
   { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", delaiMs: 25000 },
+  { url: "https://overpass.private.coffee/api/interpreter", delaiMs: 25000 },
 ];
 const DUREE_MEMOIRE_MS = 30 * 60 * 1000;
 const MAX_RESULTATS = 150;
@@ -54,9 +55,55 @@ function parkingDepuisOsm(e) {
   };
 }
 
-// Requête Overpass sur le serveur principal, puis le secours. Renvoie
-// { ok, elements } ou { ok: false, erreur }.
-export async function interrogerOverpass(requete) {
+// Réponses gardées (Cache Storage) : les trajets reviennent souvent, et le
+// service est souvent saturé. Au-delà de `dureeJours`, on redemande ; si le
+// service ne répond pas, on reprend quand même la dernière réponse connue.
+const CACHE_OSM = "trajetve-osm";
+const enCours = new Map();
+
+function cleRequete(requete) {
+  let h = 5381;
+  for (let i = 0; i < requete.length; i++) h = ((h * 33) ^ requete.charCodeAt(i)) >>> 0;
+  return `https://cache.trajetve/osm/${h.toString(36)}-${requete.length}`;
+}
+
+async function lireCacheOsm(requete) {
+  if (typeof caches === "undefined") return null;
+  try {
+    const r = await (await caches.open(CACHE_OSM)).match(cleRequete(requete));
+    return r ? { date: Number(r.headers.get("x-date")) || 0, elements: (await r.json()).elements || [] } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ecrireCacheOsm(requete, elements) {
+  if (typeof caches === "undefined") return;
+  try {
+    await (await caches.open(CACHE_OSM)).put(cleRequete(requete), new Response(JSON.stringify({ elements }), { headers: { "Content-Type": "application/json", "x-date": String(Date.now()) } }));
+  } catch {
+    // Stockage plein : tant pis, pas de mémoire.
+  }
+}
+
+// Requête Overpass (avec mémoire), sur le serveur principal puis les
+// secours. Renvoie { ok, elements } ou { ok: false, erreur }.
+export async function interrogerOverpass(requete, { dureeJours = 30 } = {}) {
+  const garde = await lireCacheOsm(requete);
+  if (garde && Date.now() - garde.date < dureeJours * 86400000) return { ok: true, elements: garde.elements, memoire: true };
+  // Même requête déjà partie : on attend sa réponse.
+  if (enCours.has(requete)) return enCours.get(requete);
+  const promesse = interrogerServeurs(requete).then(async (r) => {
+    enCours.delete(requete);
+    if (r.ok) await ecrireCacheOsm(requete, r.elements);
+    else if (garde) return { ok: true, elements: garde.elements, memoire: true, ancien: true };
+    return r;
+  });
+  enCours.set(requete, promesse);
+  return promesse;
+}
+
+async function interrogerServeurs(requete) {
   let erreur = "";
   for (const { url, delaiMs } of SERVEURS) {
     try {
@@ -80,7 +127,7 @@ export async function rechercherParkings(zone) {
   const cle = `parkings|${r(zone.sud)}|${r(zone.ouest)}|${r(zone.nord)}|${r(zone.est)}`;
   return avecMemoire(cle, DUREE_MEMOIRE_MS, async () => {
     const requete = `[out:json][timeout:20];nwr["amenity"="parking"](${zone.sud},${zone.ouest},${zone.nord},${zone.est});out center tags ${MAX_RESULTATS * 3};`;
-    const res = await interrogerOverpass(requete);
+    const res = await interrogerOverpass(requete, { dureeJours: 7 });
     if (!res.ok) return { ok: false, erreur: res.erreur.replace("OpenStreetMap", "des parkings") };
     return { ok: true, parkings: res.elements.map(parkingDepuisOsm).filter(Boolean).slice(0, MAX_RESULTATS) };
   });

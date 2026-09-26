@@ -51,6 +51,7 @@ async function requete(apiKey, points, options, sections, pointsSupport) {
   const corps = {};
   if (pointsSupport) corps.supportingPoints = pointsSupport;
   if (options.zonesEvitees?.length) corps.avoidAreas = { rectangles: options.zonesEvitees };
+  if (typeof localStorage !== "undefined") compterAppelTomTom();
   if (!Object.keys(corps).length) return fetch(`${url}?${params.toString()}`);
   return fetch(`${url}?${params.toString()}`, {
     method: "POST",
@@ -147,5 +148,37 @@ export async function calculerItineraireTomTom(apiKey, lat1, lon1, lat2, lon2, o
   } catch (e) {
     console.warn("[TOMTOM] Erreur calcul itinéraire", e);
     return { erreur: "reseau" };
+  }
+}
+
+// Appels du jour aux services TomTom payants au-delà du gratuit (itinéraires,
+// recherches) : ~2 500 par jour sur un compte gratuit.
+const CLE_QUOTA = "tve_quota_tomtom";
+export const QUOTA_TOMTOM_JOUR = 2500;
+
+export function compterAppelTomTom() {
+  const jour = new Date().toDateString();
+  let q = { jour, n: 0 };
+  try {
+    const lu = JSON.parse(localStorage.getItem(CLE_QUOTA));
+    if (lu?.jour === jour) q = lu;
+  } catch {
+    // compteur illisible : repart de zéro
+  }
+  q.n++;
+  try {
+    localStorage.setItem(CLE_QUOTA, JSON.stringify(q));
+  } catch {
+    // stockage plein : pas de compteur
+  }
+  return q.n;
+}
+
+export function appelsTomTomDuJour() {
+  try {
+    const q = JSON.parse(localStorage.getItem(CLE_QUOTA));
+    return q?.jour === new Date().toDateString() ? q.n : 0;
+  } catch {
+    return 0;
   }
 }

@@ -97,3 +97,13 @@ test("trajet habituel : destination prise au moins 2 fois vers cette heure-ci", 
   assert.equal(s.destinationHabituelle(new Date(2026, 8, 26, 7, 40)), "Travail (Rennes)");
   assert.equal(s.destinationHabituelle(new Date(2026, 8, 26, 13, 0)), null);
 });
+
+test("temps de charge appris sur les recharges réelles (pauses trop longues écartées)", () => {
+  localStorage.clear();
+  assert.equal(s.facteurChargeAppris(), null);
+  s.ajouterAuJournal({ lieu: "A", kwh: 30, duree_reelle_min: 33, duree_prevue_min: 30 });
+  s.ajouterAuJournal({ lieu: "B", kwh: 30, duree_reelle_min: 90, duree_prevue_min: 30 }); // déjeuner : écartée
+  s.ajouterAuJournal({ lieu: "C", kwh: 30, duree_reelle_min: 33, duree_prevue_min: 30 });
+  assert.equal(s.facteurChargeAppris(), 1.1);
+  assert.equal(s.obtenirProfilVehicule().facteur_charge_appris, 1.1);
+});

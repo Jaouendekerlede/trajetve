@@ -4,7 +4,7 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, destinationHabituelle } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, destinationHabituelle, facteurChargeAppris } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
@@ -30,6 +30,7 @@ import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { boutonPartage, partagerTrajet } from "./ui-partage.js";
 import { cablerDrive } from "./ui-drive.js";
 import { icone, iconeFond } from "./icones.js";
+import { appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { ouvrirSOS, cablerSOS } from "./ui-sos.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
@@ -2027,10 +2028,16 @@ function rendreProfil() {
 
 // Consommation mesurée en roulant (corrections de batterie en navigation).
 function majConsoMesuree() {
+  const n = appelsTomTomDuJour();
+  $("ev-quota-tomtom").textContent = `Appels TomTom aujourd'hui : ${n} / ${QUOTA_TOMTOM_JOUR} (compte gratuit)`;
+  const f = facteurChargeAppris();
+  const types = consoParType();
+  const apprisTxt = [types.ville && `ville ${nombre(types.ville, 1)}`, types.route && `route ${nombre(types.route, 1)}`, types.autoroute && `autoroute ${nombre(types.autoroute, 1)}`].filter(Boolean).join(" · ");
   const mesure = consoMesuree();
   $("ev-conso-mesuree").innerHTML = mesure
     ? `Mesurée : <strong>${nombre(mesure.kwh_100km, 1)}</strong> sur ${mesure.km} km · <button type="button" class="ev-lien" id="ev-conso-utiliser-btn">Utiliser</button>`
     : "Se mesure en roulant (batterie indiquée aux bornes)";
+  if (apprisTxt || f) $("ev-conso-mesuree").insertAdjacentHTML("beforeend", `<div>${apprisTxt ? `Apprise par route (kWh/100) : ${apprisTxt}` : ""}${f ? `<br>Temps de charge appris : réel ≈ ${nombre(f, 2)} × calculé` : ""}</div>`);
   $("ev-conso-utiliser-btn")?.addEventListener("click", () => {
     $("ev-profil-conso").value = mesure.kwh_100km;
     toast("Valeur mesurée reprise : touche « Enregistrer » pour la garder");

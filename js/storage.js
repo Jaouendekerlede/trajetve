@@ -43,6 +43,7 @@ export function obtenirProfilVehicule() {
     ecrireJson(STORAGE_KEYS.profil, profil);
   }
   const fusion = { ...PROFIL_PAR_DEFAUT, ...profil };
+  fusion.facteur_charge_appris = facteurChargeAppris();
   if (!(fusion.saison in MULTIPLICATEURS_SAISON)) {
     fusion.saison = "mi_saison";
   }
@@ -429,4 +430,17 @@ export function destinationHabituelle(maintenant = new Date()) {
   let meilleur = null;
   for (const [d, n] of compte) if (n >= 2 && (!meilleur || n > meilleur.n)) meilleur = { d, n };
   return meilleur?.d || null;
+}
+
+// Temps de charge appris : durée réelle à la borne / durée calculée, sur les
+// dernières recharges rapides (celles d'une pause bien plus longue que
+// nécessaire sont écartées). null tant qu'il y en a moins de 2.
+export function facteurChargeAppris() {
+  const sessions = listerJournal()
+    .filter((e) => e.duree_reelle_min > 0 && e.duree_prevue_min >= 5)
+    .map((e) => e.duree_reelle_min / e.duree_prevue_min)
+    .filter((r) => r >= 0.6 && r <= 1.6)
+    .slice(0, 10);
+  if (sessions.length < 2) return null;
+  return Math.round((sessions.reduce((a, b) => a + b, 0) / sessions.length) * 100) / 100;
 }
