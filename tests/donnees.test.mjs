@@ -63,3 +63,14 @@ test("profil : la borne à domicile est enregistrée", () => {
   assert.equal(p.puissance_domicile_kw, 7.4);
   assert.equal(p.puissance_dc_kw, 77);
 });
+
+test("mise à jour des réglages enregistrés : marge 15 %, recharge 80 %, Kona 65 kWh", () => {
+  localStorage.setItem("trajetve_prefs", JSON.stringify({ marge_pct: 12, cible_pct: 85, charge_pct: 60, mode: "confort" }));
+  const p = s.lirePrefs();
+  assert.equal(p.marge_pct, 15);
+  assert.equal(p.cible_pct, 80);
+  s.sauverPrefs({ ...p, marge_pct: 20 });
+  assert.equal(s.lirePrefs().marge_pct, 20, "un choix fait ensuite est gardé");
+  localStorage.setItem("trajetve_profil", JSON.stringify({ capacite_kwh: 64.8, puissance_dc_kw: 77 }));
+  assert.equal(s.obtenirProfilVehicule().puissance_dc_kw, 89);
+});

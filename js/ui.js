@@ -922,7 +922,8 @@ function chargerPrefs() {
   if (p) {
     if (p.depart) $("ev-depart-input").value = p.depart;
     if (p.destination) $("ev-destination-input").value = p.destination;
-    if (p.charge_pct !== undefined) setSlider("ev-charge-pct", p.charge_pct);
+    // Batterie au départ : toujours 100 % à l'ouverture (départ de la maison,
+    // chargée) ; à ajuster si besoin.
     if (p.mode && MODES_TRAJET[p.mode]) {
       modeTrajet = p.mode;
       activerModeVisuel(p.mode);

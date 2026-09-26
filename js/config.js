@@ -26,15 +26,16 @@ export function setApiKeys(keys) {
   localStorage.setItem(STORAGE_KEYS.apiKeys, JSON.stringify(keys));
 }
 
-// Hyundai Kona Electric 64,8 kWh -- même profil par défaut que JARVIS.
+// Hyundai Kona Electric 65 kWh (65,4 kWh, 64,8 utilisables) -- fiche Hyundai :
+// recharge rapide 10 → 80 % en 41 min, chargeur embarqué 11 kW.
 export const PROFIL_PAR_DEFAUT = {
   nom: "HYUNDAI - KONA - INTUITIVE - 65 kWh",
   capacite_kwh: 64.8,
   consommation_kwh_100km: 13.2,
   puissance_ac_kw: 11.0,
-  // Puissance maximale réellement atteinte (fiche Hyundai : 77 kW) ; elle
-  // sert de base à la courbe de charge rapide.
-  puissance_dc_kw: 77.0,
+  // Base de la courbe de charge rapide, calée pour retrouver les 41 min
+  // annoncées par Hyundai de 10 à 80 % (test « Kona 65 kWh »).
+  puissance_dc_kw: 89.0,
   // Borne murale « 7 kW » (monophasé 32 A = 7,4 kW).
   puissance_domicile_kw: 7.4,
   connecteurs_acceptes: ["CCS", "Type 2", "Mennekes"],
@@ -107,6 +108,7 @@ export const PALIERS_TEMPERATURE = [
 export const MODES_TRAJET = {
   rapide: { marge_pct: 8, cible_pct: 65, poids_puissance: 1.5, poids_cout: 0.5 },
   economique: { marge_pct: 10, cible_pct: 80, poids_puissance: 0.6, poids_cout: 1.6 },
-  confort: { marge_pct: 12, cible_pct: 85, poids_puissance: 1.0, poids_cout: 0.8 },
+  // Mode par défaut : 15 % mini à l'arrivée aux bornes, recharge à 80 %.
+  confort: { marge_pct: 15, cible_pct: 80, poids_puissance: 1.0, poids_cout: 0.8 },
   prudent: { marge_pct: 20, cible_pct: 90, poids_puissance: 1.0, poids_cout: 1.0 },
 };

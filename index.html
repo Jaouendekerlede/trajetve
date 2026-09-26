@@ -110,9 +110,9 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <label class="ev-champ">Batterie au départ : <span id="ev-charge-pct-value" class="ev-valeur">80</span>%
+        <label class="ev-champ">Batterie au départ : <span id="ev-charge-pct-value" class="ev-valeur">100</span>%
           <div class="ev-jauge"><div id="ev-charge-pct-fill" class="ev-jauge-remplissage"></div></div>
-          <input type="range" min="1" max="100" value="80" id="ev-charge-pct-input" class="ev-curseur">
+          <input type="range" min="1" max="100" value="100" id="ev-charge-pct-input" class="ev-curseur">
         </label>
         <div class="ev-charge-mode-row">
           <button type="button" class="ev-charge-mode-btn" data-mode="rapide">⚡<span>Rapide</span></button>
@@ -124,11 +124,11 @@
           <select id="ev-arret-impose" class="ev-input"><option value="">Automatique (le meilleur arrêt)</option></select>
         </label>
         <div id="ev-arret-impose-aide" class="ev-hint"></div>
-        <label class="ev-champ">Marge de sécurité (batterie mini à l'arrivée à une borne) : <span id="ev-marge-pct-value" class="ev-valeur">12</span>%
-          <input type="range" min="5" max="30" value="12" id="ev-marge-pct-input" class="ev-curseur">
+        <label class="ev-champ">Marge de sécurité (batterie mini à l'arrivée à une borne) : <span id="ev-marge-pct-value" class="ev-valeur">15</span>%
+          <input type="range" min="5" max="30" value="15" id="ev-marge-pct-input" class="ev-curseur">
         </label>
         <label class="ev-champ">Recharger jusqu'à : <span id="ev-cible-pct-value" class="ev-valeur">85</span>%
-          <input type="range" min="50" max="100" value="85" id="ev-cible-pct-input" class="ev-curseur">
+          <input type="range" min="50" max="100" value="80" id="ev-cible-pct-input" class="ev-curseur">
         </label>
       </div>
 
@@ -330,8 +330,8 @@
               <option value="Private">Privé</option>
             </select>
           </label>
-          <label class="ev-champ">Rayon : <span id="ev-recherche-rayon-value" class="ev-valeur">15</span> km
-            <input type="range" min="5" max="50" value="15" id="ev-recherche-rayon-input" class="ev-curseur">
+          <label class="ev-champ">Rayon : <span id="ev-recherche-rayon-value" class="ev-valeur">20</span> km
+            <input type="range" min="5" max="50" value="20" id="ev-recherche-rayon-input" class="ev-curseur">
           </label>
           <label class="ev-check"><input type="checkbox" id="ev-recherche-cb-checkbox"> 💳 Uniquement celles qui acceptent la carte bancaire</label>
           <button id="ev-recherche-run-btn" class="ev-btn-principal" type="button">Afficher sur la carte</button>
@@ -342,7 +342,7 @@
       <div class="ev-carte-bloc">
         <h3>⏱️ Calculateur de recharge</h3>
         <div class="ev-colonne">
-          <label class="ev-champ">Énergie à ajouter (kWh)<input type="number" min="0" step="0.5" id="ev-calc-kwh-input" class="ev-input" value="20" inputmode="decimal"></label>
+          <label class="ev-champ">Énergie à ajouter (kWh)<input type="number" min="0" step="0.5" id="ev-calc-kwh-input" class="ev-input" value="40" inputmode="decimal"></label>
           <label class="ev-champ">Type de charge
             <select id="ev-calc-type-select" class="ev-input">
               <option value="lente">Lente (prise domestique)</option>
@@ -500,7 +500,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 30 : affichage compact en navigation</div>
+      <div class="ev-hint ev-lien-centre">Version 31 : réglages par défaut (100 %, marge 15 %, recharge 80 %), Kona 65 kWh</div>
     </div>
   </div>
 </section>

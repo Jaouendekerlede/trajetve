@@ -31,8 +31,17 @@ function avecPrixDomicile(profil) {
   return { ...profil, prix_domicile_eur_kwh: Math.round(prix * 10000) / 10000 };
 }
 
+// Version 2 du profil : Kona 65 kWh calée sur la fiche Hyundai (41 min de
+// 10 à 80 %). Un profil enregistré avec l'ancienne valeur (77 kW) est mis à jour.
+const VERSION_PROFIL = 2;
+
 export function obtenirProfilVehicule() {
   const profil = lireJson(STORAGE_KEYS.profil, {});
+  if ((profil.version_profil || 0) < VERSION_PROFIL && Object.keys(profil).length) {
+    if (profil.puissance_dc_kw === 77) profil.puissance_dc_kw = PROFIL_PAR_DEFAUT.puissance_dc_kw;
+    profil.version_profil = VERSION_PROFIL;
+    ecrireJson(STORAGE_KEYS.profil, profil);
+  }
   const fusion = { ...PROFIL_PAR_DEFAUT, ...profil };
   if (!(fusion.saison in MULTIPLICATEURS_SAISON)) {
     fusion.saison = "mi_saison";
@@ -50,6 +59,8 @@ export function definirProfilVehicule(champs) {
   if (champs.saison && champs.saison in MULTIPLICATEURS_SAISON) {
     profil.saison = champs.saison;
   }
+  // Valeurs choisies par l'utilisateur : plus de mise à jour automatique.
+  profil.version_profil = VERSION_PROFIL;
   if (Array.isArray(champs.connecteurs_acceptes) && champs.connecteurs_acceptes.length) {
     profil.connecteurs_acceptes = champs.connecteurs_acceptes.map((c) => String(c).trim()).filter(Boolean);
   }
@@ -154,13 +165,23 @@ export function definirNoteBorne(nom, lat, lon, note) {
   ecrireJson(STORAGE_KEYS.bornesNotes, notes);
 }
 
+// Version 2 des réglages du trajet : 15 % de marge, recharge à 80 % (demande
+// de l'utilisateur). Les anciens réglages enregistrés sont mis à jour une fois.
+const VERSION_PREFS = 2;
+
 export function lirePrefs() {
-  return lireJson(STORAGE_KEYS.prefs, null);
+  const p = lireJson(STORAGE_KEYS.prefs, null);
+  if (p && (p.version_reglages || 0) < VERSION_PREFS) {
+    Object.assign(p, { marge_pct: 15, cible_pct: 80, version_reglages: VERSION_PREFS });
+    if (p.mode === undefined || p.mode === "confort") p.mode = "confort";
+    ecrireJson(STORAGE_KEYS.prefs, p);
+  }
+  return p;
 }
 
 export function sauverPrefs(prefs) {
   try {
-    ecrireJson(STORAGE_KEYS.prefs, prefs);
+    ecrireJson(STORAGE_KEYS.prefs, { ...prefs, version_reglages: VERSION_PREFS });
   } catch {
     // simple confort : une écriture ratée ne doit rien casser
   }

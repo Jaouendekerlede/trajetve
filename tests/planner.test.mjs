@@ -135,3 +135,8 @@ test("aire préférée imposée : arrêt à cette borne (même plus tôt que pr�
   const libre = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });
   assert.ok(libre.arrets[0].km_depuis_depart > 200);
 });
+
+test("temps de charge : Kona 65 kWh (profil par défaut) de 10 à 80 % ≈ 41 min, comme annoncé par Hyundai", () => {
+  const t = calculerTempsCharge(PROFIL_PAR_DEFAUT.capacite_kwh * 0.7, 350, { pctDebut: 10, profil: PROFIL_PAR_DEFAUT });
+  assert.ok(Math.abs(t - 41) <= 1, `${t.toFixed(1)} min`);
+});
