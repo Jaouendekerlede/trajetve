@@ -40,7 +40,12 @@ export async function sauvegarderSurDrive({ silencieux = false } = {}) {
     toast("☁️ Sauvegardé sur Google Drive");
     return true;
   } catch (e) {
-    if (!silencieux) toast(`⚠️ Drive : ${e.message}`);
+    if (!silencieux) {
+      toast(`⚠️ Drive : ${e.message}`);
+      // Le toast disparaît vite : le message complet reste dans le bloc Drive.
+      const info = $("ev-drive-info");
+      if (info) info.textContent = `⚠️ ${e.message}`;
+    }
     return false;
   }
 }
@@ -59,6 +64,8 @@ async function restaurerDepuisDrive() {
     setTimeout(() => location.reload(), 1200);
   } catch (e) {
     toast(`⚠️ Drive : ${e.message}`);
+    const info = $("ev-drive-info");
+    if (info) info.textContent = `⚠️ ${e.message}`;
   }
 }
 

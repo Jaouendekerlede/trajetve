@@ -34,3 +34,8 @@ test("Drive : restauration de la dernière sauvegarde (ou rien)", async () => {
   assert.equal(r.sauvegarde.format, "trajetve-sauvegarde");
   assert.equal(r.date, "2026-09-26T10:00:00Z");
 });
+
+test("Drive : une erreur de Google est rapportée avec son message", async () => {
+  installerFetch((url) => (url.includes("spaces=appDataFolder") ? { statut: 400, json: { error: { code: 400, message: "Invalid value for: orderBy" } } } : { json: {} }));
+  await assert.rejects(envoyerSauvegarde("JETON", sauvegarde), /HTTP 400 : Invalid value for: orderBy/);
+});

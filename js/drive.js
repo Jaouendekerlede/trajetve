@@ -43,21 +43,35 @@ export async function obtenirJeton(clientId, { silencieux = false } = {}) {
         jeton = { valeur: r.access_token, expire: Date.now() + (r.expires_in || 3600) * 1000 };
         ok(jeton.valeur);
       },
-      error_callback: (e) => ko(new Error(e?.message || e?.type || "connexion refusée")),
+      error_callback: (e) => {
+        const t = e?.type || "";
+        ko(new Error(t === "popup_failed_to_open" ? "la fenêtre de connexion Google n'a pas pu s'ouvrir (autorisez les fenêtres pop-up pour ce site)" : t === "popup_closed" ? "connexion annulée" : e?.message || t || "connexion refusée"));
+      },
     });
     client.requestAccessToken({ prompt: silencieux ? "" : "consent" });
   });
 }
 
+// Réponse d'erreur de Google : « HTTP 400 : Invalid value… » (le message
+// de Google aide à comprendre, plutôt qu'un simple code).
 async function appel(url, jetonAcces, options = {}) {
   const r = await fetch(url, { ...options, headers: { Authorization: `Bearer ${jetonAcces}`, ...(options.headers || {}) } });
-  if (!r.ok) throw new Error(`Drive : HTTP ${r.status}`);
+  if (!r.ok) {
+    let detail = "";
+    try {
+      const j = await r.json();
+      detail = j?.error?.message || j?.error_description || (typeof j?.error === "string" ? j.error : "");
+    } catch {
+      // Réponse sans détail lisible : le code seul.
+    }
+    throw new Error(`HTTP ${r.status}${detail ? ` : ${detail}` : ""}`);
+  }
   return r;
 }
 
 export async function trouverSauvegarde(jetonAcces) {
   const q = encodeURIComponent(`name='${NOM_FICHIER}'`);
-  const r = await appel(`${API}?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime,size)&orderBy=modifiedTime desc`, jetonAcces);
+  const r = await appel(`${API}?spaces=appDataFolder&q=${q}&fields=${encodeURIComponent("files(id,modifiedTime,size)")}&orderBy=${encodeURIComponent("modifiedTime desc")}`, jetonAcces);
   return (await r.json()).files?.[0] || null;
 }
 
