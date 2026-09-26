@@ -75,6 +75,23 @@ async function calculerItineraire(depart, destination, opts) {
   if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
 
   const itin = itineraireDepuisRoute(it, a, b, departMs, !!opts.trace_imposee && it.traceSuivie);
+  // Aire préférée imposée : combien de km et de minutes elle ajoute au
+  // trajet direct (aire de l'autre côté de l'autoroute → demi-tour lointain).
+  if (opts.arret_impose) {
+    try {
+      const direct = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, {
+        eviterPeages: opts.eviter_peages,
+        eviterFerries: opts.eviter_ferries,
+        eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
+        eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
+        departAt: departMs > Date.now() + 5 * 60000 ? new Date(departMs).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
+        zonesEvitees: rectanglesZonesEvitees(),
+      });
+      if (!direct.erreur) itin.aire_imposee = { nom: opts.arret_impose.nom, detour_km: arrondi1(itin.distance_km - direct.summary.lengthInMeters / 1000), detour_min: Math.round(itin.duree_min - direct.summary.travelTimeInSeconds / 60) };
+    } catch {
+      // Mesure du détour impossible : le trajet reste calculé, sans avertissement.
+    }
+  }
   itin._alternatives = it.alternatives.map((r) => itineraireDepuisRoute(r, a, b, departMs, true));
   return itin;
 }
@@ -200,6 +217,26 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     },
   });
   if (meteoInfo) resultat.meteo_info = meteoInfo;
+  // Route réelle passant par les bornes prévues (celle que suivra la
+  // navigation) : plus longue que le trajet direct si une borne est de
+  // l'autre côté de l'autoroute. On le mesure pour le dire.
+  if (resultat.ok && resultat.arrets?.length && !opts.trace_imposee) {
+    try {
+      const avecArrets = await calculerItineraireTomTom(getApiKeys().tomtom, itin.from_lat, itin.from_lon, itin.to_lat, itin.to_lon, {
+        etapes: resultat.arrets.map((a) => ({ lat: a.lat, lon: a.lon })),
+        eviterPeages: opts.eviter_peages,
+        eviterFerries: opts.eviter_ferries,
+        eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
+        eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
+        zonesEvitees: rectanglesZonesEvitees(),
+      });
+      if (!avecArrets.erreur) {
+        resultat.detour_arrets = { km: arrondi1(avecArrets.summary.lengthInMeters / 1000 - itin.distance_km), min: Math.round(avecArrets.summary.travelTimeInSeconds / 60 - itin.duree_min) };
+      }
+    } catch {
+      // Mesure impossible : pas d'avertissement, le plan reste valable.
+    }
+  }
 
   const { _sections, _summary, _alternatives, ...itinPublic } = itin;
   const dureeTotaleMin = resultat.ok ? itin.duree_min + (resultat.temps_charge_total_min || 0) : null;

@@ -444,3 +444,27 @@ export function facteurChargeAppris() {
   if (sessions.length < 2) return null;
   return Math.round((sessions.reduce((a, b) => a + b, 0) / sessions.length) * 100) / 100;
 }
+
+// ── Remise à zéro (Profil) ──────────────────────────────────────────────────
+// Efface réglages, favoris, historique, journal, abonnements, trajets et
+// données apprises ; garde la voiture (profil), les clés et la carte de la
+// région téléchargée, ainsi que le journal de diagnostic (pour le rapport).
+
+const CLES_GARDEES = ["trajetve_profil", "trajetve_api_keys", "tve_region_hors_ligne", "tve_journal_diag"];
+
+export function clesRemiseAZero(cles) {
+  return cles.filter((k) => (k.startsWith("trajetve_") || k.startsWith("tve_")) && !CLES_GARDEES.includes(k));
+}
+
+export async function remiseAZero() {
+  const cles = [];
+  for (let i = 0; i < localStorage.length; i++) cles.push(localStorage.key(i));
+  const effacees = clesRemiseAZero(cles);
+  for (const k of effacees) localStorage.removeItem(k);
+  try {
+    await caches.delete("trajetve-osm"); // réponses OpenStreetMap gardées
+  } catch {
+    // pas de Cache Storage : rien à vider
+  }
+  return effacees.length;
+}

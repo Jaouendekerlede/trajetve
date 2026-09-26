@@ -140,3 +140,25 @@ test("temps de charge : Kona 65 kWh (profil par défaut) de 10 à 80 % ≈ 41 mi
   const t = calculerTempsCharge(PROFIL_PAR_DEFAUT.capacite_kwh * 0.7, 350, { pctDebut: 10, profil: PROFIL_PAR_DEFAUT });
   assert.ok(Math.abs(t - 41) <= 1, `${t.toFixed(1)} min`);
 });
+
+test("un seul arrêt plus long plutôt qu'un mini-arrêt de plus : la charge dépasse la cible si cela suffit à finir", async () => {
+  bornesAutour((lat, lon) => [poiOcm({ nom: "Aire rapide", lat: lat + 0.002, lon, kw: 150 })]);
+  const trace = Array.from({ length: 63 }, (_, i) => [0, i / 10]); // ~690 km
+  const r = await calculerTrajetElectrique("cle", 680, trace, 100, PROFIL, { margeSecuritePct: 15, cibleRechargePct: 80 });
+  assert.equal(r.ok, true, r.erreur);
+  // Avant : 2 arrêts, dont un de 4 minutes à 11 km de l'arrivée.
+  assert.equal(r.nb_arrets, 1, `${r.nb_arrets} arrêts`);
+  assert.ok(r.arrets[0].pct_depart_borne > 82 && r.arrets[0].pct_depart_borne <= 98, `recharge jusqu'à ${r.arrets[0].pct_depart_borne} %`);
+  assert.ok(r.pct_batterie_arrivee >= 15, `arrivée à ${r.pct_batterie_arrivee} %`);
+});
+
+test("aire de l'autre sens de l'autoroute : écartée au profit de celle du bon côté", async () => {
+  // Tracé vers le nord : la droite du sens de marche est l'est (longitude +).
+  bornesAutour((lat, lon) => [
+    poiOcm({ nom: "A10 - Aire de Test Ouest (direction Sud)", lat: lat + 0.002, lon: lon - 0.0012, kw: 150 }), // à gauche : autre sens
+    poiOcm({ nom: "A10 - Aire de Test Est (direction Nord)", lat: lat + 0.002, lon: lon + 0.0012, kw: 150 }), // à droite : bon sens
+  ]);
+  const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });
+  assert.equal(r.ok, true, r.erreur);
+  assert.match(r.arrets[0].nom_borne, /Est \(direction Nord\)/);
+});

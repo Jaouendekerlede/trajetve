@@ -142,3 +142,11 @@ test("carte de la région : nombre de tuiles et poids raisonnables", async () =>
   assert.ok(!t.some((x) => x.startsWith("15/")));
   assert.equal(new Set(t).size, t.length, "pas de doublon");
 });
+
+test("remise à zéro : garde voiture, clés, région et journal de diagnostic, efface le reste", () => {
+  localStorage.clear();
+  for (const k of ["trajetve_profil", "trajetve_api_keys", "trajetve_reglages", "trajetve_favoris", "trajetve_journal", "tve_region_hors_ligne", "tve_journal_diag", "tve_conso_x", "tve_navigation_en_cours", "autre_appli"]) localStorage.setItem(k, "1");
+  const cles = [];
+  for (let i = 0; i < localStorage.length; i++) cles.push(localStorage.key(i));
+  assert.deepEqual(s.clesRemiseAZero(cles).sort(), ["trajetve_favoris", "trajetve_journal", "trajetve_reglages", "tve_conso_x", "tve_navigation_en_cours"].sort());
+});

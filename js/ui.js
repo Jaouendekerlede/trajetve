@@ -4,7 +4,7 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, destinationHabituelle, facteurChargeAppris } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
@@ -1269,7 +1269,12 @@ function afficherResultat(p) {
   alerteCout.textContent = p.depasse_seuil_cout ? `⚠️ Le coût estimé (${euros(p.cout_total_eur)}) dépasse le seuil que tu as fixé.` : "";
   alerteCout.classList.toggle("hidden", !p.depasse_seuil_cout);
 
-  $("ev-etapes").innerHTML = etapesHtml(p) + echangeursHtml(p) + boutonQuandPartir() + boutonPartage();
+  $("ev-etapes").innerHTML = avertissementAireHtml(p) + etapesHtml(p) + echangeursHtml(p) + boutonQuandPartir() + boutonPartage();
+  $("ev-sans-aire-btn")?.addEventListener("click", () => {
+    $("ev-arret-impose").value = "";
+    $("ev-arret-impose").dispatchEvent(new Event("change"));
+    lancerTrajet();
+  });
   $("ev-partager-trajet-btn").addEventListener("click", () => partagerTrajet(p));
   $("ev-quand-partir-btn").addEventListener("click", () => quandPartir(p));
   $("ev-etapes")
@@ -1379,6 +1384,21 @@ function echangeursHtml(p) {
     })
     .join("");
   return `<details class="ev-accordeon ev-echangeurs"><summary>🛣️ Sorties et échangeurs (${liste.length})</summary><div class="ev-echangeurs-liste">${lignes}</div></details>`;
+}
+
+// Aire préférée qui rallonge nettement le trajet : on le dit, avec la sortie.
+const DETOUR_AIRE_ALERTE_KM = 8;
+
+function avertissementAireHtml(p) {
+  const a = p.aire_imposee;
+  const d = p.detour_arrets;
+  let html = "";
+  if (a && a.detour_km >= DETOUR_AIRE_ALERTE_KM) {
+    html += alerte(`⚠️ Votre aire ⭐ ${escapeHtml(nomCourt(a.nom))} rallonge le trajet de <strong>${nombre(a.detour_km)} km</strong> (+${formaterMinutes(Math.max(0, a.detour_min))}) : elle est sans doute de l'autre côté de la route pour ce sens.`) + `<button type="button" id="ev-sans-aire-btn" class="ev-btn ev-btn-plein">↩️ Recalculer sans cette aire</button>`;
+  } else if (d && d.km >= DETOUR_AIRE_ALERTE_KM) {
+    html += alerte(`⚠️ Passer par les bornes prévues rallonge la route réelle de <strong>${nombre(d.km)} km</strong> (+${formaterMinutes(Math.max(0, d.min))}) par rapport au trajet direct : une borne est peut-être de l'autre côté de l'autoroute. La batterie à l'arrivée sera plus basse que prévu.`);
+  }
+  return html;
 }
 
 function choisirItineraire(i) {
@@ -2180,7 +2200,16 @@ async function telechargerRegion() {
   }
 }
 
+async function remettreAZero() {
+  if (navigationActive()) return toast("⚠️ Pas pendant une navigation.");
+  if (!confirm("Remettre l'appli à zéro ?\n\nEffacé : réglages, favoris, historique, journal des recharges, abonnements, trajets et données apprises.\nConservé : votre voiture (Kona 65 kWh), vos clés et la carte de la région.")) return;
+  const n = await remiseAZero();
+  toast(`🧹 Remise à zéro faite (${n} éléments) : redémarrage…`);
+  setTimeout(() => location.reload(), 1200);
+}
+
 function cablerProfil() {
+  $("ev-remise-zero-btn").addEventListener("click", remettreAZero);
   $("ev-region-rayon").innerHTML = RAYONS_REGION_KM.map((k) => `<option value="${k}"${k === 50 ? " selected" : ""}>${k} km</option>`).join("");
   $("ev-region-btn").addEventListener("click", telechargerRegion);
   majInfoRegion();

@@ -275,6 +275,21 @@ function mesurerConso(pctReel) {
 // Énergie consommée depuis le dernier repère : conso apprise pour le type
 // de route roulé (ville, route, autoroute) quand elle existe, sinon la
 // moyenne du plan.
+// Batterie prévue à l'arrivée à cette borne d'après le plan de recharge,
+// corrigée de l'écart constaté maintenant entre la batterie réelle et la
+// batterie prévue au même endroit. null si le plan ne s'applique plus
+// (navigation reprise, borne remplacée).
+function pctBorneSelonPlan(arret) {
+  if (etat.plan._reprise || !Number.isFinite(arret.pct_arrivee_borne) || !etat.plan.arrets?.includes(arret)) return null;
+  return arret.pct_arrivee_borne + (batterieEstimee() - pctPrevuA(pointsPrevus(), etat.odometre / 1000));
+}
+
+function effacerAlerteBatterie() {
+  if (!etat.alerteBatterieAffichee) return;
+  etat.alerteBatterieAffichee = false;
+  if ($("ev-nav-alerte").textContent.startsWith("⚠️ Batterie trop juste")) afficherAlerte(null);
+}
+
 function batterieEstimee() {
   const b = etat.batterie;
   if (b.refEnergie !== undefined) return b.refPct - ((etat.energieCumulee - b.refEnergie) / etat.capacite) * 100;
@@ -443,13 +458,22 @@ function majEcran() {
     const heureBorne = Date.now() + secondesRestantesJusqua(offsetBorne) * 1000;
     $("ev-nav-borne").innerHTML = `${arret.pause ? "📍" : "🔋"} <strong>${escapeHtml(arret.nom_borne)}</strong> · ${distanceAffichee(reste)} · ${heure(heureBorne)} · ~${Math.round(pctBorne)} %`;
     $("ev-nav-borne").classList.remove("hidden");
-    if (!arret.pause && pctBorne < etat.margePct - 3 && !etat.alerteBatterieAffichee) {
+    // Alerte seulement si les deux estimations (linéaire, et plan corrigé de
+    // l'écart réel) sont sous le seuil, plusieurs fois de suite ; effacée dès
+    // que la situation redevient normale.
+    const seuil = etat.margePct - 3;
+    const pctPlan = pctBorneSelonPlan(arret);
+    const juste = !arret.pause && pctBorne < seuil && (pctPlan === null || pctPlan < seuil);
+    etat.batterieJusteCompteur = juste ? (etat.batterieJusteCompteur || 0) + 1 : 0;
+    if (etat.batterieJusteCompteur >= 3 && !etat.alerteBatterieAffichee) {
       etat.alerteBatterieAffichee = true;
+      noter("batterie", `alerte : linéaire ${Math.round(pctBorne)} %, plan ${pctPlan === null ? "?" : Math.round(pctPlan)} %, reste ${Math.round(reste / 1000)} km, seuil ${seuil} %`);
       afficherAlerte("⚠️ Batterie trop juste pour atteindre la borne prévue.", { libelle: "🔄 Recalculer", action: replanifier });
       parler("Attention, la batterie risque d'être trop juste pour atteindre la prochaine borne.");
-    }
+    } else if (!juste) effacerAlerteBatterie();
   } else {
     $("ev-nav-borne").classList.add("hidden");
+    effacerAlerteBatterie();
   }
 
   // Bas de l'écran : heure d'arrivée, temps et km restants, batterie

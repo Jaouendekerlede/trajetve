@@ -16,6 +16,17 @@ import {
   PUISSANCE_LENTE_KW,
 } from "./config.js";
 import { pointADistanceSurTrace, haversineKm } from "./geo.js";
+import { projeterSurTrace } from "./alertes-route.js";
+
+// Une borne d'aire d'autoroute située de l'autre côté (à gauche du sens de
+// marche) oblige à sortir puis à faire demi-tour très loin : mesuré sur
+// Saint-Nazaire → Bordeaux, +46 km et +25 min pour une seule aire.
+const PENALITE_AUTRE_SENS_MIN = 25;
+const NOM_AXE_RAPIDE = /(\bA\s?\d{1,3}\b|\baire\b|autoroute|direction|péage|\bN\s?\d{1,3}\b)/i;
+const ECART_AUTRE_SENS_M = [25, 700];
+
+// Plafond de charge d'un arrêt qui évite d'en faire un de plus.
+const PLAFOND_CHARGE_UN_ARRET_PCT = 98;
 
 // Position (km depuis le départ) du point du tracé le plus proche, et
 // l'écart (km) entre ce point et le lieu.
@@ -359,6 +370,19 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
   let chargePct = chargeActuellePct;
   const connecteursAcceptes = profil.connecteurs_acceptes?.length ? profil.connecteurs_acceptes : ["CCS", "Type 2"];
 
+  // Borne d'axe rapide (nom d'aire, d'autoroute ou « direction … ») située à
+  // gauche du sens de marche, à quelques centaines de mètres au plus.
+  let cumulTrace = null;
+  function estDeLAutreSens(b) {
+    if (!NOM_AXE_RAPIDE.test(`${b.nom || ""} ${b.adresse || ""}`)) return false;
+    if (!cumulTrace) {
+      cumulTrace = [0];
+      for (let i = 1; i < coords.length; i++) cumulTrace.push(cumulTrace[i - 1] + haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]) * 1000);
+    }
+    const p = projeterSurTrace(b.lat, b.lon, coords, cumulTrace);
+    return !!p.gauche && p.d >= ECART_AUTRE_SENS_M[0] && p.d <= ECART_AUTRE_SENS_M[1];
+  }
+
   // Bornes compatibles, enrichies et notées autour d'un point du tracé ;
   // { erreur } si la recherche échoue ou ne trouve rien d'utilisable.
   async function candidatsAutour(km) {
@@ -384,6 +408,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     if (!candidates.length) return { erreur: `Aucune borne compatible (connecteur/puissance) trouvée à proximité du km ${Math.round(km)}.` };
     if (options.enrichirBornes) await options.enrichirBornes(candidates);
     for (const b of candidates) b._score_info = calculerScoreBorne(b, profil, mode, !!options.preferCb);
+    for (const b of candidates) b._autre_sens = estDeLAutreSens(b);
     candidates.sort((a, b) => b._score_info.score - a._score_info.score);
     return { candidates };
   }
@@ -403,14 +428,25 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       const besoinAirePct = Math.ceil(margeSecuritePct + pctConsomme(km, kmImpose) + RESERVE_DERNIER_ARRET_PCT);
       pctDepart = Math.min(pctDepart, Math.max(pctArrivee + 1, besoinAirePct));
     }
-    const kwh = Math.max(0, (profil.capacite_kwh * (pctDepart - pctArrivee)) / 100);
     // Puissance réellement reçue : borne rapide limitée par la voiture en
     // courant continu, borne lente par son chargeur embarqué (alternatif).
     const kwBorne = borne.puissance_max_kw || profil.puissance_dc_kw;
     const rapide = kwBorne >= SEUIL_PUISSANCE_DC_KW;
     const puissanceKw = Math.min(kwBorne, rapide ? profil.puissance_dc_kw : profil.puissance_ac_kw || kwBorne);
-    const tempsMin = calculerTempsCharge(kwh, kwBorne, { pctDebut: pctArrivee, profil });
-    return { km, pctArrivee, pctDepart, kwh, puissanceKw, tempsMin };
+    const construire = (pctDep) => {
+      const kwh = Math.max(0, (profil.capacite_kwh * (pctDep - pctArrivee)) / 100);
+      return { km, pctArrivee, pctDepart: pctDep, kwh, puissanceKw, tempsMin: calculerTempsCharge(kwh, kwBorne, { pctDebut: pctArrivee, profil }) };
+    };
+    const plan = construire(pctDepart);
+    // La cible ne suffit pas pour finir, mais un peu plus haut (jusqu'à 98 %)
+    // évite un arrêt de plus : on garde le plus rapide des deux (la charge
+    // ralentit vers la fin, mais un arrêt de plus coûte ~12 min de plus).
+    const finiraitApres = kmImpose === null || kmImpose <= km;
+    if (finiraitApres && atteignable(km, cibleRechargePct) < distanceKm && besoinFinPct > pctDepart && besoinFinPct <= PLAFOND_CHARGE_UN_ARRET_PCT) {
+      const haut = construire(besoinFinPct);
+      if (haut.tempsMin + futurMinDe(haut) < plan.tempsMin + futurMinDe(plan) - 1) return haut;
+    }
+    return plan;
   }
 
   // « Coût » en minutes jusqu'à l'arrivée si l'on choisit cette borne :
@@ -423,17 +459,23 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
   const puissanceMoyenneFuture = Math.max(20, profil.puissance_dc_kw * 0.55);
   const energieParArretKwh = Math.max(5, (profil.capacite_kwh * (cibleRechargePct - margeSecuritePct)) / 100);
   const SURCOUT_ARRET_MIN = 12;
+  // Minutes de recharge encore à prévoir après cet arrêt (arrêts suivants compris).
+  function futurMinDe(plan) {
+    const energieRestanteKwh = energie.energieA(distanceKm) - energie.energieA(plan.km) + margeKwh - (profil.capacite_kwh * plan.pctDepart) / 100;
+    return energieRestanteKwh > 0 ? (energieRestanteKwh / puissanceMoyenneFuture) * 60 + SURCOUT_ARRET_MIN * Math.ceil(energieRestanteKwh / energieParArretKwh) : 0;
+  }
   const MINUTES_PAR_EURO = { rapide: 0.3, economique: 3 }[mode] ?? 1;
   function tempsEstime(borne, plan) {
     const detourMin = ((borne.distance_km || 0) * 2 * 60) / 50;
     const energieRestanteKwh = energie.energieA(distanceKm) - energie.energieA(plan.km) + margeKwh - (profil.capacite_kwh * plan.pctDepart) / 100;
-    const futurMin = energieRestanteKwh > 0 ? (energieRestanteKwh / puissanceMoyenneFuture) * 60 + SURCOUT_ARRET_MIN * Math.ceil(energieRestanteKwh / energieParArretKwh) : 0;
+    const futurMin = futurMinDe(plan);
     const euros = plan.kwh * (borne.prix_kwh_eur ?? PRIX_KWH_ESTIME_DEFAUT_EUR) + Math.max(0, energieRestanteKwh) * PRIX_KWH_ESTIME_DEFAUT_EUR;
     const penaliteQualite = (100 - borne._score_info.score) * (mode === "rapide" ? 0.15 : 0.35);
     // Réseau d'abonnement (réglage « privilégier mes réseaux ») : préféré à
     // temps à peu près égal.
     const bonusReseau = borne.abonnement ? options.bonusAbonnementMin || 0 : 0;
-    return detourMin + plan.tempsMin + futurMin + euros * MINUTES_PAR_EURO + penaliteQualite - bonusReseau;
+    const autreSens = borne._autre_sens ? PENALITE_AUTRE_SENS_MIN : 0;
+    return detourMin + plan.tempsMin + futurMin + euros * MINUTES_PAR_EURO + penaliteQualite - bonusReseau + autreSens;
   }
 
   // Endroits où chercher : à la limite de la batterie, puis un peu avant

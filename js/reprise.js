@@ -35,7 +35,8 @@ export function lireReprise(maintenant = Date.now()) {
     // Anciennes sauvegardes : seul le nombre d'arrêts faits était gardé.
     const restants = Array.isArray(s.arrets_restants) ? s.arrets_restants : (s.plan.arrets || []).slice(s.arrets_faits || 0);
     const cible = s.destination?.lat != null ? s.destination : { lat: s.plan.to_lat, lon: s.plan.to_lon, nom: s.plan.to_name };
-    const plan = { ...s.plan, arrets: restants, to_lat: cible.lat, to_lon: cible.lon, to_name: cible.nom || s.plan.to_name };
+    // _reprise : les km du plan ne correspondent plus au trajet restant.
+    const plan = { ...s.plan, arrets: restants, to_lat: cible.lat, to_lon: cible.lon, to_name: cible.nom || s.plan.to_name, _reprise: true };
     const age = maintenant - s.ts;
     return { plan, options: s.options, batterie_pct: s.batterie_pct, destination: plan.to_name, age_ms: age, automatique: age <= DELAI_REPRISE_AUTO_MS };
   } catch {
