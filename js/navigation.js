@@ -13,6 +13,7 @@ import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande, interpreterOuiNon, interpreterChoix } from "./commandes-vocales.js";
 import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js";
+import { icone } from "./icones.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
@@ -1624,7 +1625,7 @@ function cablerBoutons() {
   });
   $("ev-nav-voix-btn").addEventListener("click", () => {
     etat.voix = !etat.voix;
-    $("ev-nav-voix-btn").textContent = etat.voix ? "🔊" : "🔇";
+    $("ev-nav-voix-btn").innerHTML = icone(etat.voix ? "son" : "muet");
     if (!etat.voix) speechSynthesis.cancel();
   });
   $("ev-nav-orientation-btn").addEventListener("click", () => {
@@ -1892,6 +1893,10 @@ function actionMenu(action) {
   else if (action === "partage") partagerArrivee();
   else if (action === "secours") afficherSecours();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
+  else if (action === "aide") {
+    afficherAlerte("🎤 En roulant : « prochaine borne ? », « trouve un café », « où me garer », « autre borne », « route barrée ». Répondez « oui » / « non » aux questions.");
+    setTimeout(() => etat && $("ev-nav-alerte").textContent.startsWith("🎤 En roulant") && afficherAlerte(null), 15000);
+  }
 }
 
 // ── Météo devant soi (toutes les 15 min) ────────────────────────────────────
@@ -2082,7 +2087,7 @@ async function commandeVocale() {
   switch (c.action) {
     case "voix":
       etat.voix = c.valeur;
-      $("ev-nav-voix-btn").textContent = etat.voix ? "🔊" : "🔇";
+      $("ev-nav-voix-btn").innerHTML = icone(etat.voix ? "son" : "muet");
       if (etat.voix) parler("Voix activée.", true);
       break;
     case "barree":
@@ -2481,7 +2486,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-etape-borne").classList.add("hidden");
   $("ev-nav-batterie-panneau").classList.add("hidden");
   $("ev-nav-recentrer-btn").classList.add("hidden");
-  $("ev-nav-voix-btn").textContent = etat.voix ? "🔊" : "🔇";
+  $("ev-nav-voix-btn").innerHTML = icone(etat.voix ? "son" : "muet");
   majBoutonOrientation();
   $("ev-nav-fleche").textContent = "⏳";
   $("ev-nav-rue").classList.add("hidden");

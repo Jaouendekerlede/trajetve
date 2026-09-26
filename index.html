@@ -49,10 +49,10 @@
 
 <!-- Boutons flottants sur la carte -->
 <div class="ev-fabs">
-  <button id="ev-urgence-btn" class="ev-fab ev-fab-urgence" type="button" title="Mode urgence : bornes les plus proches">🆘</button>
-  <button id="ev-fond-btn" class="ev-fab" type="button" title="Changer le fond de carte">🌙</button>
+  <button id="ev-urgence-btn" class="ev-fab ev-fab-urgence" type="button" title="Mode urgence : bornes les plus proches"><span class="ev-fab-sos">SOS</span></button>
+  <button id="ev-fond-btn" class="ev-fab" type="button" title="Changer le fond de carte"></button>
   <button id="ev-carte3d-btn" class="ev-fab ev-fab-texte" type="button" title="Carte en 3D / 2D">3D</button>
-  <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser">📍</button>
+  <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser" data-icone="localiser"></button>
 </div>
 
 <!-- Panneau coulissant -->
@@ -115,7 +115,7 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <label class="ev-champ">Batterie au départ : <span id="ev-charge-pct-value" class="ev-valeur">100</span>%
+        <label class="ev-champ"><span class="ev-champ-titre">Batterie au départ : <span id="ev-charge-pct-value" class="ev-valeur">100</span> %</span>
           <div class="ev-jauge"><div id="ev-charge-pct-fill" class="ev-jauge-remplissage"></div></div>
           <input type="range" min="1" max="100" value="100" id="ev-charge-pct-input" class="ev-curseur">
           <span id="ev-charge-km" class="ev-km-estime"></span>
@@ -126,18 +126,21 @@
           <button type="button" class="ev-charge-mode-btn active" data-mode="confort">🛋️<span>Confort</span></button>
           <button type="button" class="ev-charge-mode-btn" data-mode="prudent">🛡️<span>Prudent</span></button>
         </div>
+        <details class="ev-sous-menu ev-recharge-details">
+          <summary id="ev-recharge-resume">🔋 Recharges</summary>
         <label class="ev-champ">🔌 Recharger à
           <select id="ev-arret-impose" class="ev-input"><option value="">Automatique (le meilleur arrêt)</option></select>
         </label>
         <div id="ev-arret-impose-aide" class="ev-hint"></div>
-        <label class="ev-champ">Marge de sécurité (batterie mini à l'arrivée à une borne) : <span id="ev-marge-pct-value" class="ev-valeur">15</span>%
+        <label class="ev-champ"><span class="ev-champ-titre">Marge de sécurité (mini à l'arrivée à une borne) : <span id="ev-marge-pct-value" class="ev-valeur">15</span> %</span>
           <input type="range" min="5" max="30" value="15" id="ev-marge-pct-input" class="ev-curseur">
           <span id="ev-marge-km" class="ev-km-estime"></span>
         </label>
-        <label class="ev-champ">Recharger jusqu'à : <span id="ev-cible-pct-value" class="ev-valeur">85</span>%
+        <label class="ev-champ"><span class="ev-champ-titre">Recharger jusqu'à : <span id="ev-cible-pct-value" class="ev-valeur">80</span> %</span>
           <input type="range" min="50" max="100" value="80" id="ev-cible-pct-input" class="ev-curseur">
           <span id="ev-cible-km" class="ev-km-estime"></span>
         </label>
+        </details>
       </div>
 
       <details class="ev-accordeon">
@@ -428,46 +431,58 @@
 
       <div class="ev-carte-bloc">
         <h3>🧭 Navigation</h3>
-        <label class="ev-champ">🔠 Taille du texte en navigation : <span id="ev-reglage-taille-texte-val" class="ev-valeur">100</span> %
-          <input type="range" min="80" max="130" step="5" value="100" id="ev-reglage-taille-texte" class="ev-curseur">
-        </label>
-        <label class="ev-champ">🪧 Affichage en navigation
-          <select id="ev-reglage-taille-bandeau" class="ev-input">
-            <option value="compact">Compact : la carte reste bien visible (conseillé)</option>
-            <option value="grand">Grand : flèche, rue et infos en très gros</option>
-          </select>
-        </label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-zoom-renforce"> 🔍 Zoom renforcé aux ronds-points, grands carrefours, sorties et entrées de voie rapide</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-voix"> 🔊 Guidage vocal (on peut aussi le couper en route avec 🔊)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-voies"> 🛣️ Dire quelle voie prendre (« prenez la voie de droite »)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-travaux"> 🚧 Annoncer les travaux, routes fermées et ralentissements</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-bornes"> 🔋 Annoncer les bornes de recharge prévues</label>
-        <label class="ev-champ">Icône de la voiture
-          <select id="ev-reglage-icone" class="ev-input">
-            <option value="fleche_bleue">Flèche bleue</option>
-            <option value="fleche_verte">Flèche verte</option>
-            <option value="fleche_orange">Flèche orange</option>
-            <option value="fleche_rouge">Flèche rouge</option>
-            <option value="voiture">Voiture vue de dessus</option>
-            <option value="point">Point avec direction</option>
-          </select>
-        </label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-reponses-voix"> 🗣️ Mains sur le volant : répondre à la voix (« oui », « non », « le premier »…) aux propositions</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-epure"> 🧘 Écran épuré en longue ligne droite (bandeau replié, autoroute : l'essentiel)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-vibration"> 📳 Vibrer avant chaque manœuvre</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-nuit-douce"> 🌙 Écran moins lumineux la nuit</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-notif"> 🔔 Guidage visible écran verrouillé (notification)</label>
-        <div class="ev-hint">En navigation : touchez le bandeau pour voir les prochaines étapes ; appui long sur la carte pour y aller ou en faire une étape.</div>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-prechauffage"> 🌡️ Rappeler de préchauffer la batterie avant une borne rapide</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-aires"> 🛣️ Sur autoroute et voie express : prochaine borne et aires (en bas à gauche)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-meteo-route"> 🌦️ Annoncer la météo devant soi (orage, neige, verglas, forte pluie, vent)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-parking-arrivee"> 🅿️ Proposer des parkings à 2 km de l'arrivée</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-vue-carrefour"> 🗺️ Dessin du vrai carrefour dans le panneau (ronds-points, carrefours à plusieurs routes)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-fenetre-voies"> 🛣️ Fenêtre des voies (comme Sygic) quand il faut choisir sa file</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-feux"> 🚦 « Au feu, tournez… » (feux d'OpenStreetMap)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-zones-danger"> ⚠️ Zones de danger (radars fixes, comme la loi l'autorise : zone sans emplacement précis)</label>
-        <div class="ev-hint">Les voies à prendre restent toujours affichées à l'écran.</div>
+        <div class="ev-hint">Tout est déjà réglé comme conseillé ; ouvrez une rubrique pour changer.</div>
+        <details class="ev-sous-menu">
+          <summary>🖥️ Affichage</summary>
+          <label class="ev-champ">🔠 Taille du texte en navigation : <span id="ev-reglage-taille-texte-val" class="ev-valeur">100</span> %
+            <input type="range" min="80" max="130" step="5" value="100" id="ev-reglage-taille-texte" class="ev-curseur">
+          </label>
+          <label class="ev-champ">🪧 Affichage en navigation
+            <select id="ev-reglage-taille-bandeau" class="ev-input">
+              <option value="compact">Compact : la carte reste bien visible (conseillé)</option>
+              <option value="grand">Grand : flèche, rue et infos en très gros</option>
+            </select>
+          </label>
+          <label class="ev-champ">Icône de la voiture
+            <select id="ev-reglage-icone" class="ev-input">
+              <option value="fleche_bleue">Flèche bleue</option>
+              <option value="fleche_verte">Flèche verte</option>
+              <option value="fleche_orange">Flèche orange</option>
+              <option value="fleche_rouge">Flèche rouge</option>
+              <option value="voiture">Voiture vue de dessus</option>
+              <option value="point">Point avec direction</option>
+            </select>
+          </label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-epure"> 🧘 Écran épuré en longue ligne droite (bandeau replié, autoroute : l'essentiel)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-nuit-douce"> 🌙 Écran moins lumineux la nuit</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-zoom-renforce"> 🔍 Zoom renforcé aux ronds-points, grands carrefours, sorties et entrées de voie rapide</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-vue-carrefour"> 🗺️ Dessin du vrai carrefour dans le panneau (ronds-points, carrefours à plusieurs routes)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-fenetre-voies"> 🛣️ Fenêtre des voies (comme Sygic) quand il faut choisir sa file</label>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>🗣️ Voix et mains libres</summary>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-voix"> 🔊 Guidage vocal (on peut aussi le couper en route avec 🔊)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-reponses-voix"> 🗣️ Mains sur le volant : répondre à la voix (« oui », « non », « le premier »…) aux propositions</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-voies"> 🛣️ Dire quelle voie prendre (« prenez la voie de droite »)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-vibration"> 📳 Vibrer avant chaque manœuvre</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-notif"> 🔔 Guidage visible écran verrouillé (notification)</label>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>⚠️ Alertes</summary>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-travaux"> 🚧 Annoncer les travaux, routes fermées et ralentissements</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-zones-danger"> ⚠️ Zones de danger (radars fixes, comme la loi l'autorise : zone sans emplacement précis)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-meteo-route"> 🌦️ Annoncer la météo devant soi (orage, neige, verglas, forte pluie, vent)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-feux"> 🚦 « Au feu, tournez… » (feux d'OpenStreetMap)</label>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>🔋 Voiture électrique</summary>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-bornes"> 🔋 Annoncer les bornes de recharge prévues</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-prechauffage"> 🌡️ Rappeler de préchauffer la batterie avant une borne rapide</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-aires"> 🛣️ Sur autoroute et voie express : prochaine borne et aires (en bas à gauche)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-reglage-parking-arrivee"> 🅿️ Proposer des parkings à 2 km de l'arrivée</label>
+        </details>
+        <button id="ev-reglages-conseilles-btn" class="ev-lien ev-lien-centre" type="button">↺ Revenir aux réglages conseillés</button>
       </div>
 
       <div class="ev-carte-bloc">
@@ -536,8 +551,38 @@
         </div>
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
+      <div class="ev-carte-bloc">
+        <h3>❓ Aide et astuces</h3>
+        <details class="ev-sous-menu" id="ev-aide">
+          <summary>En navigation, mains sur le volant</summary>
+          <ul class="ev-aide-liste">
+            <li><strong>🎤 Micro</strong> : « prochaine borne ? », « combien de temps ? », « batterie », « trouve une boulangerie », « où me garer », « autre borne », « la route est barrée », « coupe le son », « préviens que j'arrive ».</li>
+            <li><strong>Questions de l'appli</strong> (itinéraire plus rapide, parking, borne en panne) : répondez « oui » ou « non » ; pour une liste : « le premier », « la deuxième »… Sans réponse, rien ne change.</li>
+            <li><strong>Toucher le bandeau</strong> : les prochaines étapes. <strong>Appui long sur la carte</strong> : y aller ou en faire une étape.</li>
+            <li><strong>Menu ⋯</strong> : aperçu, partage de l'arrivée, batterie prévue / réelle, changer de borne, tête haute, le long du trajet, parkings.</li>
+            <li><strong>Bouton barrière</strong> : route barrée devant, un autre chemin est cherché.</li>
+          </ul>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>Préparer un trajet</summary>
+          <ul class="ev-aide-liste">
+            <li>Sous chaque curseur : les km réels (et sur autoroute) que cela représente.</li>
+            <li><strong>Recharger à</strong> : imposer votre aire préférée (mettez sa borne en ⭐ favori sur la carte).</li>
+            <li><strong>🏠 Chez moi / 💼 Travail</strong> : adresses dans le Profil. <strong>🎤</strong> : dicter la destination.</li>
+            <li>Résumé du trajet : sorties et échangeurs, « Quand partir ? », partager le trajet.</li>
+          </ul>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>Sur la carte et dans Outils</summary>
+          <ul class="ev-aide-liste">
+            <li>Puces 🅿️ Parkings, 🚦 Trafic, 🚗 Ma voiture (position enregistrée à l'arrivée).</li>
+            <li>Outils : statistiques, journal des recharges, anciens trajets à revoir.</li>
+            <li>Changer de téléphone : Profil › Sauvegarde (lien par e-mail, ou Google Drive).</li>
+          </ul>
+        </details>
+      </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 38 : mains sur le volant (réponses à la voix), tracé bleu de jour</div>
+      <div class="ev-hint ev-lien-centre">Version 39 : icônes dessinées, Profil en rubriques, trajet allégé, aide intégrée</div>
     </div>
   </div>
 </section>
@@ -591,11 +636,11 @@
   </div>
 
   <div class="ev-nav-boutons">
-    <button id="ev-nav-voix-btn" class="ev-fab" type="button" title="Couper / remettre la voix">🔊</button>
-    <button id="ev-nav-micro-btn" class="ev-fab" type="button" title="Commande vocale">🎤</button>
+    <button id="ev-nav-voix-btn" class="ev-fab" type="button" title="Couper / remettre la voix"></button>
+    <button id="ev-nav-micro-btn" class="ev-fab" type="button" title="Commande vocale" data-icone="micro"></button>
     <button id="ev-nav-3d-btn" class="ev-fab ev-fab-texte" type="button" title="Vue 3D / 2D">3D</button>
-    <button id="ev-nav-barree-btn" class="ev-fab" type="button" title="Route barrée devant : chercher un autre chemin">🚧</button>
-    <button id="ev-nav-menu-btn" class="ev-fab ev-fab-texte" type="button" title="Plus d'options">⋯</button>
+    <button id="ev-nav-barree-btn" class="ev-fab" type="button" title="Route barrée devant : chercher un autre chemin" data-icone="barriere"></button>
+    <button id="ev-nav-menu-btn" class="ev-fab ev-fab-texte" type="button" title="Plus d'options" data-icone="menu"></button>
   </div>
   <button id="ev-nav-recentrer-btn" class="ev-nav-recentrer hidden" type="button">🎯 Recentrer</button>
 
@@ -609,6 +654,7 @@
       <button type="button" data-nav-action="partage">📤<span>Partager mon arrivée</span></button>
       <button type="button" data-nav-action="batterie">🔋<span>Batterie prévue / réelle</span></button>
       <button type="button" data-nav-action="secours">🔌<span>Changer de borne</span></button>
+      <button type="button" data-nav-action="aide">❓<span>Astuces (à l'arrêt)</span></button>
       <button type="button" data-nav-action="hud">🪞<span>Tête haute</span></button>
       <button type="button" data-nav-action="recherche">🔍<span>Le long du trajet</span></button>
       <button type="button" data-nav-action="parkings">🅿️<span>Parkings à l'arrivée</span></button>

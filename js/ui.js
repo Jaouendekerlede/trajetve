@@ -29,6 +29,7 @@ import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./
 import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { boutonPartage, partagerTrajet } from "./ui-partage.js";
 import { cablerDrive } from "./ui-drive.js";
+import { icone, iconeFond } from "./icones.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -99,6 +100,8 @@ function majKmCurseurs() {
   $("ev-charge-km").textContent = `${deux(depart)} (jusqu'à 0 %)`;
   $("ev-marge-km").textContent = `Réserve gardée ≈ ${nombre(km(marge))} km · ${nombre(km(marge, consoAutoroute))} km sur autoroute`;
   $("ev-cible-km").textContent = `Entre deux recharges (${cible} − ${marge} = ${cible - marge} %) : ${deux(cible - marge)}`;
+  const aire = $("ev-arret-impose")?.selectedOptions?.[0];
+  $("ev-recharge-resume").textContent = `🔋 Recharges : marge ${marge} % · jusqu'à ${cible} %${aire?.value ? ` · ${aire.text}` : ""}`;
   $("ev-charge-km").title = `Base : ${String(conso.toFixed(1)).replace(".", ",")} kWh/100 km ${mesuree ? "(appris en roulant)" : "(fiche constructeur, saison)"}`;
 }
 
@@ -513,7 +516,7 @@ function appliquerTheme() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "clair" ? "#ffffff" : "#05080e");
   document.querySelectorAll("[data-theme-choix]").forEach((b) => b.classList.toggle("active", b.dataset.themeChoix === choix));
   // Tant que l'utilisateur n'a pas choisi de fond de carte, il suit le thème.
-  if (!reglages.fond_carte) $("ev-fond-btn").textContent = ICONES_FONDS[choisirFond(fondParDefaut())];
+  if (!reglages.fond_carte) $("ev-fond-btn").innerHTML = iconeFond(choisirFond(fondParDefaut()));
   if (dernierTrajet && !$("ev-profil-trajet").classList.contains("hidden")) afficherVueCourbe();
 }
 
@@ -542,7 +545,7 @@ function appliquerJourNuit(auDemarrage = false) {
   const actuel = fondCourant();
   const voulu = nuit ? "sombre" : "plan";
   if (actuel === "satellite" || actuel === voulu) return;
-  $("ev-fond-btn").textContent = ICONES_FONDS[choisirFond(voulu)];
+  $("ev-fond-btn").innerHTML = iconeFond(choisirFond(voulu));
   if (!auDemarrage) toast(nuit ? "🌙 Coucher du soleil : carte de nuit" : "☀️ Lever du soleil : carte de jour");
 }
 
@@ -574,10 +577,10 @@ async function basculerCarte3D(actif, parUtilisateur) {
 function cablerCarte() {
   const reglages = lireReglages();
   const fond = choisirFond(reglages.fond_carte || fondParDefaut());
-  $("ev-fond-btn").textContent = ICONES_FONDS[fond];
+  $("ev-fond-btn").innerHTML = iconeFond(fond);
   $("ev-fond-btn").addEventListener("click", () => {
     const nom = fondSuivant();
-    $("ev-fond-btn").textContent = ICONES_FONDS[nom];
+    $("ev-fond-btn").innerHTML = iconeFond(nom);
     sauverReglages({ fond_carte: nom });
     toast({ sombre: "🌙 Carte sombre", plan: "🗺️ Plan clair", satellite: "🛰️ Vue satellite" }[nom]);
   });
@@ -597,6 +600,15 @@ function cablerCarte() {
   cablerTrafic();
   cablerVoitureGaree();
   cablerStats();
+  $("ev-arret-impose").addEventListener("change", majKmCurseurs);
+  $("ev-reglages-conseilles-btn").addEventListener("click", () => {
+    if (!confirm("Revenir aux réglages de navigation conseillés ?")) return;
+    const cles = ["taille_texte_nav", "taille_bandeau", "icone_voiture", "ecran_epure", "nuit_douce", "zoom_renforce", "vue_carrefour", "fenetre_voies", "voix_guidage", "reponses_voix", "voix_voies", "vibration", "notif_guidage", "voix_travaux", "zones_danger", "bip_vitesse", "meteo_route", "feux", "voix_bornes", "prechauffage", "aires_autoroute", "parking_arrivee"];
+    sauverReglages(Object.fromEntries(cles.map((c) => [c, undefined])));
+    rendreReglagesProfil();
+    toast("↺ Réglages conseillés rétablis");
+  });
+  for (const b of document.querySelectorAll("[data-icone]")) b.innerHTML = icone(b.dataset.icone);
   cablerDrive();
   // Raccourcis de destination (Chez moi, Travail, trajet habituel).
   document.querySelector(".ev-raccourcis-dest").addEventListener("click", (e) => {

@@ -28,7 +28,7 @@ const PAGES_ACCUEIL = [
   {
     icone: "💡",
     titre: "Quelques astuces",
-    texte: "• « 3D » : carte inclinée avec les bâtiments.\n• 🌙 / 🗺️ / 🛰️ : fond de carte (nuit et jour automatiques).\n• 🎬 Mode démo : essayer la navigation sans rouler.\n• 🚧 En navigation : route barrée devant toi ? Un appui et l'appli trouve un autre chemin.\n• 📧 Profil > Sauvegarde : envoie-toi le lien qui réinstalle tout sur un autre téléphone.",
+    texte: "• En roulant, tout se fait à la voix : 🎤 « prochaine borne ? », « trouve un café »… et « oui » / « non » aux questions de l'appli.\n• Toucher le bandeau : prochaines étapes. Appui long sur la carte : y aller.\n• 🎬 Mode démo : essayer la navigation sans rouler.\n• Profil › Aide et astuces : tout le reste.",
   },
 ];
 
