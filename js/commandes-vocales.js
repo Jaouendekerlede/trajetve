@@ -52,7 +52,8 @@ export function interpreterCommande(texte) {
   if (/(route|rue|c'est) (est )?(barr[ée]|coup[ée]|ferm[ée])/.test(t)) return { action: "barree" };
   if (/(t[êe]te haute|hud|pare-brise)/.test(t)) return { action: "hud" };
   if (/(partag|envoi|pr[ée]vien)/.test(t)) return { action: "partage" };
-  if (/(autre borne|changer de borne|borne (en panne|occup|hors))/.test(t)) return { action: "secours" };
+  if (/(autre borne|changer de borne|borne (est )?(en panne|occup|hors))/.test(t)) return { action: "secours" };
+  if (/(\bsos\b|urgence|accident|\bpanne\b|au secours|aidez-moi)/.test(t)) return { action: "sos" };
   if (/(parking|garer|stationner)/.test(t)) return { action: "parkings" };
   for (const [motif, requete] of RECHERCHES) if (motif.test(t)) return { action: "recherche", requete };
   if (/(batterie|autonomie|pourcentage)/.test(t)) return { action: "batterie" };

@@ -33,3 +33,18 @@ test("réponses à la voix : oui / non, et choix dans une liste", async () => {
   assert.equal(ch("aucun", 3), -1);
   assert.equal(c("autre borne s'il te plaît").action, "secours");
 });
+
+test("SOS : commande vocale et texte à envoyer aux secours", async () => {
+  assert.equal(c("SOS").action, "sos");
+  assert.equal(c("je suis en panne").action, "sos");
+  assert.equal(c("la borne est en panne").action, "secours");
+  const { texteSOS, phraseSOS } = await import("../js/sos.js");
+  const info = { lat: 46.72891, lon: -0.61234, precision: 6, route: { numero: "A83", nom: "L'Océane", rapide: true }, pr: { km: "112,4", distanceM: 150 }, commune: "Faye-sur-Ardin, 79160", sens: "Niort" };
+  const t = texteSOS(info);
+  assert.ok(t.includes("A83 (L'Océane), sens Niort"));
+  assert.ok(t.includes("PR) le plus proche : 112,4 (à 150 m)"));
+  assert.ok(t.includes("46.72891, -0.61234 (précision 6 m)"));
+  assert.ok(phraseSOS(info).startsWith("Vous êtes sur l'autoroute A 83"));
+  assert.ok(phraseSOS({ ...info, route: { numero: "A 83", nom: "" } }).startsWith("Vous êtes sur l'autoroute A 83"), "« A 83 » écrit avec une espace (OpenStreetMap)");
+  assert.ok(texteSOS({ ...info, reperes: "après la sortie 7, avant la sortie 8 (à 5 km)" }).includes("Repère : après la sortie 7"));
+});

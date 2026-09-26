@@ -30,6 +30,7 @@ import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { boutonPartage, partagerTrajet } from "./ui-partage.js";
 import { cablerDrive } from "./ui-drive.js";
 import { icone, iconeFond } from "./icones.js";
+import { ouvrirSOS, cablerSOS } from "./ui-sos.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -600,6 +601,8 @@ function cablerCarte() {
   cablerTrafic();
   cablerVoitureGaree();
   cablerStats();
+  cablerSOS();
+  $("ev-urgence-btn").addEventListener("click", () => ouvrirSOS({ bornes: () => $("ev-urgence-bornes-interne").click() }));
   $("ev-arret-impose").addEventListener("change", majKmCurseurs);
   $("ev-reglages-conseilles-btn").addEventListener("click", () => {
     if (!confirm("Revenir aux réglages de navigation conseillés ?")) return;
@@ -1947,7 +1950,8 @@ function cablerUrgence() {
   const panneau = $("ev-urgence-panel");
   const corps = $("ev-urgence-body");
   let bornesUrg = [];
-  $("ev-urgence-btn").addEventListener("click", async () => {
+  // Recherche « batterie vide » : lancée depuis le panneau SOS.
+  $("ev-urgence-bornes-interne").addEventListener("click", async () => {
     panneau.classList.remove("hidden");
     history.pushState({ urgence: true }, "");
     corps.innerHTML = hint("Recherche des bornes compatibles les plus proches de ta position…");

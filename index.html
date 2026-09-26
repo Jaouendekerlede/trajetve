@@ -582,7 +582,7 @@
         </details>
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 39 : icônes dessinées, Profil en rubriques, trajet allégé, aide intégrée</div>
+      <div class="ev-hint ev-lien-centre">Version 40 : SOS (position exacte, 112, consignes)</div>
     </div>
   </div>
 </section>
@@ -649,6 +649,7 @@
   <div id="ev-nav-menu" class="ev-nav-carte ev-nav-menu hidden">
     <div class="ev-nav-carte-titre">Options</div>
     <div class="ev-nav-menu-grille">
+      <button type="button" data-nav-action="sos" class="ev-menu-sos">🆘<span>SOS / urgence</span></button>
       <button id="ev-nav-apercu-btn" type="button">🗺️<span>Aperçu du trajet</span></button>
       <button id="ev-nav-orientation-btn" type="button">🧭<span>Nord en haut</span></button>
       <button type="button" data-nav-action="partage">📤<span>Partager mon arrivée</span></button>
@@ -738,5 +739,37 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 <script type="module" src="./js/main.js"></script>
+<!-- 🆘 SOS : position exacte, 112, consignes -->
+<div id="ev-sos" class="ev-sos hidden" role="dialog" aria-label="SOS">
+  <div class="ev-sos-carte">
+    <div class="ev-sos-tete"><strong>🆘 SOS — ma position</strong><button id="ev-sos-fermer" type="button" class="ev-fermer" aria-label="Fermer">✕</button></div>
+    <div id="ev-sos-position" class="ev-sos-position"></div>
+    <a class="ev-sos-appel" href="tel:112">📞 Appeler le 112</a>
+    <div class="ev-grille-2">
+      <button id="ev-sos-partager" type="button" class="ev-btn">📤 Envoyer ma position</button>
+      <button id="ev-sos-lire" type="button" class="ev-btn">🔊 Lire à voix haute</button>
+    </div>
+    <button id="ev-sos-bornes" type="button" class="ev-btn ev-btn-plein">🔋 Batterie vide : bornes les plus proches</button>
+    <details class="ev-sous-menu">
+      <summary>⚠️ Sur autoroute ou voie express</summary>
+      <ul class="ev-aide-liste">
+        <li>Feux de détresse, puis <strong>gilet avant de sortir</strong>, par la droite.</li>
+        <li>Tous les passagers <strong>derrière la glissière</strong>, loin des voies. Pas de triangle sur autoroute.</li>
+        <li>Appelez depuis une <strong>borne orange</strong> (tous les 2 km : elle vous localise) ou le <strong>112</strong> en donnant route, sens et PR ci-dessus.</li>
+        <li>Sur autoroute, le dépannage se fait <strong>uniquement par les dépanneurs agréés</strong>, envoyés par ces appels.</li>
+      </ul>
+    </details>
+    <details class="ev-sous-menu">
+      <summary>🔋 Voiture électrique</summary>
+      <ul class="ev-aide-liste">
+        <li>Dites aux secours que c'est une <strong>voiture électrique</strong>.</li>
+        <li>Après un choc, ou en cas de fumée, de bruit ou d'odeur anormale : <strong>éloignez-vous</strong> du véhicule (risque batterie).</li>
+        <li>Batterie vide : ne pas pousser sur la voie ; le dépanneur la remorque sur plateau.</li>
+      </ul>
+    </details>
+    <div class="ev-hint">Numéros : 112 (urgences), 15 (SAMU), 17 (police), 18 (pompiers), 114 (par SMS).</div>
+  </div>
+</div>
+<button id="ev-urgence-bornes-interne" type="button" class="hidden" aria-hidden="true"></button>
 </body>
 </html>

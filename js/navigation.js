@@ -14,6 +14,7 @@ import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande, interpreterOuiNon, interpreterChoix } from "./commandes-vocales.js";
 import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js";
 import { icone } from "./icones.js";
+import { ouvrirSOS } from "./ui-sos.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
@@ -1891,6 +1892,7 @@ function actionMenu(action) {
   else if (action === "recherche") $("ev-nav-recherche").classList.remove("hidden");
   else if (action === "parkings") proposerParkings(true);
   else if (action === "partage") partagerArrivee();
+  else if (action === "sos") ouvrirSOSNavigation(false);
   else if (action === "secours") afficherSecours();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
   else if (action === "aide") {
@@ -2036,6 +2038,20 @@ async function remplacerBorne(i) {
   majEcran();
 }
 
+// SOS depuis la navigation : dernière position connue, sens de circulation
+// (direction des panneaux, sinon la destination), position lue à voix haute.
+function ouvrirSOSNavigation(aVoix) {
+  const suivante = etat.route?.instructions.find((i) => i.offset > etat.offset && i.direction);
+  const sens = suivante?.direction || nomCourtLieu((etat.destinationFinale || etat.destination).nom);
+  // Repère compris des secours : entre quelles sorties (d'après l'itinéraire).
+  const instrs = etat.route?.instructions || [];
+  const avant = instrs.filter((i) => i.sortie && i.offset <= etat.offset).pop();
+  const apres = instrs.find((i) => i.sortie && i.offset > etat.offset);
+  const reperes = [avant ? `après la sortie ${avant.sortie}` : "", apres ? `avant la sortie ${apres.sortie} (à ${distanceAffichee(apres.offset - etat.offset)})` : ""].filter(Boolean).join(", ");
+  if (aVoix) parler("Je cherche votre position exacte.", true);
+  ouvrirSOS({ pos: etat.pos ? { lat: etat.pos.lat, lon: etat.pos.lon, precision: Math.round(etat.pos.precision || 0), cap: etat.pos.cap } : null, sens, reperes, lireAHauteVoix: aVoix });
+}
+
 function majBoutonOrientation() {
   $("ev-nav-orientation-btn").innerHTML = etat.sensDeMarche ? "🧭<span>Nord en haut</span>" : "🅽<span>Sens de marche</span>";
 }
@@ -2102,6 +2118,9 @@ async function commandeVocale() {
     case "parkings":
       etat.parVoix = true;
       proposerParkings(true);
+      break;
+    case "sos":
+      ouvrirSOSNavigation(true);
       break;
     case "batterie":
       parler(`Batterie estimée : ${Math.round(batterieEstimee())} pour cent.`, true);
