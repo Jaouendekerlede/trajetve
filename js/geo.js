@@ -59,6 +59,7 @@ export async function suggestionsLieux(texte, pres) {
   }
 }
 const MOTS_DOMICILE = ["chez moi", "maison", "domicile", "à la maison", "a la maison"];
+const MOTS_TRAVAIL = ["travail", "boulot", "bureau", "au travail"];
 
 function positionGps() {
   return new Promise((resolve) => {
@@ -82,7 +83,7 @@ function positionGps() {
 
 // Même rôle que _resoudre_lieu_itineraire de JARVIS : "chez moi" et "ma
 // position" sont des raccourcis, tout le reste passe par le géocodage.
-export async function resoudreLieu(nomLieu, adresseDomicile) {
+export async function resoudreLieu(nomLieu, adresseDomicile, adresseTravail) {
   const brut = (nomLieu || "").trim();
   const cle = brut.toLowerCase();
   if (!brut || MOTS_POSITION.includes(cle)) return positionGps();
@@ -97,6 +98,11 @@ export async function resoudreLieu(nomLieu, adresseDomicile) {
     }
     const lieu = await geocodeLieu(adresseDomicile);
     return lieu ? { ...lieu, nom: `Chez moi (${lieu.nom})` } : { erreur: `Adresse du domicile introuvable : "${adresseDomicile}".` };
+  }
+  if (MOTS_TRAVAIL.includes(cle)) {
+    if (!adresseTravail) return { erreur: "Adresse du travail non renseignée. Ajoute-la dans 🚗 Profil." };
+    const lieuTravail = await geocodeLieu(adresseTravail);
+    return lieuTravail ? { ...lieuTravail, nom: `Travail (${lieuTravail.nom})` } : { erreur: `Adresse du travail introuvable : "${adresseTravail}".` };
   }
   const lieu = await geocodeLieu(brut);
   return lieu || { erreur: `Lieu introuvable : "${brut}".` };

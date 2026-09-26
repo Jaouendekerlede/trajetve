@@ -105,6 +105,11 @@
             <input type="text" id="ev-destination-input" class="ev-input" placeholder="Destination (ville, adresse…)" enterkeyhint="go" aria-label="Destination">
             <button id="ev-destination-micro" class="ev-mini-btn" type="button" title="Dicter la destination">🎤</button>
           </span>
+          <div class="ev-raccourcis-dest">
+            <button type="button" class="ev-chip" data-dest="Chez moi">🏠 Chez moi</button>
+            <button type="button" class="ev-chip" data-dest="Travail">💼 Travail</button>
+            <button type="button" class="ev-chip hidden" id="ev-suggestion-trajet"></button>
+          </div>
         </div>
         <button id="ev-inverser-btn" class="ev-mini-btn ev-inverser" type="button" title="Inverser départ et destination">⇅</button>
       </div>
@@ -263,6 +268,10 @@
         </div>
         <div id="ev-stats-tuiles" class="ev-tuiles"></div>
         <details class="ev-details">
+          <summary>🗺️ Revoir mes derniers trajets</summary>
+          <div id="ev-traces-liste" class="ev-journal-liste"></div>
+        </details>
+        <details class="ev-details">
           <summary>⛽ Comparaison avec une voiture essence</summary>
           <div class="ev-grille-2">
             <label class="ev-champ">Prix de l'essence (€/L) <input type="number" id="ev-stats-prix-essence" class="ev-input" min="0.5" step="0.01" inputmode="decimal"></label>
@@ -408,6 +417,9 @@
 
       <div class="ev-carte-bloc">
         <h3>Domicile et voix</h3>
+        <label class="ev-champ">Adresse du travail (pour « Travail »)
+          <input type="text" id="ev-reglage-travail" class="ev-input" placeholder="Ex : 3 rue de la Gare, Rennes">
+        </label>
         <label class="ev-champ">Adresse du domicile (pour « Chez moi »)
           <input type="text" id="ev-reglage-domicile" class="ev-input" placeholder="Ex : 12 rue des Lilas, Rennes">
         </label>
@@ -509,7 +521,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 33 : préchauffage, minuteur de recharge, conso par type de route, borne à l'approche, recharge maison</div>
+      <div class="ev-hint ev-lien-centre">Version 34 : Travail, trajets habituels, bilan d'arrivée, partage du trajet, anciens trajets</div>
     </div>
   </div>
 </section>

@@ -395,3 +395,38 @@ export function noterTrajetPrevu(trajet) {
 export function trajetPrevu() {
   return lireJson(CLE_TRAJET_PREVU, null);
 }
+
+// Tracés réellement roulés des derniers trajets (« 🗺️ Revoir »). Clé hors
+// sauvegarde (« tve_ ») : trop volumineux pour le lien de restauration.
+const CLE_TRACES = "tve_traces";
+const MAX_TRACES = 20;
+
+export function listerTraces() {
+  return lireJson(CLE_TRACES, []);
+}
+
+export function ajouterTrace(trace) {
+  const liste = [{ date: Date.now(), ...trace }, ...listerTraces()].slice(0, MAX_TRACES);
+  try {
+    ecrireJson(CLE_TRACES, liste);
+  } catch {
+    // Stockage plein : on garde moins de tracés.
+    ecrireJson(CLE_TRACES, liste.slice(0, 5));
+  }
+}
+
+// Trajets fréquents : destination souvent prise à cette heure-ci (±1 h),
+// d'après les trajets faits. Renvoie le nom, ou null.
+export function destinationHabituelle(maintenant = new Date()) {
+  const h = maintenant.getHours();
+  const compte = new Map();
+  for (const t of listerTrajetsFaits()) {
+    if (!t.destination) continue;
+    const ht = new Date(t.date).getHours();
+    if (Math.min(Math.abs(ht - h), 24 - Math.abs(ht - h)) > 1) continue;
+    compte.set(t.destination, (compte.get(t.destination) || 0) + 1);
+  }
+  let meilleur = null;
+  for (const [d, n] of compte) if (n >= 2 && (!meilleur || n > meilleur.n)) meilleur = { d, n };
+  return meilleur?.d || null;
+}

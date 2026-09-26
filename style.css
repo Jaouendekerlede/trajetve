@@ -977,3 +977,10 @@ body.ev-nuit-douce .ev-nav-haut, body.ev-nuit-douce .ev-nav-bas { filter: bright
 
 /* Km réels sous les curseurs de batterie */
 .ev-km-estime { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 600; color: var(--texte-att); }
+
+/* Raccourcis de destination, bilan d'arrivée */
+.ev-raccourcis-dest { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ev-bilan { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 8px 0; }
+.ev-bilan div { display: flex; flex-direction: column; padding: 6px 8px; border-radius: 10px; background: var(--chip); }
+.ev-bilan strong { font-size: 17px; }
+.ev-bilan span { font-size: 12px; color: var(--texte-att); }

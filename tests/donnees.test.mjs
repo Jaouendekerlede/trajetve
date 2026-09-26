@@ -85,3 +85,15 @@ test("conso apprise par type de route (mesures surtout sur un type)", () => {
   assert.equal(c.ville, 14);
   assert.equal(c.route, null);
 });
+
+test("trajet habituel : destination prise au moins 2 fois vers cette heure-ci", () => {
+  localStorage.clear();
+  const a8h = (j) => new Date(2026, 8, j, 8, 5).getTime();
+  s.ajouterTrajetFait({ km: 20, destination: "Travail (Rennes)" });
+  const liste = JSON.parse(localStorage.getItem("trajetve_trajets_faits"));
+  liste[0].date = a8h(20);
+  liste.push({ date: a8h(21), km: 20, destination: "Travail (Rennes)" }, { date: new Date(2026, 8, 21, 18).getTime(), km: 30, destination: "Chez moi" });
+  localStorage.setItem("trajetve_trajets_faits", JSON.stringify(liste));
+  assert.equal(s.destinationHabituelle(new Date(2026, 8, 26, 7, 40)), "Travail (Rennes)");
+  assert.equal(s.destinationHabituelle(new Date(2026, 8, 26, 13, 0)), null);
+});

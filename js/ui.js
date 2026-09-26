@@ -4,7 +4,7 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, destinationHabituelle } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
@@ -27,6 +27,7 @@ import { cablerVoitureGaree } from "./ui-voiture.js";
 import { rendreStats, cablerStats } from "./ui-stats.js";
 import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
 import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
+import { boutonPartage, partagerTrajet } from "./ui-partage.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -217,10 +218,14 @@ function afficherVue(vue, { etat, historique = true } = {}) {
   if (vue === "borne" && vueCourante !== "borne") vueAvantBorne = vueCourante;
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
-  if (vue === "trajet") remplirArretsImposes();
+  if (vue === "trajet") {
+    remplirArretsImposes();
+    majSuggestionTrajet();
+  }
   if (vue === "outils") {
     rendreJournal();
     rendreStats();
+    rendreTraces();
   }
   // Mesures et abonnements ont pu changer depuis (navigation, autre écran).
   if (vue === "profil") {
@@ -591,6 +596,22 @@ function cablerCarte() {
   cablerTrafic();
   cablerVoitureGaree();
   cablerStats();
+  // Raccourcis de destination (Chez moi, Travail, trajet habituel).
+  document.querySelector(".ev-raccourcis-dest").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-dest]");
+    if (!b) return;
+    $("ev-destination-input").value = b.dataset.dest;
+    $("ev-destination-input").dispatchEvent(new Event("change"));
+    lancerTrajet();
+  });
+  $("ev-traces-liste").addEventListener("click", (e) => {
+    const i = e.target.closest("[data-trace]")?.dataset.trace;
+    const t = i !== undefined ? listerTraces()[Number(i)] : null;
+    if (!t) return;
+    afficherVue("bornes", { etat: "bas" });
+    afficherTrajet({ coords: t.coords, arrets: [], bouchons: [] });
+    toast(`🗺️ ${nomCourt(t.destination || "Trajet")} · ${nombre(t.km)} km`);
+  });
   cablerArretsImposes();
   for (const id of ["ev-charge-pct-input", "ev-marge-pct-input", "ev-cible-pct-input"]) $(id).addEventListener("input", majKmCurseurs);
   majKmCurseurs();
@@ -1210,7 +1231,8 @@ function afficherResultat(p) {
   alerteCout.textContent = p.depasse_seuil_cout ? `⚠️ Le coût estimé (${euros(p.cout_total_eur)}) dépasse le seuil que tu as fixé.` : "";
   alerteCout.classList.toggle("hidden", !p.depasse_seuil_cout);
 
-  $("ev-etapes").innerHTML = etapesHtml(p) + echangeursHtml(p) + boutonQuandPartir();
+  $("ev-etapes").innerHTML = etapesHtml(p) + echangeursHtml(p) + boutonQuandPartir() + boutonPartage();
+  $("ev-partager-trajet-btn").addEventListener("click", () => partagerTrajet(p));
   $("ev-quand-partir-btn").addEventListener("click", () => quandPartir(p));
   $("ev-etapes")
     .querySelectorAll("[data-arret]")
@@ -2000,6 +2022,7 @@ function rendreReglagesProfil() {
   const profil = obtenirProfilVehicule();
   const reglages = lireReglages();
   $("ev-reglage-domicile").value = reglages.adresse_domicile || "";
+  $("ev-reglage-travail").value = reglages.adresse_travail || "";
   $("ev-reglage-annonce").checked = !!reglages.annonce_vocale;
   $("ev-reglage-carte3d").value = reglages.carte_3d || "libre";
   $("ev-reglage-relief").checked = reglages.relief_3d === true;
@@ -2100,6 +2123,7 @@ function cablerProfil() {
     });
     sauverReglages({
       adresse_domicile: $("ev-reglage-domicile").value.trim(),
+      adresse_travail: $("ev-reglage-travail").value.trim(),
       annonce_vocale: $("ev-reglage-annonce").checked,
       carte_3d: $("ev-reglage-carte3d").value,
       relief_3d: $("ev-reglage-relief").checked,
@@ -2157,6 +2181,26 @@ export function proposerRechargeMaison() {
     texte: `🔌 Trajet ${quand} vers ${nomCourt(t.destination || "").split(",")[0]} (${nombre(t.distance_km)} km) : branchez ce soir en heures creuses pour partir à 100 %.`,
     boutons: [{ libelle: "OK", action: () => {} }],
   });
+}
+
+// « 💡 Travail ? » : destination souvent prise à cette heure-ci.
+function majSuggestionTrajet() {
+  const d = destinationHabituelle();
+  const b = $("ev-suggestion-trajet");
+  b.classList.toggle("hidden", !d);
+  if (d) {
+    b.dataset.dest = d;
+    b.textContent = `💡 ${nomCourt(d).split(",")[0]} ?`;
+  }
+}
+
+function rendreTraces() {
+  const traces = listerTraces();
+  $("ev-traces-liste").innerHTML = traces.length
+    ? traces
+        .map((t, i) => `<div class="ev-journal-ligne"><span>${new Date(t.date).toLocaleDateString("fr-FR")} · ${escapeHtml(nomCourt(t.destination || "Trajet").split(",")[0])} · ${nombre(t.km)} km</span><button type="button" class="ev-btn" data-trace="${i}">Voir</button></div>`)
+        .join("")
+    : `<div class="ev-hint">Les trajets guidés apparaîtront ici.</div>`;
 }
 
 export function executerAction(action) {

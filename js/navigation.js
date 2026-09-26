@@ -6,7 +6,7 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace } from "./storage.js";
 import { enrichirBornes } from "./irve.js";
 import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
@@ -1016,6 +1016,7 @@ function arriveePause(arret) {
 function arriveeBorne(arret) {
   if (arret.pause) return arriveePause(arret);
   etat.aLaBorne = arret;
+  etat.debutBorne = Date.now();
   parler(
     `Vous êtes arrivé à la borne ${arret.nom_borne}. Rechargez jusqu'à ${arret.pct_depart_borne} pour cent, environ ${arret.temps_charge_min} minutes.`,
     true,
@@ -1057,7 +1058,9 @@ function arriveeBorne(arret) {
     // Journal des recharges (pas en démo) : kWh réellement ajoutés d'après
     // la batterie à l'arrivée et celle indiquée au départ.
     const kwh = Math.round(((pctRepart - pctArrivee) * etat.capacite) / 10) / 10;
+    etat.tempsRechargeMs += Date.now() - (etat.debutBorne || Date.now());
     if (!etat.demo && kwh >= 0.5) {
+      etat.coutRecharges += Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100;
       ajouterAuJournal({ lieu: arret.nom_borne, kwh, cout_eur: Math.round(kwh * (arret.prix_kwh_eur ?? 0.45) * 100) / 100, prix_estime: arret.prix_est_estimation !== false, source: "navigation" });
     }
     arreterMinuteurRecharge();
@@ -1078,6 +1081,21 @@ function arriveeBorne(arret) {
   majEcran();
 }
 
+// Bilan d'arrivée : réel comparé au plan.
+function bilanArrivee() {
+  const minutes = Math.round((Date.now() - etat.debut) / 60000);
+  const prevu = etat.plan.duree_totale_min;
+  const batt = Math.round(batterieEstimee());
+  const recharge = Math.round(etat.tempsRechargeMs / 60000);
+  const cases = [
+    [`${Math.round(etat.odometre / 1000)} km`, "parcourus"],
+    [formaterMinutes(minutes), prevu ? `prévu ${formaterMinutes(prevu)}` : "de route"],
+    [`${batt} %`, etat.plan.pct_batterie_arrivee != null ? `batterie (prévu ${Math.round(etat.plan.pct_batterie_arrivee)} %)` : "batterie"],
+  ];
+  if (recharge > 0) cases.push([`${recharge} min`, `de recharge${etat.coutRecharges ? ` · ${etat.coutRecharges.toFixed(2).replace(".", ",")} €` : ""}`]);
+  return `<div class="ev-bilan">${cases.map(([v, l]) => `<div><strong>${v}</strong><span>${l}</span></div>`).join("")}</div>`;
+}
+
 function arriveeDestination() {
   if (etat.arrive) return;
   etat.arrive = true;
@@ -1093,6 +1111,7 @@ function arriveeDestination() {
     <div class="ev-nav-carte-titre">🏁 Vous êtes arrivé</div>
     <div>${escapeHtml(etat.destination.nom || "")}</div>
     <div>Batterie estimée : <strong>${Math.round(batterieEstimee())} %</strong></div>
+    ${bilanArrivee()}
     ${etat.demo ? "" : `<div class="ev-nav-carte-sous">🚗 Position de la voiture enregistrée (Carte › 🚗 Ma voiture)</div>`}
     ${finale ? `<a class="ev-btn" href="${escapeHtml(lienAPied(finale.lat, finale.lon))}" target="_blank" rel="noopener">🚶 Finir à pied jusqu'à ${escapeHtml(finale.nom || "la destination")}</a>` : ""}
     <button type="button" id="ev-nav-terminer-btn" class="ev-btn-principal">Terminer</button>`;
@@ -1304,6 +1323,9 @@ function surPosition(p) {
     const kmhType = (p.vitesse || 0) * 3.6;
     etat.kmTypes[kmhType < 55 ? "ville" : kmhType < 95 ? "route" : "autoroute"] += avance / 1000;
   }
+  // Tracé réellement roulé (« Revoir mes trajets ») : un point tous les 150 m.
+  const dernier = etat.traceRoulee[etat.traceRoulee.length - 1];
+  if (!etat.demo && (!dernier || haversineKm(dernier[1], dernier[0], p.lat, p.lon) > 0.15)) etat.traceRoulee.push([Math.round(p.lon * 1e5) / 1e5, Math.round(p.lat * 1e5) / 1e5]);
   // Nouveau repère de batterie : la répartition repart d'ici.
   if (!etat.batterie.refTypes) etat.batterie.refTypes = { ...etat.kmTypes };
   etat.idx = m.i;
@@ -2240,6 +2262,9 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     carrefours: new Map(),
     mesuresBatterie: [{ km: 0, pct: chargeDepartPct ?? 80 }],
     kmTypes: { ville: 0, route: 0, autoroute: 0 },
+    traceRoulee: [],
+    tempsRechargeMs: 0,
+    coutRecharges: 0,
     rappelsFaits: new Set(),
     alertesMeteo: new Set(),
     airesOsm: null,
@@ -2406,6 +2431,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   // Statistiques : trajet réellement roulé (pas la démo, pas un faux départ).
   if (!etat.demo && etat.odometre > 1000) {
     const km = etat.odometre / 1000;
+    if (etat.traceRoulee.length >= 2) ajouterTrace({ destination: (etat.destinationFinale || etat.destination).nom || "", km: Math.round(km * 10) / 10, coords: etat.traceRoulee });
     ajouterTrajetFait({ km: Math.round(km * 10) / 10, kwh: Math.round(km * etat.consoKwhKm * 10) / 10, duree_min: Math.round((Date.now() - etat.debut) / 60000), destination: (etat.destinationFinale || etat.destination).nom || "" });
   }
   const onFin = etat.onFin;

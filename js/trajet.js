@@ -50,9 +50,10 @@ async function calculerItineraire(depart, destination, opts) {
   const domicile = lireReglages().adresse_domicile;
 
   // Séquentiel exprès : Nominatim demande au plus 1 requête/seconde.
-  const a = await resoudreLieu(depart, domicile);
+  const travail = lireReglages().adresse_travail;
+  const a = await resoudreLieu(depart, domicile, travail);
   if (a.erreur) return { ok: false, erreur: a.erreur };
-  const b = await resoudreLieu(destination, domicile);
+  const b = await resoudreLieu(destination, domicile, travail);
   if (b.erreur) return { ok: false, erreur: b.erreur };
 
   const departMs = departPrevuMs(opts);
