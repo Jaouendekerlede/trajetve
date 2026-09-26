@@ -82,7 +82,7 @@ async function telecharger(urls, onProgres, depart = 0, total = urls.length) {
 
 // Guidage complet du trajet (via les bornes prévues), gardé pour démarrer ou
 // recalculer la navigation sans réseau.
-async function preparerGuidage(plan) {
+export async function preparerGuidage(plan) {
   const arrets = (plan.arrets || []).map((a) => ({ lat: a.lat, lon: a.lon }));
   const r = await calculerItineraireTomTom(getApiKeys().tomtom, plan.from_lat, plan.from_lon, plan.to_lat, plan.to_lon, { etapes: arrets, instructions: true, zonesEvitees: rectanglesZonesEvitees() });
   if (r.erreur) return false;

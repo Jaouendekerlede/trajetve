@@ -14,7 +14,7 @@ import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-v
 import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
-import { guidageHorsLigne } from "./hors-ligne.js";
+import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
@@ -1408,6 +1408,11 @@ function boucleAnimation(t) {
     if (etat) etat.raf = null;
     return;
   }
+  // Téléphone faible : une image sur trois suffit.
+  if (etat.eco && etat.derniereImage && t - etat.derniereImage < 50) {
+    etat.raf = requestAnimationFrame(boucleAnimation);
+    return;
+  }
   const { depuis, vers, debut, duree } = etat.anim;
   const k = Math.min(1, (t - debut) / duree);
   const dtImage = etat.derniereImage ? Math.min(100, t - etat.derniereImage) : 16;
@@ -1571,6 +1576,8 @@ function cablerBoutons() {
   });
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
   $("ev-nav-micro-btn").addEventListener("click", commandeVocale);
+  window.addEventListener("online", surReseau);
+  window.addEventListener("offline", surReseau);
   $("ev-nav-manoeuvre").addEventListener("click", () => etat && basculerFeuilleDeRoute());
   $("ev-nav-feuille").addEventListener("click", () => $("ev-nav-feuille").classList.add("hidden"));
   $("ev-nav-point").addEventListener("click", (e) => {
@@ -1754,6 +1761,57 @@ async function allerAuPoint() {
   afficherAlerte(route ? null : "⚠️ Itinéraire impossible pour le moment (réseau ?).");
   if (route) parler("Nouvelle destination.", true);
   majEcran();
+}
+
+// ── Téléphone faible (< 20 %, pas en charge) : affichage allégé ─────────────
+
+const SEUIL_BATTERIE_TELEPHONE = 0.2;
+
+async function surveillerBatterieTelephone() {
+  if (!navigator.getBattery) return;
+  try {
+    const b = await navigator.getBattery();
+    const maj = () => {
+      if (!etat) return;
+      const eco = b.level < SEUIL_BATTERIE_TELEPHONE && !b.charging;
+      if (eco && !etat.eco) {
+        afficherAlerte("🔋 Téléphone faible : affichage allégé (branchez-le si possible).");
+        setTimeout(() => etat && $("ev-nav-alerte").textContent.startsWith("🔋 Téléphone") && afficherAlerte(null), 10000);
+      }
+      etat.eco = eco;
+      document.body.classList.toggle("ev-eco", eco);
+    };
+    b.addEventListener("levelchange", maj);
+    b.addEventListener("chargingchange", maj);
+    maj();
+  } catch {
+    // API indisponible : rien à faire.
+  }
+}
+
+// ── Réseau perdu / retrouvé ─────────────────────────────────────────────────
+// Le guidage est gardé au départ (léger) ; sur Wi-Fi, les cartes du trajet
+// aussi. Une zone blanche n'interrompt donc rien.
+
+async function garderPourHorsLigne() {
+  if (etat.demo || !navigator.onLine) return;
+  try {
+    const wifi = navigator.connection?.type === "wifi" && !navigator.connection?.saveData;
+    if (wifi) await preparerHorsLigne(etat.plan);
+    else await preparerGuidage(etat.plan);
+  } catch {
+    // Pas grave : le guidage en ligne continue.
+  }
+}
+
+function surReseau() {
+  if (!etat) return;
+  if (!navigator.onLine) {
+    afficherAlerte("📡 Hors réseau : le guidage continue avec l'itinéraire gardé.");
+  } else {
+    if ($("ev-nav-alerte").textContent.startsWith("📡")) afficherAlerte(null);
+    etat.dernierTrafic = 0; // trafic à jour dès que possible
+  }
 }
 
 // Menu « ⋯ » : les actions moins fréquentes.
@@ -2303,6 +2361,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   document.body.classList.add("ev-mode-navigation");
   document.body.classList.toggle("ev-mode-voiture", reglages.mode_voiture === true);
   document.body.classList.toggle("ev-bandeau-compact", reglages.taille_bandeau !== "grand");
+  document.documentElement.style.setProperty("--echelle-nav", String((reglages.taille_texte_nav || 100) / 100));
   reveillerBoutons();
   carte2D.definirIconeVoiture(reglages.icone_voiture);
   carte3D.definirIconeVoiture(reglages.icone_voiture);
@@ -2367,6 +2426,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   installerRoute(route);
   chercherRadars();
   chercherAires();
+  surveillerBatterieTelephone();
+  garderPourHorsLigne();
   const premiere = route.instructions.find((i) => i.type !== "LOCATION_DEPARTURE");
   parler(`C'est parti. ${premiere ? premiere.message : ""}`, true);
   if (demo) demarrerDemo();
@@ -2439,7 +2500,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   etat = null;
   vue.montrerBornes(false);
   vue.quitterNavigation();
-  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud", "ev-nav-calme", "ev-nav-epure", "ev-nuit-douce");
+  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud", "ev-nav-calme", "ev-nav-epure", "ev-nuit-douce", "ev-eco");
   carte2D.definirAppuiLong(null);
   navigator.serviceWorker?.getRegistration?.().then((reg) => reg?.getNotifications({ tag: "guidage" }).then((l) => l.forEach((n) => n.close())));
   $("ev-navigation").classList.add("hidden");

@@ -984,3 +984,9 @@ body.ev-nuit-douce .ev-nav-haut, body.ev-nuit-douce .ev-nav-bas { filter: bright
 .ev-bilan div { display: flex; flex-direction: column; padding: 6px 8px; border-radius: 10px; background: var(--chip); }
 .ev-bilan strong { font-size: 17px; }
 .ev-bilan span { font-size: 12px; color: var(--texte-att); }
+
+/* Taille du texte en navigation (réglage) : tout le haut, le bas, le compteur */
+.ev-nav-haut, .ev-nav-bas, .ev-nav-vitesse-bloc, .ev-nav-feuille { zoom: var(--echelle-nav, 1); }
+/* Téléphone faible : ombres et transitions coûteuses retirées */
+body.ev-eco .ev-nav-manoeuvre, body.ev-eco .ev-nav-ensuite, body.ev-eco .ev-fab, body.ev-eco .ev-aire { box-shadow: none; }
+body.ev-eco .ev-nav-manoeuvre, body.ev-eco .ev-nav-boutons, body.ev-eco .ev-nav-borne { transition: none; }
