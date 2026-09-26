@@ -7,7 +7,7 @@
 // qu'au premier démarrage d'une navigation en 3D.
 
 import { getApiKeys } from "./config.js";
-import { haversineKm } from "./geo.js";
+import { haversineKm, densifier, recalerSurRoutes, pointSurLigne } from "./geo.js";
 import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 import { svgVoiture } from "./icones-voiture.js";
@@ -305,6 +305,12 @@ export function dessinerFlecheManoeuvre(fleche) {
   flecheNav = fleche;
   const source = carte?.getSource("nav-fleche");
   if (!source) return;
+  if (fleche && recalage?.segs?.length) {
+    const ligne = recalerSurRoutes(fleche.ligne, recalage.segs, ECART_RECALAGE_M);
+    const [fin, finR] = [fleche.ligne[fleche.ligne.length - 1], ligne[ligne.length - 1]];
+    const [dx, dy] = [finR[0] - fin[0], finR[1] - fin[1]];
+    fleche = { ligne, pointe: fleche.pointe.map(([x, y]) => [x + dx, y + dy]) };
+  }
   source.setData(
     fleche
       ? {
@@ -985,6 +991,7 @@ export function quitterNavigation() {
 
 export function dessinerRouteNavigation(coords, arrets, destination) {
   traceNav = [coords, arrets, destination];
+  recalage = null;
   cumRoute = [0];
   for (let i = 1; i < coords.length; i++) cumRoute.push(cumRoute[i - 1] + haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]));
   carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
@@ -1005,7 +1012,81 @@ export function majProgressionNavigation(coords, indice, lat, lon) {
   carte.setPaintProperty("trajet-ligne", "line-gradient", ["step", ["line-progress"], COULEUR_PARCOURU, f, COULEUR_RESTANT]);
 }
 
+// ── Tracé recalé sur les routes dessinées ───────────────────────────────────
+// Les tuiles OpenFreeMap simplifient les routes : zoomées très près (rond-
+// point), elles s'écartent de quelques mètres du tracé TomTom. Autour de la
+// voiture, on recale donc le tracé (et la voiture) sur les routes telles
+// qu'elles sont dessinées.
+const CLASSES_ROUTES = new Set(["motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service"]);
+const RECALAGE_AVANT_M = 150;
+const RECALAGE_APRES_M = 1000;
+const RECALAGE_TOUS_LES_M = 300;
+const ECART_RECALAGE_M = 14;
+let recalage = null;
+
+function segmentsRoutesCarte(bbox) {
+  const sources = carte.getStyle()?.sources || {};
+  const src = Object.keys(sources).find((k) => sources[k].type === "vector");
+  if (!src) return [];
+  let features;
+  try {
+    features = carte.querySourceFeatures(src, { sourceLayer: "transportation" });
+  } catch {
+    return [];
+  }
+  const [o, s, e, n] = bbox;
+  const dedans = ([x, y]) => x >= o && x <= e && y >= s && y <= n;
+  const segs = [];
+  for (const f of features) {
+    if (!CLASSES_ROUTES.has(f.properties?.class)) continue;
+    const g = f.geometry;
+    const lignes = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+    for (const l of lignes) for (let i = 1; i < l.length; i++) if (dedans(l[i - 1]) || dedans(l[i])) segs.push([l[i - 1], l[i]]);
+  }
+  return segs;
+}
+
+function recalerAutour(lat, lon) {
+  const coords = traceNav?.[0];
+  if (!coords?.length || !carte?.getSource("trajet")) return;
+  const maintenant = Date.now();
+  if (recalage?.essai && maintenant - recalage.essai < 2000 && !recalage.fenetre) return;
+  // Point du tracé le plus proche de la voiture, puis la fenêtre autour.
+  let i0 = 0;
+  let dMin = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const d = Math.abs(coords[i][1] - lat) + Math.abs(coords[i][0] - lon);
+    if (d < dMin) {
+      dMin = d;
+      i0 = i;
+    }
+  }
+  let a = i0;
+  for (let cum = 0; a > 0 && cum < RECALAGE_AVANT_M; a--) cum += haversineKm(coords[a - 1][1], coords[a - 1][0], coords[a][1], coords[a][0]) * 1000;
+  let b = i0;
+  for (let cum = 0; b < coords.length - 1 && cum < RECALAGE_APRES_M; b++) cum += haversineKm(coords[b][1], coords[b][0], coords[b + 1][1], coords[b + 1][0]) * 1000;
+  const fenetre = densifier(coords.slice(a, b + 1), 4);
+  const lats = fenetre.map((p) => p[1]);
+  const lons = fenetre.map((p) => p[0]);
+  const marge = 0.0005;
+  const segs = segmentsRoutesCarte([Math.min(...lons) - marge, Math.min(...lats) - marge, Math.max(...lons) + marge, Math.max(...lats) + marge]);
+  recalage = { centre: [lat, lon], trace: coords, essai: maintenant, segs, fenetre: null };
+  if (segs.length < 3) return; // tuiles pas encore chargées : nouvel essai bientôt
+  recalage.fenetre = recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M);
+  const affiche = [...coords.slice(0, a), ...recalage.fenetre, ...coords.slice(b + 1)];
+  carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: affiche }, properties: {} });
+  if (flecheNav) dessinerFlecheManoeuvre(flecheNav);
+}
+
+function voitureRecalee(lat, lon) {
+  if (!enNavigation || !traceNav) return { lat, lon };
+  const [la, lo] = recalage?.centre || [];
+  if (!recalage || recalage.trace !== traceNav[0] || !recalage.fenetre || haversineKm(la, lo, lat, lon) * 1000 > RECALAGE_TOUS_LES_M) recalerAutour(lat, lon);
+  return (recalage?.fenetre && pointSurLigne(lat, lon, recalage.fenetre, 15)) || { lat, lon };
+}
+
 export function majVoiture(lat, lon, cap) {
+  ({ lat, lon } = voitureRecalee(lat, lon));
   if (!voiture) {
     voiture = new maplibregl.Marker({ element: iconeVoiture(), rotationAlignment: "map", pitchAlignment: "map" }).setLngLat([lon, lat]).addTo(carte);
   } else {

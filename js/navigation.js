@@ -75,6 +75,18 @@ function distanceParlee(m) {
   return `${m >= 100 ? Math.round(m / 50) * 50 : Math.round(m / 10) * 10} mètres`;
 }
 
+// « Puis… » en une ligne : l'essentiel de la manœuvre suivante.
+function messageCourt(message) {
+  return minusculeInitiale(
+    String(message || "")
+      .replace(/^Vous (êtes|serez) arrivé.*$/i, "arrivée")
+      .replace(/^Au rond-point, prenez la /i, "rond-point, ")
+      .replace(/,? direction .*$/i, "")
+      .replace(/^Tournez /i, "")
+      .replace(/^Continuez tout droit/i, "tout droit"),
+  );
+}
+
 function minusculeInitiale(texte) {
   return texte ? texte.charAt(0).toLowerCase() + texte.slice(1) : "";
 }
@@ -576,7 +588,7 @@ function majEcran() {
     $("ev-nav-instruction").textContent = t.action;
     const suivante = prochaines[1];
     if (suivante && suivante.offset - instr.offset < 400) {
-      ensuite.innerHTML = `Puis <span class="ev-nav-ensuite-fleche">${svgFleche(suivante)}</span> ${escapeHtml(minusculeInitiale(suivante.message))}`;
+      ensuite.innerHTML = `Puis <span class="ev-nav-ensuite-fleche">${svgFleche(suivante)}</span> ${escapeHtml(messageCourt(suivante.message))}`;
       ensuite.classList.remove("hidden");
     }
   } else {
@@ -597,12 +609,12 @@ function majEcran() {
   majZoneDanger();
   majFrise();
   majAires();
+  document.body.classList.toggle("ev-borne-bas", !$("ev-nav-borne").classList.contains("hidden"));
   // Affichage compact : une seule info sous le bandeau (alerte, sinon voies,
   // sinon prochaine borne) pour garder la carte visible.
   if (document.body.classList.contains("ev-bandeau-compact")) {
     const alerte = !$("ev-nav-alerte").classList.contains("hidden");
     const voies = !$("ev-nav-vue-voies").classList.contains("hidden");
-    if (alerte || voies) $("ev-nav-borne").classList.add("hidden");
     if (alerte) $("ev-nav-vue-voies").classList.add("hidden");
   }
 

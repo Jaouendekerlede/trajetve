@@ -112,3 +112,17 @@ test("flèche de manœuvre : morceau de route autour du virage et pointe dans le
   assert.ok(f.pointe[0][1] > f.pointe[2][1], "base de la pointe perpendiculaire (nord-sud)");
   assert.equal(flecheManoeuvre(coords, cum, 400), null, "au-delà de la route");
 });
+
+test("tracé recalé sur la route dessinée (rond-point), sans sauter sur une rue qui croise", async () => {
+  const { densifier, recalerSurRoutes } = await import("../js/geo.js");
+  // Route dessinée : vers l'est à la latitude 48.1000 ; tracé TomTom 6 m plus au nord.
+  const route = [[[-1.70, 48.1], [-1.60, 48.1]]];
+  const rueQuiCroise = [[[-1.65, 48.09], [-1.65, 48.11]]];
+  const trace = densifier([[-1.66, 48.100054], [-1.64, 48.100054]], 50);
+  assert.ok(trace.length > 20);
+  const r = recalerSurRoutes(trace, [...route, ...rueQuiCroise], 14);
+  assert.ok(r.every(([, lat]) => Math.abs(lat - 48.1) < 1e-7), "tous les points sur la route dessinée");
+  // Trop loin (30 m) : pas de recalage.
+  const loin = recalerSurRoutes([[-1.65, 48.10027]], route, 14);
+  assert.equal(loin[0][1], 48.10027);
+});

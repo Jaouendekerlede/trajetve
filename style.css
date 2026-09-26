@@ -990,3 +990,15 @@ body.ev-nuit-douce .ev-nav-haut, body.ev-nuit-douce .ev-nav-bas { filter: bright
 /* Téléphone faible : ombres et transitions coûteuses retirées */
 body.ev-eco .ev-nav-manoeuvre, body.ev-eco .ev-nav-ensuite, body.ev-eco .ev-fab, body.ev-eco .ev-aire { box-shadow: none; }
 body.ev-eco .ev-nav-manoeuvre, body.ev-eco .ev-nav-boutons, body.ev-eco .ev-nav-borne { transition: none; }
+
+/* « Puis… » : une ligne discrète dans le bandeau, sous l'instruction */
+.ev-nav-manoeuvre-texte .ev-nav-ensuite, body.ev-bandeau-compact .ev-nav-manoeuvre-texte .ev-nav-ensuite { margin: 5px 0 0; padding: 4px 0 0; border-radius: 0; border-top: 1px solid rgba(255, 255, 255, 0.22); background: none; box-shadow: none; color: rgba(255, 255, 255, 0.85); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-nav-manoeuvre-texte .ev-nav-ensuite-fleche svg { width: 16px; height: 16px; vertical-align: -3px; }
+/* Prochaine borne : une ligne dans la barre du bas */
+.ev-nav-bas { flex-wrap: wrap; row-gap: 4px; }
+.ev-nav-bas .ev-nav-borne, body.ev-bandeau-compact .ev-nav-bas .ev-nav-borne { order: -1; flex-basis: 100%; margin: 0; padding: 0 2px 4px; border: none; border-bottom: 1px solid var(--bordure); border-radius: 0; background: none; box-shadow: none; color: var(--texte-att); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-nav-bas .ev-nav-borne strong { color: var(--texte); }
+body.ev-borne-bas .ev-nav-frise { bottom: calc(116px + var(--securite-bas)); }
+body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bottom: calc(134px + var(--securite-bas)); }
+.ev-nav-manoeuvre-texte .ev-nav-ensuite .ev-nav-fleche-emoji { display: inline; font-size: 14px; line-height: 1; }
+.ev-nav-manoeuvre-texte .ev-nav-ensuite-fleche { display: inline; }

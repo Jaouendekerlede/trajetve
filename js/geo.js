@@ -263,3 +263,75 @@ export function lisser(points, passes = 2) {
   }
   return pts;
 }
+
+// Un point au moins tous les `pasM` mètres (pour suivre un rond-point).
+export function densifier(coords, pasM) {
+  if (coords.length < 2) return coords.slice();
+  const res = [coords[0]];
+  for (let i = 1; i < coords.length; i++) {
+    const [lonA, latA] = coords[i - 1];
+    const [lonB, latB] = coords[i];
+    const n = Math.ceil((haversineKm(latA, lonA, latB, lonB) * 1000) / pasM);
+    for (let k = 1; k <= n; k++) res.push([lonA + ((lonB - lonA) * k) / n, latA + ((latB - latA) * k) / n]);
+  }
+  return res;
+}
+
+// Recale chaque point sur la route dessinée la plus proche (à moins de
+// `ecartMaxM`), orientée à peu près comme le tracé (pas sur une rue qui
+// croise). segments : [[lon, lat], [lon, lat]][].
+export function recalerSurRoutes(points, segments, ecartMaxM) {
+  if (!segments.length) return points.slice();
+  return points.map(([lon, lat], i) => {
+    const kx = 111320 * Math.cos((lat * Math.PI) / 180);
+    const ky = 110540;
+    const [p0, p1] = [points[Math.max(0, i - 1)], points[Math.min(points.length - 1, i + 1)]];
+    let [tx, ty] = [(p1[0] - p0[0]) * kx, (p1[1] - p0[1]) * ky];
+    const nt = Math.hypot(tx, ty) || 1;
+    [tx, ty] = [tx / nt, ty / nt];
+    let meilleur = null;
+    let dMin = ecartMaxM;
+    for (const [a, b] of segments) {
+      const ax = (a[0] - lon) * kx;
+      const ay = (a[1] - lat) * ky;
+      const dx = (b[0] - a[0]) * kx;
+      const dy = (b[1] - a[1]) * ky;
+      // Tronçon entièrement d'un côté, loin : inutile de calculer.
+      if ((ax > 200 && ax + dx > 200) || (ax < -200 && ax + dx < -200) || (ay > 200 && ay + dy > 200) || (ay < -200 && ay + dy < -200)) continue;
+      const l2 = dx * dx + dy * dy;
+      if (!l2) continue;
+      // Direction : |cos| ≥ 0,7 (le sens de la voie OSM est quelconque).
+      if (Math.abs((dx * tx + dy * ty) / Math.sqrt(l2)) < 0.7) continue;
+      const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2));
+      const d = Math.hypot(ax + t * dx, ay + t * dy);
+      if (d < dMin) {
+        dMin = d;
+        meilleur = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+      }
+    }
+    return meilleur || [lon, lat];
+  });
+}
+
+// Point le plus proche sur une ligne (à moins de `ecartMaxM`), ou null.
+export function pointSurLigne(lat, lon, ligne, ecartMaxM) {
+  const kx = 111320 * Math.cos((lat * Math.PI) / 180);
+  const ky = 110540;
+  let meilleur = null;
+  let dMin = ecartMaxM;
+  for (let i = 1; i < ligne.length; i++) {
+    const [a, b] = [ligne[i - 1], ligne[i]];
+    const ax = (a[0] - lon) * kx;
+    const ay = (a[1] - lat) * ky;
+    const dx = (b[0] - a[0]) * kx;
+    const dy = (b[1] - a[1]) * ky;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < dMin) {
+      dMin = d;
+      meilleur = { lat: a[1] + t * (b[1] - a[1]), lon: a[0] + t * (b[0] - a[0]) };
+    }
+  }
+  return meilleur;
+}
