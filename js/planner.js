@@ -15,7 +15,32 @@ import {
   MODES_TRAJET,
   PUISSANCE_LENTE_KW,
 } from "./config.js";
-import { pointADistanceSurTrace } from "./geo.js";
+import { pointADistanceSurTrace, haversineKm } from "./geo.js";
+
+// Position (km depuis le départ) du point du tracé le plus proche, et
+// l'écart (km) entre ce point et le lieu.
+export function kmSurTrace(coords, lat, lon) {
+  const kx = 111.32 * Math.cos((lat * Math.PI) / 180);
+  const ky = 110.54;
+  let cumul = 0;
+  let meilleur = { km: 0, ecartKm: Infinity };
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [lonA, latA] = coords[i];
+    const [lonB, latB] = coords[i + 1];
+    const longueur = haversineKm(latA, lonA, latB, lonB);
+    // Projection sur le segment (en km, localement plan).
+    const ax = (lonA - lon) * kx;
+    const ay = (latA - lat) * ky;
+    const dx = (lonB - lonA) * kx;
+    const dy = (latB - latA) * ky;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < meilleur.ecartKm) meilleur = { km: cumul + t * longueur, ecartKm: d };
+    cumul += longueur;
+  }
+  return meilleur;
+}
 import { rechercherBornesProches, borneCompatible } from "./ocm.js";
 
 export function consommationEffectiveKwh100km(profil) {
@@ -371,7 +396,12 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     // ferait arriver très chargé après une longue attente, souvent sur une
     // borne lente près de l'arrivée.
     const besoinFinPct = Math.ceil(margeSecuritePct + pctConsomme(km, distanceKm) + RESERVE_DERNIER_ARRET_PCT);
-    const pctDepart = atteignable(km, cibleRechargePct) >= distanceKm ? Math.min(cibleRechargePct, Math.max(pctArrivee + 1, besoinFinPct)) : cibleRechargePct;
+    let pctDepart = atteignable(km, cibleRechargePct) >= distanceKm ? Math.min(cibleRechargePct, Math.max(pctArrivee + 1, besoinFinPct)) : cibleRechargePct;
+    // Aire préférée plus loin : juste de quoi l'atteindre (on rechargera là-bas).
+    if (kmImpose !== null && kmImpose > km && atteignable(km, cibleRechargePct) >= kmImpose) {
+      const besoinAirePct = Math.ceil(margeSecuritePct + pctConsomme(km, kmImpose) + RESERVE_DERNIER_ARRET_PCT);
+      pctDepart = Math.min(pctDepart, Math.max(pctArrivee + 1, besoinAirePct));
+    }
     const kwh = Math.max(0, (profil.capacite_kwh * (pctDepart - pctArrivee)) / 100);
     // Puissance réellement reçue : borne rapide limitée par la voiture en
     // courant continu, borne lente par son chargeur embarqué (alternatif).
@@ -413,6 +443,21 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     return [limite, distanceParcourue + ecart * 0.8, distanceParcourue + ecart * 0.62].filter((km, i, t) => i === 0 || (km - distanceParcourue >= 30 && t[i - 1] - km >= 15));
   }
 
+  // Arrêt imposé (aire préférée, borne ⭐ choisie au départ) : l'itinéraire
+  // y passe ; on s'y arrête dès qu'il est à portée, sans chercher ailleurs.
+  const impose = options.arretImpose || null;
+  let kmImpose = null;
+  if (impose) {
+    const p = kmSurTrace(coords, impose.lat, impose.lon);
+    if (p.ecartKm <= 2) kmImpose = p.km;
+  }
+  async function choixImpose() {
+    const r = await candidatsAutour(kmImpose);
+    const liste = r.candidates || [];
+    const borne = liste.find((b) => haversineKm(b.lat, b.lon, impose.lat, impose.lon) < 0.4) || { nom: impose.nom, adresse: impose.adresse || "", lat: impose.lat, lon: impose.lon, distance_km: 0, puissance_max_kw: null, operateur: "", _score_info: { score: 60 } };
+    return { borne, plan: planArret(borne, kmImpose), temps: 0, candidates: liste.length ? liste : [borne], impose: true };
+  }
+
   while (true) {
     const limite = atteignable(distanceParcourue, chargePct);
     if (limite >= distanceKm) break;
@@ -425,7 +470,11 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
 
     let choix = null;
     let premiereErreur = null;
-    for (const km of positionsCandidates(limite)) {
+    if (kmImpose !== null && kmImpose > distanceParcourue + 1 && kmImpose <= limite) {
+      choix = await choixImpose();
+      kmImpose = null;
+    }
+    for (const km of choix ? [] : positionsCandidates(limite)) {
       const r = await candidatsAutour(km);
       if (r.erreur) {
         premiereErreur ??= r.erreur;
@@ -476,6 +525,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     arrets.push({
       numero: arrets.length + 1,
       km_depuis_depart: Math.round(pointRechargeKm * 10) / 10,
+      impose: !!choix.impose,
       nom_borne: borne.nom,
       adresse: borne.adresse,
       lat: borne.lat,

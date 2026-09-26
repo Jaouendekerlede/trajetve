@@ -119,3 +119,19 @@ test("formatage des durées", () => {
   assert.equal(formaterMinutes(45), "45 min");
   assert.equal(formaterMinutes(125), "2 h 05");
 });
+
+test("aire préférée imposée : arrêt à cette borne (même plus tôt que prévu), bien reconnue", async () => {
+  // Borne choisie au km ~150 (latitude 1,35), sur le tracé.
+  const aire = { nom: "Aire préférée", lat: 1.35, lon: 0, adresse: "A10" };
+  bornesAutour((lat, lon) => [poiOcm({ nom: "Aire rapide", lat: lat + 0.002, lon, kw: 150 }), poiOcm({ nom: "Aire préférée", lat: 1.3502, lon: 0, kw: 150 })]);
+  const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80, arretImpose: aire });
+  assert.equal(r.ok, true, r.erreur);
+  const a = r.arrets[0];
+  assert.equal(a.nom_borne, "Aire préférée");
+  assert.equal(a.impose, true);
+  assert.ok(Math.abs(a.km_depuis_depart - 150) < 3, `arrêt au km ${a.km_depuis_depart}`);
+  // Sans aire imposée, le premier arrêt serait plus loin.
+  viderMemoire();
+  const libre = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });
+  assert.ok(libre.arrets[0].km_depuis_depart > 200);
+});

@@ -120,6 +120,10 @@
           <button type="button" class="ev-charge-mode-btn active" data-mode="confort">🛋️<span>Confort</span></button>
           <button type="button" class="ev-charge-mode-btn" data-mode="prudent">🛡️<span>Prudent</span></button>
         </div>
+        <label class="ev-champ">🔌 Recharger à
+          <select id="ev-arret-impose" class="ev-input"><option value="">Automatique (le meilleur arrêt)</option></select>
+        </label>
+        <div id="ev-arret-impose-aide" class="ev-hint"></div>
         <label class="ev-champ">Marge de sécurité (batterie mini à l'arrivée à une borne) : <span id="ev-marge-pct-value" class="ev-valeur">12</span>%
           <input type="range" min="5" max="30" value="12" id="ev-marge-pct-input" class="ev-curseur">
         </label>
@@ -490,7 +494,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 27 : météo en route, quand partir, statistiques</div>
+      <div class="ev-hint ev-lien-centre">Version 28 : aire de recharge préférée imposée au départ</div>
     </div>
   </div>
 </section>

@@ -63,7 +63,9 @@ async function calculerItineraire(depart, destination, opts) {
     eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
     // TomTom prévoit alors le trafic à cette heure-là
     departAt: departMs > Date.now() + 5 * 60000 ? new Date(departMs).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
-    maxAlternatives: opts.avec_alternatives && !opts.trace_imposee ? MAX_ALTERNATIVES : 0,
+    // Aire préférée imposée : l'itinéraire y passe (pas d'alternatives alors).
+    etapes: opts.arret_impose ? [{ lat: opts.arret_impose.lat, lon: opts.arret_impose.lon }] : [],
+    maxAlternatives: opts.avec_alternatives && !opts.trace_imposee && !opts.arret_impose ? MAX_ALTERNATIVES : 0,
     traceImposee: opts.trace_imposee,
     zonesEvitees: rectanglesZonesEvitees(),
     // Pour la feuille de route (sorties et échangeurs du trajet).
@@ -188,6 +190,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     enrichirBornes: async (bornes) => appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true })),
     preferCb: opts.preferer_cb,
     optimiserArrets: opts.optimiser_arrets !== false,
+    arretImpose: opts.arret_impose || null,
     bonusAbonnementMin: lireReglages().privilegier_abonnements === false ? 0 : BONUS_ABONNEMENT_MIN,
     fusionner: fusionnerBornes,
     bornesSupplementaires: async (lat, lon) => {

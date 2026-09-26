@@ -24,6 +24,7 @@ import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
 import { rendreStats, cablerStats } from "./ui-stats.js";
+import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
 import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
@@ -191,6 +192,7 @@ function afficherVue(vue, { etat, historique = true } = {}) {
   if (vue === "borne" && vueCourante !== "borne") vueAvantBorne = vueCourante;
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
+  if (vue === "trajet") remplirArretsImposes();
   if (vue === "outils") {
     rendreJournal();
     rendreStats();
@@ -564,6 +566,7 @@ function cablerCarte() {
   cablerTrafic();
   cablerVoitureGaree();
   cablerStats();
+  cablerArretsImposes();
   cablerSuggestions(["ev-depart-input", "ev-destination-input"]);
   // 🎤 Dicter la destination : « Nantes », « aller à la gare de Rennes »…
   $("ev-destination-micro").addEventListener("click", async () => {
@@ -949,6 +952,7 @@ function construireOptions() {
     puissance_min_kw: parseFloat($("ev-puissance-min-input").value) || 0,
     seuil_cout_eur: Number.isFinite(seuil) ? seuil : null,
     depart_prevu: $("ev-depart-prevu-input").value || null,
+    arret_impose: arretImposeChoisi(),
   };
   for (const [cle, id] of Object.entries(CASES)) options[cle] = $(id).checked;
   dernieresOptions = options;
@@ -956,7 +960,7 @@ function construireOptions() {
 }
 
 function sauverPrefsDepuis(options) {
-  const { depart_prevu: _ponctuel, ...aGarder } = options;
+  const { depart_prevu: _ponctuel, arret_impose: _parDestination, ...aGarder } = options;
   sauverPrefs({ ...aGarder, seuil_cout_eur: $("ev-seuil-cout-input").value.trim() });
 }
 
@@ -1115,7 +1119,7 @@ function etapesHtml(p) {
           <div class="ev-etape-titre">Arrêt ${a.numero} · km ${nombre(a.km_depuis_depart)}</div>
           <div class="ev-etape-sous">Arrivée ${heure(arriveeMs)} · repart ${heure(arriveeMs + a.temps_charge_min * 60000)}</div>
           <div class="ev-etape-carte" data-arret="${i}">
-            <strong>${escapeHtml(a.nom_borne)}</strong>
+            <strong>${a.impose ? "⭐ " : ""}${escapeHtml(a.nom_borne)}</strong>${a.impose ? ` <span class="ev-cb-pill ok">Votre aire</span>` : ""}
             <div class="ev-borne-sous">${badgeOperateur(a.operateur)}${escapeHtml(a.operateur || "")}${a.adresse ? ` · ${escapeHtml(a.adresse)}` : ""}</div>
             <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
@@ -1356,8 +1360,11 @@ function lancerNavigation(demo) {
     demo,
     chargeDepartPct: dernierChargeDepartPct,
     // Recalcul des recharges en route, depuis la position actuelle de la voiture.
-    onReplanifier: async (departCoordonnees, chargePct) => {
+    onReplanifier: async (departCoordonnees, chargePct, restants = []) => {
       const o = { ...options, charge_pct: chargePct, depart_prevu: null };
+      // Aire préférée déjà passée : ne pas y renvoyer.
+      const imp = o.arret_impose;
+      if (imp && !restants.some((a) => Math.abs(a.lat - imp.lat) < 0.01 && Math.abs(a.lon - imp.lon) < 0.01)) o.arret_impose = null;
       // Itinéraire choisi parmi les alternatives : on reste dessus.
       if (dernierTrajet.suivre_trace) {
         const [lat, lon] = departCoordonnees.split(",").map(Number);

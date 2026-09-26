@@ -1026,7 +1026,7 @@ async function replanifier() {
   if (!etat?.onReplanifier) return;
   afficherAlerte("🔄 Recalcul des recharges depuis ta position…");
   const pct = Math.max(1, Math.round(batterieEstimee()));
-  const nouveauPlan = await etat.onReplanifier(`${etat.pos.lat.toFixed(5)},${etat.pos.lon.toFixed(5)}`, pct);
+  const nouveauPlan = await etat.onReplanifier(`${etat.pos.lat.toFixed(5)},${etat.pos.lon.toFixed(5)}`, pct, etat.arretsRestants);
   if (!etat) return;
   if (!nouveauPlan?.ok) {
     afficherAlerte(`⚠️ ${nouveauPlan?.erreur || "Recalcul impossible."}`);
