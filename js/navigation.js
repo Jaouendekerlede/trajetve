@@ -20,7 +20,7 @@ import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panne
 import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
-import { escapeHtml, lienAPied } from "./util.js";
+import { escapeHtml, lienAPied, estNuit } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
 import { stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import * as carte2D from "./carte.js";
@@ -553,6 +553,8 @@ function majEcran() {
     const d = instr.offset - etat.offset;
     flecheBandeau(pictoCarrefour(instr) || svgFleche(instr));
     $("ev-nav-distance").textContent = distanceAffichee(d);
+    // Longue ligne droite : bandeau replié en une ligne (« ↑ 34 km · A83 »).
+    etat.bandeauReplie = etat.prefs.epure && (etat.bandeauReplie ? d > REPLI_FIN_M : d > REPLI_DEBUT_M);
     const t = textesPanneau(instr);
     rue.textContent = t.rue;
     rue.classList.toggle("hidden", !t.rue);
@@ -578,6 +580,15 @@ function majEcran() {
     $("ev-nav-distance").textContent = distanceAffichee(route.total - etat.offset);
     $("ev-nav-instruction").textContent = "Continuez jusqu'à la destination";
   }
+  if (!instr || etat.arrive || etat.aLaBorne) etat.bandeauReplie = false;
+  $("ev-nav-manoeuvre").classList.toggle("replie", !!etat.bandeauReplie);
+  if (etat.bandeauReplie) ensuite.classList.add("hidden");
+  // Autoroute en ligne droite : l'essentiel seulement (un toucher rend tout).
+  const kmhEpure = (pos.vitesse || 0) * 3.6;
+  document.body.classList.toggle("ev-nav-epure", !!etat.bandeauReplie && kmhEpure > VITESSE_EPURE_KMH && Date.now() > (etat.epureSuspenduJusqua || 0) && $("ev-nav-alerte").classList.contains("hidden"));
+  if (!$("ev-nav-feuille").classList.contains("hidden")) majFeuilleDeRoute();
+  majNotificationGuidage(instr);
+  majNuitDouce();
   majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
   majZoneDanger();
   majFrise();
@@ -869,6 +880,7 @@ function annonces() {
       parler(instr.message, true);
     } else if (d <= proche && d > maintenant && !instr.annonces.has(2)) {
       instr.annonces.add(1).add(2);
+      if (etat.prefs.vibration) navigator.vibrate?.([120, 80, 120]);
       parler(`Dans ${distanceParlee(d)}, ${minusculeInitiale(instr.message)}. ${phraseVoies(instr)}`, true);
     } else if (d <= loin && d > proche && ecart > loin + 200 && !instr.annonces.has(1)) {
       instr.annonces.add(1);
@@ -1443,6 +1455,16 @@ function cablerBoutons() {
   });
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
   $("ev-nav-micro-btn").addEventListener("click", commandeVocale);
+  $("ev-nav-manoeuvre").addEventListener("click", () => etat && basculerFeuilleDeRoute());
+  $("ev-nav-feuille").addEventListener("click", () => $("ev-nav-feuille").classList.add("hidden"));
+  $("ev-nav-point").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-point]")?.dataset.point;
+    if (a === "etape") {
+      $("ev-nav-point").classList.add("hidden");
+      if (etat?.pointChoisi) ajouterEtape({ ...etat.pointChoisi, nom: "Point choisi sur la carte", adresse: "" });
+    } else if (a === "aller") allerAuPoint();
+    else if (a === "fermer") $("ev-nav-point").classList.add("hidden");
+  });
   document.addEventListener("pointerdown", () => etat && reveillerBoutons(), true);
   // Valeurs au toucher du graphique de batterie (crosshair).
   $("ev-nav-batt-graph").addEventListener("pointermove", toucherGraphique);
@@ -1516,9 +1538,106 @@ const DELAI_CALME_MS = 8000;
 let minuteurCalme = null;
 
 function reveillerBoutons() {
-  document.body.classList.remove("ev-nav-calme");
+  document.body.classList.remove("ev-nav-calme", "ev-nav-epure");
+  if (etat) etat.epureSuspenduJusqua = Date.now() + DUREE_REVEIL_EPURE_MS;
   clearTimeout(minuteurCalme);
   minuteurCalme = setTimeout(() => etat && document.body.classList.add("ev-nav-calme"), DELAI_CALME_MS);
+}
+
+// ── Bandeau replié, écran épuré, feuille de route ───────────────────────────
+
+const REPLI_DEBUT_M = 5000;
+const REPLI_FIN_M = 4000;
+const VITESSE_EPURE_KMH = 90;
+const DUREE_REVEIL_EPURE_MS = 12000;
+const NB_LIGNES_FEUILLE = 15;
+
+// Toucher le bandeau : liste des prochaines manœuvres, bornes et arrivée.
+function basculerFeuilleDeRoute() {
+  const f = $("ev-nav-feuille");
+  f.classList.toggle("hidden");
+  if (!f.classList.contains("hidden")) majFeuilleDeRoute();
+}
+
+function majFeuilleDeRoute() {
+  const route = etat.route;
+  const lignes = route.instructions
+    .filter((i) => i.offset > etat.offset + 8 && i.type !== "LOCATION_DEPARTURE" && !i.synthetique)
+    .slice(0, NB_LIGNES_FEUILLE)
+    .map((i) => ({ offset: i.offset, html: `<span class="ev-feuille-fleche">${svgFleche(i)}</span><span>${escapeHtml(i.message || "Continuez")}</span>` }));
+  etat.arretsRestants.forEach((a, k) => {
+    const fin = route.troncons[k]?.fin;
+    if (fin > etat.offset) lignes.push({ offset: fin, html: `<span class="ev-feuille-fleche">${a.pause ? "📍" : "🔋"}</span><span><strong>${escapeHtml(a.nom_borne)}</strong></span>` });
+  });
+  lignes.sort((a, b) => a.offset - b.offset);
+  $("ev-nav-feuille-liste").innerHTML = lignes.map((l) => `<div class="ev-feuille-ligne">${l.html}<em>${distanceAffichee(l.offset - etat.offset)}</em></div>`).join("") || `<div class="ev-nav-carte-sous">Tout droit jusqu'à l'arrivée.</div>`;
+}
+
+// ── Nuit douce : carte et bandeau un peu moins lumineux après le coucher ─────
+
+function majNuitDouce() {
+  if (!etat.pos || Date.now() - (etat.derniereNuit || 0) < 60000) return;
+  etat.derniereNuit = Date.now();
+  document.body.classList.toggle("ev-nuit-douce", etat.prefs.nuitDouce && estNuit(etat.pos.lat, etat.pos.lon));
+}
+
+// ── Guidage sur l'écran verrouillé (notification Android) ───────────────────
+
+async function majNotificationGuidage(instr) {
+  if (document.visibilityState === "visible" && !etat.notifAffichee) return;
+  if (!etat.prefs.notifGuidage || !("Notification" in window) || Notification.permission !== "granted") return;
+  const reg = await navigator.serviceWorker?.getRegistration?.();
+  if (!reg) return;
+  if (document.visibilityState === "visible" || !instr || etat.arrive) {
+    if (etat.notifAffichee) {
+      etat.notifAffichee = null;
+      (await reg.getNotifications({ tag: "guidage" })).forEach((n) => n.close());
+    }
+    return;
+  }
+  const d = instr.offset - etat.offset;
+  // Nouvelle manœuvre, ou distance changée d'au moins un palier.
+  const palier = d > 2000 ? Math.round(d / 1000) : d > 300 ? Math.round(d / 100) : Math.round(d / 50);
+  const cle = `${instr.offset}|${palier}`;
+  if (etat.notifAffichee === cle) return;
+  etat.notifAffichee = cle;
+  const t = textesPanneau(instr);
+  reg.showNotification(`${fleche(instr.manoeuvre)} ${distanceAffichee(d)} · ${t.rue || t.action}`, { body: t.rue ? t.action : "", tag: "guidage", renotify: false, silent: true, icon: "./icons/icon-192.png", badge: "./icons/icon-192.png" });
+}
+
+async function demanderPermissionNotifications() {
+  if (!etat.prefs.notifGuidage || !("Notification" in window) || Notification.permission !== "default") return;
+  try {
+    await Notification.requestPermission();
+  } catch {
+    // Refusé ou indisponible : le guidage reste dans l'appli.
+  }
+}
+
+// ── Appui long sur la carte : « Aller ici » ou « Ajouter comme étape » ───────
+
+function surAppuiLong(lat, lon) {
+  if (!etat?.route) return;
+  etat.pointChoisi = { lat, lon };
+  $("ev-nav-point").classList.remove("hidden");
+}
+
+async function allerAuPoint() {
+  const p = etat.pointChoisi;
+  $("ev-nav-point").classList.add("hidden");
+  if (!p) return;
+  etat.destinationFinale = null;
+  etat.destination = { lat: p.lat, lon: p.lon, nom: "Point choisi sur la carte" };
+  // Nouvelle destination : le plan de recharge ne vaut plus (touchez la
+  // batterie → « Recalculer les recharges » si besoin).
+  etat.arretsRestants = etat.arretsRestants.filter((a) => a.pause);
+  afficherAlerte("🏁 Nouvelle destination…");
+  const route = await calculerRouteNav(etat.pos, etat.pos.cap, { sansSecours: true });
+  if (!etat) return;
+  if (route) installerRoute(route);
+  afficherAlerte(route ? null : "⚠️ Itinéraire impossible pour le moment (réseau ?).");
+  if (route) parler("Nouvelle destination.", true);
+  majEcran();
 }
 
 // Menu « ⋯ » : les actions moins fréquentes.
@@ -2050,6 +2169,10 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       parkingArrivee: reglages.parking_arrivee !== false,
       meteo: reglages.meteo_route !== false,
       aires: reglages.aires_autoroute !== false,
+      epure: reglages.ecran_epure !== false,
+      vibration: reglages.vibration === true,
+      nuitDouce: reglages.nuit_douce !== false,
+      notifGuidage: reglages.notif_guidage !== false,
     },
     sensDeMarche: true,
     suivi: true,
@@ -2066,6 +2189,10 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-recherche").classList.add("hidden");
   $("ev-nav-parkings").classList.add("hidden");
   $("ev-nav-secours").classList.add("hidden");
+  $("ev-nav-feuille").classList.add("hidden");
+  $("ev-nav-point").classList.add("hidden");
+  carte2D.definirAppuiLong(surAppuiLong);
+  demanderPermissionNotifications();
   $("ev-nav-recherche-res").innerHTML = "";
   $("ev-navigation").classList.remove("hidden");
   $("ev-nav-etape-borne").classList.add("hidden");
@@ -2188,7 +2315,9 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   etat = null;
   vue.montrerBornes(false);
   vue.quitterNavigation();
-  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud", "ev-nav-calme");
+  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud", "ev-nav-calme", "ev-nav-epure", "ev-nuit-douce");
+  carte2D.definirAppuiLong(null);
+  navigator.serviceWorker?.getRegistration?.().then((reg) => reg?.getNotifications({ tag: "guidage" }).then((l) => l.forEach((n) => n.close())));
   $("ev-navigation").classList.add("hidden");
   if (!depuisRetour && history.state?.navigation) {
     retourEnCours = true;

@@ -948,3 +948,32 @@ body.ev-mode-voiture .ev-aire strong { font-size: 15px; }
 /* Boutons de droite estompés après quelques secondes sans toucher l'écran. */
 .ev-nav-boutons { transition: opacity 0.5s; }
 body.ev-nav-calme .ev-nav-boutons { opacity: 0.35; }
+
+/* Bandeau replié en longue ligne droite : une seule ligne */
+.ev-nav-manoeuvre.replie { padding: 5px 12px; gap: 8px; align-items: center; }
+.ev-nav-manoeuvre.replie .ev-nav-manoeuvre-gauche { flex-direction: row; gap: 6px; min-width: 0; align-items: center; }
+.ev-nav-manoeuvre.replie .ev-nav-fleche svg { width: 26px; height: 26px; }
+.ev-nav-manoeuvre.replie .ev-nav-distance { font-size: 18px; }
+.ev-nav-manoeuvre.replie .ev-nav-rue { font-size: 15px; -webkit-line-clamp: 1; }
+.ev-nav-manoeuvre.replie .ev-nav-instruction, .ev-nav-manoeuvre.replie .ev-nav-panneau { display: none; }
+.ev-nav-manoeuvre.replie .ev-nav-rue.hidden ~ .ev-nav-instruction { display: block; font-size: 15px; }
+.ev-nav-manoeuvre { cursor: pointer; }
+/* Écran épuré sur autoroute : l'essentiel reste, le reste s'efface */
+.ev-nav-borne, .ev-nav-frise { transition: opacity 0.6s; }
+body.ev-nav-epure .ev-nav-borne, body.ev-nav-epure .ev-nav-frise { opacity: 0; pointer-events: none; }
+body.ev-nav-epure .ev-nav-boutons { opacity: 0.15; }
+/* Feuille de route (toucher le bandeau) */
+.ev-nav-feuille { position: absolute; left: 8px; right: 8px; top: calc(96px + var(--securite-haut)); z-index: 30; max-height: 55vh; overflow-y: auto; padding: 10px 12px; border-radius: 16px; background: var(--panneau); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); }
+.ev-nav-feuille small { font-weight: 500; color: var(--texte-att); font-size: 12px; }
+.ev-feuille-liste { display: flex; flex-direction: column; margin-top: 6px; }
+.ev-feuille-ligne { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--bordure); font-size: 14px; }
+.ev-feuille-ligne em { font-style: normal; font-weight: 800; white-space: nowrap; }
+.ev-feuille-fleche svg { width: 24px; height: 24px; display: block; }
+.ev-feuille-fleche svg path, .ev-feuille-fleche svg polygon { stroke: var(--texte); }
+.ev-feuille-fleche svg polygon { fill: var(--texte); }
+/* Nuit douce */
+body.ev-nuit-douce.ev-mode-navigation .ev-carte, body.ev-nuit-douce.ev-mode-navigation .ev-carte-3d { filter: brightness(0.78); }
+body.ev-nuit-douce .ev-nav-haut, body.ev-nuit-douce .ev-nav-bas { filter: brightness(0.88); }
+
+/* Km réels sous les curseurs de batterie */
+.ev-km-estime { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 600; color: var(--texte-att); }

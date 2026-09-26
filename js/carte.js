@@ -721,3 +721,24 @@ export function marquerVoitureGaree(pos) {
   marqueurGaree = pos ? L.marker([pos.lat, pos.lon], { icon: L.divIcon({ className: "", iconSize: [40, 40], iconAnchor: [20, 20], html: `<div class="ev-garee">🚗</div>` }), interactive: false }).addTo(carte) : null;
   c3d.exploVoitureGaree(pos);
 }
+
+// Appui long sur la carte (navigation) : cb(lat, lon), ou null.
+let appuiLongCb = null;
+let appuiLongBranche = false;
+
+export function definirAppuiLong(cb) {
+  appuiLongCb = cb;
+  if (appuiLongBranche) return;
+  appuiLongBranche = true;
+  // Appui long au doigt = « contextmenu » pour le navigateur (et clic droit).
+  for (const id of ["ev-carte", "ev-carte-3d"]) {
+    document.getElementById(id)?.addEventListener("contextmenu", (e) => {
+      if (!appuiLongCb) return;
+      e.preventDefault();
+      const r = e.currentTarget.getBoundingClientRect();
+      const [x, y] = [e.clientX - r.left, e.clientY - r.top];
+      const p = id === "ev-carte" ? carte.containerPointToLatLng([x, y]) : c3d.pointVersLatLon(x, y);
+      if (p) appuiLongCb(p.lat, p.lng ?? p.lon);
+    });
+  }
+}

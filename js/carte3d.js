@@ -1086,3 +1086,10 @@ export function exploVoitureGaree(pos) {
   el.textContent = "🚗";
   marqueurGaree = marqueur(el, pos.lat, pos.lon).addTo(carte);
 }
+
+// Point de l'écran (px dans la carte) → { lat, lon }.
+export function pointVersLatLon(x, y) {
+  if (!carte) return null;
+  const p = carte.unproject([x, y]);
+  return { lat: p.lat, lon: p.lng };
+}

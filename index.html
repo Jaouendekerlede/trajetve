@@ -113,6 +113,7 @@
         <label class="ev-champ">Batterie au départ : <span id="ev-charge-pct-value" class="ev-valeur">100</span>%
           <div class="ev-jauge"><div id="ev-charge-pct-fill" class="ev-jauge-remplissage"></div></div>
           <input type="range" min="1" max="100" value="100" id="ev-charge-pct-input" class="ev-curseur">
+          <span id="ev-charge-km" class="ev-km-estime"></span>
         </label>
         <div class="ev-charge-mode-row">
           <button type="button" class="ev-charge-mode-btn" data-mode="rapide">⚡<span>Rapide</span></button>
@@ -126,9 +127,11 @@
         <div id="ev-arret-impose-aide" class="ev-hint"></div>
         <label class="ev-champ">Marge de sécurité (batterie mini à l'arrivée à une borne) : <span id="ev-marge-pct-value" class="ev-valeur">15</span>%
           <input type="range" min="5" max="30" value="15" id="ev-marge-pct-input" class="ev-curseur">
+          <span id="ev-marge-km" class="ev-km-estime"></span>
         </label>
         <label class="ev-champ">Recharger jusqu'à : <span id="ev-cible-pct-value" class="ev-valeur">85</span>%
           <input type="range" min="50" max="100" value="80" id="ev-cible-pct-input" class="ev-curseur">
+          <span id="ev-cible-km" class="ev-km-estime"></span>
         </label>
       </div>
 
@@ -435,6 +438,11 @@
           </select>
         </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-epure"> 🧘 Écran épuré en longue ligne droite (bandeau replié, autoroute : l'essentiel)</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-vibration"> 📳 Vibrer avant chaque manœuvre</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-nuit-douce"> 🌙 Écran moins lumineux la nuit</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-notif"> 🔔 Guidage visible écran verrouillé (notification)</label>
+        <div class="ev-hint">En navigation : touchez le bandeau pour voir les prochaines étapes ; appui long sur la carte pour y aller ou en faire une étape.</div>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-aires"> 🛣️ Sur autoroute et voie express : prochaine borne et aires (en bas à gauche)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-meteo-route"> 🌦️ Annoncer la météo devant soi (orage, neige, verglas, forte pluie, vent)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-parking-arrivee"> 🅿️ Proposer des parkings à 2 km de l'arrivée</label>
@@ -500,7 +508,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 31 : réglages par défaut (100 %, marge 15 %, recharge 80 %), Kona 65 kWh</div>
+      <div class="ev-hint ev-lien-centre">Version 32 : km réels sous les curseurs, écran épuré, feuille de route, appui long, écran verrouillé</div>
     </div>
   </div>
 </section>
@@ -594,6 +602,19 @@
     <div class="ev-nav-carte-titre ev-titre-fermer">🔍 Le long du trajet <button type="button" class="ev-fermer" data-fermer aria-label="Fermer">✕</button></div>
     <div id="ev-nav-recherche-cats" class="ev-nav-menu-grille"></div>
     <div id="ev-nav-recherche-res" class="ev-nav-resultats"></div>
+  </div>
+
+  <div id="ev-nav-feuille" class="ev-nav-feuille hidden" aria-label="Feuille de route">
+    <div class="ev-nav-carte-titre">🧾 Prochaines étapes <small>(toucher pour fermer)</small></div>
+    <div id="ev-nav-feuille-liste" class="ev-feuille-liste"></div>
+  </div>
+
+  <div id="ev-nav-point" class="ev-nav-carte hidden">
+    <div class="ev-nav-carte-titre ev-titre-fermer">📍 Point choisi sur la carte <button type="button" class="ev-fermer" data-point="fermer" aria-label="Fermer">✕</button></div>
+    <div class="ev-grille-2">
+      <button type="button" class="ev-btn" data-point="etape">➕ Ajouter comme étape</button>
+      <button type="button" class="ev-btn" data-point="aller">🏁 Y aller</button>
+    </div>
   </div>
 
   <div id="ev-nav-secours" class="ev-nav-carte hidden">

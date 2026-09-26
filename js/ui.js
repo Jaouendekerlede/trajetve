@@ -3,7 +3,7 @@
 // outils, profil) et barre de navigation. Les calculs viennent du moteur
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
-import { getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
+import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
 import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
@@ -20,6 +20,7 @@ import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
 import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
 import { cablerZonesEvitees } from "./ui-zones.js";
+import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
@@ -73,6 +74,30 @@ const listesAffichees = new Map();
 function setSlider(prefixe, valeur) {
   $(`${prefixe}-input`).value = String(valeur);
   $(`${prefixe}-value`).textContent = String(valeur);
+  majKmCurseurs();
+}
+
+// Sous les curseurs de batterie : ce que ça fait en km réels (consommation
+// apprise en roulant, sinon fiche constructeur corrigée de la saison), et
+// sur autoroute à 130 km/h (modèle physique).
+function majKmCurseurs() {
+  if (!$("ev-charge-km")) return;
+  const p = obtenirProfilVehicule();
+  const mesuree = consoMesuree();
+  const conso = mesuree?.kwh_100km || p.consommation_kwh_100km * (MULTIPLICATEURS_SAISON[p.saison] ?? 1);
+  // Autoroute : consommation de référence (90 km/h) × effet de la vitesse,
+  // corrigée de la saison par rapport à la mi-saison (~20 kWh/100 à 130).
+  const multSaison = (MULTIPLICATEURS_SAISON[p.saison] ?? 1) / (MULTIPLICATEURS_SAISON.mi_saison ?? 1);
+  const consoAutoroute = p.consommation_kwh_100km * multSaison * facteurVitesse(p, 130);
+  const km = (pct, c = conso) => Math.max(0, ((p.capacite_kwh * pct) / 100 / c) * 100);
+  const deux = (pct) => `≈ ${nombre(km(pct))} km · ${nombre(km(pct, consoAutoroute))} km sur autoroute`;
+  const depart = Number($("ev-charge-pct-input").value);
+  const marge = Number($("ev-marge-pct-input").value);
+  const cible = Number($("ev-cible-pct-input").value);
+  $("ev-charge-km").textContent = `${deux(depart)} (jusqu'à 0 %)`;
+  $("ev-marge-km").textContent = `Réserve gardée ≈ ${nombre(km(marge))} km · ${nombre(km(marge, consoAutoroute))} km sur autoroute`;
+  $("ev-cible-km").textContent = `Entre deux recharges (${cible} − ${marge} = ${cible - marge} %) : ${deux(cible - marge)}`;
+  $("ev-charge-km").title = `Base : ${String(conso.toFixed(1)).replace(".", ",")} kWh/100 km ${mesuree ? "(appris en roulant)" : "(fiche constructeur, saison)"}`;
 }
 
 function dateFr(iso) {
@@ -567,6 +592,12 @@ function cablerCarte() {
   cablerVoitureGaree();
   cablerStats();
   cablerArretsImposes();
+  for (const id of ["ev-charge-pct-input", "ev-marge-pct-input", "ev-cible-pct-input"]) $(id).addEventListener("input", majKmCurseurs);
+  majKmCurseurs();
+  // Autorisation des notifications demandée au moment où l'on coche.
+  $("ev-reglage-notif").addEventListener("change", (e) => {
+    if (e.target.checked && "Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+  });
   cablerSuggestions(["ev-depart-input", "ev-destination-input"]);
   // 🎤 Dicter la destination : « Nantes », « aller à la gare de Rennes »…
   $("ev-destination-micro").addEventListener("click", async () => {
@@ -1986,6 +2017,10 @@ function rendreReglagesProfil() {
   $("ev-reglage-privilegier-abos").checked = reglages.privilegier_abonnements !== false;
   $("ev-reglage-meteo-route").checked = reglages.meteo_route !== false;
   $("ev-reglage-aires").checked = reglages.aires_autoroute !== false;
+  $("ev-reglage-epure").checked = reglages.ecran_epure !== false;
+  $("ev-reglage-vibration").checked = reglages.vibration === true;
+  $("ev-reglage-nuit-douce").checked = reglages.nuit_douce !== false;
+  $("ev-reglage-notif").checked = reglages.notif_guidage !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
@@ -2081,6 +2116,10 @@ function cablerProfil() {
       privilegier_abonnements: $("ev-reglage-privilegier-abos").checked,
       meteo_route: $("ev-reglage-meteo-route").checked,
       aires_autoroute: $("ev-reglage-aires").checked,
+      ecran_epure: $("ev-reglage-epure").checked,
+      vibration: $("ev-reglage-vibration").checked,
+      nuit_douce: $("ev-reglage-nuit-douce").checked,
+      notif_guidage: $("ev-reglage-notif").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
     });

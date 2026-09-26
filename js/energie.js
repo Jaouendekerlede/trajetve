@@ -401,3 +401,10 @@ export async function construireProfilEnergie(itin, profil, options) {
     },
   };
 }
+
+// Consommation à `vKmh` rapportée à celle à 90 km/h (vitesse de référence
+// du profil), à plat, 15 °C : ~1,4 à 130 km/h pour une Kona.
+export function facteurVitesse(profil, vKmh) {
+  const masse = masseVehicule(profil);
+  return energieSegmentKwh(1, 0, vKmh, 15, 0, 0, masse) / energieSegmentKwh(1, 0, 90, 15, 0, 0, masse);
+}

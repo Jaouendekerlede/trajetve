@@ -6,7 +6,7 @@
 // prÃ©parÃ©es. Les autres services (TomTom, bornes, mÃ©tÃ©o) ne passent pas ici :
 // TomTom interdit de stocker ses cartes, et les autres doivent Ãªtre frais.
 
-const CACHE_NOM = "trajetve-v31";
+const CACHE_NOM = "trajetve-v32";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -124,6 +124,17 @@ async function carteOuReseau(requete) {
     throw e;
   }
 }
+
+// Notification de guidage (écran verrouillé) : un toucher rouvre l'appli.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((fenetres) => {
+      const f = fenetres[0];
+      return f ? f.focus() : self.clients.openWindow("./index.html");
+    }),
+  );
+});
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
