@@ -10,6 +10,7 @@ import { getApiKeys } from "./config.js";
 import { haversineKm } from "./geo.js";
 import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
+import { svgVoiture } from "./icones-voiture.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
 const DELAI_CHARGEMENT_MS = 30000;
@@ -357,6 +358,8 @@ function surveiller() {
   carte.on("error", (e) => {
     if (!e.sourceId) return;
     // Relief indisponible : on s'en passe, la carte reste utilisable.
+    // Trafic refusé (clé sans ce service) : la carte, elle, va bien.
+    if (e.sourceId === "trafic") return;
     if (e.sourceId === "relief") {
       if (++reliefKo >= 5 && carte.getTerrain()) {
         console.warn("[3D] Relief indisponible, carte à plat");
@@ -423,6 +426,7 @@ async function creerCarte(fournisseur, fond, relief) {
   ajouterCouchesTrajet();
   ajouterCouchesExplo();
   if (relief && fond !== "satellite") ajouterRelief();
+  appliquerTrafic();
   carte.on("dragstart", (e) => e.originalEvent && surDeplacementManuel?.());
   carte.on("zoomstart", (e) => e.originalEvent && surDeplacementManuel?.());
   surveiller();
@@ -905,10 +909,39 @@ export function exploCurseur(lat, lon, label) {
   rendreCurseur();
 }
 
+let styleVoiture = "fleche_bleue";
+
 function iconeVoiture() {
   const el = document.createElement("div");
-  el.innerHTML = `<svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="26" fill="rgba(61,139,255,0.22)"/><path d="M28 8 L42 44 L28 36 L14 44 Z" fill="#3d8bff" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/></svg>`;
+  el.innerHTML = svgVoiture(styleVoiture);
   return el;
+}
+
+// Réglage Profil > Navigation : l'icône est refaite au prochain affichage.
+export function definirIconeVoiture(style) {
+  styleVoiture = style || "fleche_bleue";
+  voiture?.remove();
+  voiture = null;
+}
+
+// Trafic en couleur (tuiles TomTom) sous le tracé ; gardé d'une carte à l'autre.
+let traficActif = false;
+let cleTrafic = "";
+
+export function afficherTrafic(actif, cle) {
+  traficActif = actif;
+  cleTrafic = cle || cleTrafic;
+  if (carte?.getSource("trajet")) appliquerTrafic();
+}
+
+function appliquerTrafic() {
+  const present = !!carte.getLayer("trafic");
+  if (traficActif && cleTrafic && !present) {
+    if (!carte.getSource("trafic")) {
+      carte.addSource("trafic", { type: "raster", tiles: [`https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${encodeURIComponent(cleTrafic)}&tileSize=256`], tileSize: 256, maxzoom: 20 });
+    }
+    carte.addLayer({ id: "trafic", type: "raster", source: "trafic", paint: { "raster-opacity": 0.75 } }, carte.getLayer("trajet-halo") ? "trajet-halo" : undefined);
+  } else if (!traficActif && present) carte.removeLayer("trafic");
 }
 
 function pastille(taille, couleur, contenu = "") {

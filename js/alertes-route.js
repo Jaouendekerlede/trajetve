@@ -94,3 +94,23 @@ export function messageAvecFeu(message, n) {
   if (!n || n >= ORDINAUX.length || !message) return message;
   return ORDINAUX[n] + message.charAt(0).toLowerCase() + message.slice(1);
 }
+
+// Part (0 à 1) du nouveau tracé qui s'écarte de plus de `ecartM` m de
+// l'ancien, sur ses `maxM` premiers mètres : un autre chemin, ou le même
+// avec un trafic mis à jour ?
+export function partDifferente(coordsNouveau, coordsAncien, cumAncien, { pasM = 300, maxM = 20000, ecartM = 40 } = {}) {
+  let cumul = 0;
+  let prochain = 0;
+  let total = 0;
+  let loin = 0;
+  for (let i = 1; i < coordsNouveau.length && cumul < maxM; i++) {
+    const [lonA, latA] = coordsNouveau[i - 1];
+    const [lon, lat] = coordsNouveau[i];
+    cumul += Math.hypot((lon - lonA) * 111320 * Math.cos((lat * Math.PI) / 180), (lat - latA) * 110540);
+    if (cumul < prochain) continue;
+    prochain = cumul + pasM;
+    total++;
+    if (projeterSurTrace(lat, lon, coordsAncien, cumAncien).d > ecartM) loin++;
+  }
+  return total ? loin / total : 0;
+}

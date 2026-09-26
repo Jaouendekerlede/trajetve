@@ -4,7 +4,8 @@ import { $, toast } from "./ui-commun.js";
 import { escapeHtml, lienGoogleMaps } from "./util.js";
 import { lireReglages, sauverReglages } from "./storage.js";
 import { rechercherParkings } from "./parkings.js";
-import { afficherParkings, montrerParkings, limitesVisibles, rayonVisibleKm } from "./carte.js";
+import { afficherParkings, montrerParkings, limitesVisibles, rayonVisibleKm, afficherTrafic } from "./carte.js";
+import { getApiKeys } from "./config.js";
 import { navigationActive } from "./navigation.js";
 
 const RAYON_MAX_PARKINGS_KM = 6;
@@ -66,4 +67,20 @@ export function planifierParkings() {
   if (!parkingsActifs) return;
   clearTimeout(minuteurParkings);
   minuteurParkings = setTimeout(chargerParkings, 800);
+}
+
+// Puce « 🚦 Trafic » : routes en vert, orange, rouge selon la circulation.
+export function cablerTrafic() {
+  const chip = $("ev-trafic-chip");
+  const appliquer = (actif) => {
+    chip.classList.toggle("actif", actif);
+    afficherTrafic(actif);
+  };
+  appliquer(!!lireReglages().trafic_carte);
+  chip.addEventListener("click", () => {
+    const actif = !chip.classList.contains("actif");
+    if (actif && !getApiKeys().tomtom) return toast("🚦 Clé TomTom nécessaire (onglet 🚗 Profil)");
+    sauverReglages({ trafic_carte: actif });
+    appliquer(actif);
+  });
 }

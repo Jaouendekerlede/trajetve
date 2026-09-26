@@ -51,3 +51,12 @@ test("routes coupées marquées : gardées, limitées à 5, converties pour TomT
   // Incluses dans la sauvegarde (clé « trajetve_ »).
   assert.ok("trajetve_zones_evitees" in s.exporterDonnees().donnees);
 });
+
+test("itinéraire proposé : même chemin (trafic à jour) ou vraiment un autre", () => {
+  // Même route légèrement décalée (4 m) : pas « différente ».
+  const meme = coords.map(([lon, lat]) => [lon, lat + 0.00004]);
+  assert.ok(a.partDifferente(meme, coords, cum) < 0.05);
+  // Route parallèle à 1 km au nord : différente.
+  const autre = coords.map(([lon, lat]) => [lon, lat + 0.009]);
+  assert.ok(a.partDifferente(autre, coords, cum) > 0.9);
+});

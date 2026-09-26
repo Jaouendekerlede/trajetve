@@ -12,6 +12,7 @@ import { escapeHtml } from "./util.js";
 import { getApiKeys } from "./config.js";
 import { lireReglages } from "./storage.js";
 import * as c3d from "./carte3d.js";
+import { svgVoiture } from "./icones-voiture.js";
 
 let explo3D = false;
 let surDeplacement = null;
@@ -206,13 +207,16 @@ export function majProgressionNavigation(coords, indice, lat, lon) {
   ligneRestante.setLatLngs([actuel, ...coords.slice(indice + 1).map(([x, y]) => [y, x])]);
 }
 
+let styleVoiture = "fleche_bleue";
+
 function iconeVoiture() {
-  return L.divIcon({
-    className: "",
-    iconSize: [56, 56],
-    iconAnchor: [28, 28],
-    html: `<div class="ev-voiture"><svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="26" fill="rgba(61,139,255,0.22)"/><path d="M28 8 L42 44 L28 36 L14 44 Z" fill="#3d8bff" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/></svg></div>`,
-  });
+  return L.divIcon({ className: "", iconSize: [56, 56], iconAnchor: [28, 28], html: `<div class="ev-voiture">${svgVoiture(styleVoiture)}</div>` });
+}
+
+// Réglage Profil > Navigation.
+export function definirIconeVoiture(style) {
+  styleVoiture = style || "fleche_bleue";
+  marqueurVoiture?.setIcon(iconeVoiture());
 }
 
 export function majVoiture(lat, lon, cap) {
@@ -691,4 +695,20 @@ export function pixelCentreVisible() {
   const el = document.getElementById(explo3D ? "ev-carte-3d" : "ev-carte");
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + Math.max(1, (r.height - decalageBas) / 2) };
+}
+
+// Trafic en couleur sur toutes les routes (tuiles « flow » de TomTom), en 2D
+// comme en 3D, carte des bornes et navigation.
+let coucheTrafic = null;
+
+export function afficherTrafic(actif) {
+  const cle = getApiKeys().tomtom;
+  if (actif && cle && !coucheTrafic) {
+    coucheTrafic = L.tileLayer(`https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${encodeURIComponent(cle)}&tileSize=256`, { opacity: 0.75, zIndex: 10, maxZoom: 22, maxNativeZoom: 20 });
+  }
+  if (coucheTrafic) {
+    if (actif && !carte.hasLayer(coucheTrafic)) coucheTrafic.addTo(carte);
+    else if (!actif && carte.hasLayer(coucheTrafic)) carte.removeLayer(coucheTrafic);
+  }
+  c3d.afficherTrafic(actif, cle);
 }

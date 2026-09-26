@@ -12,7 +12,7 @@ import { guidageHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
-import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu } from "./alertes-route.js";
+import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml } from "./util.js";
@@ -301,10 +301,16 @@ function construireRoute(r) {
 
   // Travaux et fermetures connus de TomTom sur le trajet (pour les annoncer).
   const travaux = (r.sections || [])
-    .filter((s) => String(s.sectionType || "").toUpperCase() === "TRAFFIC" && ["ROAD_WORK", "ROAD_CLOSURE"].includes(s.simpleCategory))
+    .filter((s) => {
+      if (String(s.sectionType || "").toUpperCase() !== "TRAFFIC") return false;
+      if (["ROAD_WORK", "ROAD_CLOSURE"].includes(s.simpleCategory)) return true;
+      // Ralentissements notables seulement (pas chaque petit ralenti).
+      return s.simpleCategory === "JAM" && ((s.magnitudeOfDelay || 0) >= 2 || (s.delayInSeconds || 0) >= 120);
+    })
     .map((s) => {
       const i = Math.min(Math.max(0, s.startPointIndex ?? 0), dernier);
-      return { offset: cum[i], cle: `${coords[i][1].toFixed(3)},${coords[i][0].toFixed(3)}`, fermeture: s.simpleCategory === "ROAD_CLOSURE", retard_min: Math.round((s.delayInSeconds || 0) / 60) };
+      const f = Math.min(Math.max(i, s.endPointIndex ?? i), dernier);
+      return { offset: cum[i], fin: cum[f], cle: `${coords[i][1].toFixed(3)},${coords[i][0].toFixed(3)}`, fermeture: s.simpleCategory === "ROAD_CLOSURE", bouchon: s.simpleCategory === "JAM", retard_min: Math.round((s.delayInSeconds || 0) / 60) };
     })
     .sort((a, b) => a.offset - b.offset);
 
@@ -568,6 +574,7 @@ function majEcran() {
   }
   majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
   majZoneDanger();
+  majFrise();
 
   afficherVoies(instr);
 
@@ -579,6 +586,7 @@ function majEcran() {
   $("ev-nav-limite").textContent = limite || "";
   $("ev-nav-limite").classList.toggle("hidden", !limite);
   surveillerVitesse(kmh, limite);
+  if (document.body.classList.contains("ev-hud")) majHud(kmh, limite);
 
   // Prochaine borne
   const arret = etat.arretsRestants[0];
@@ -804,8 +812,9 @@ function annonces() {
     etat.annoncesTravaux.add(travaux.cle);
     const d = travaux.offset - etat.offset;
     const retard = travaux.retard_min >= 1 ? `, environ ${travaux.retard_min} minute${travaux.retard_min > 1 ? "s" : ""} de retard` : "";
-    if (etat.prefs.voixTravaux) parler(travaux.fermeture ? `Attention, route signalée fermée dans ${distanceParlee(d)}.` : `Travaux dans ${distanceParlee(d)}${retard}.`);
-    const texte = travaux.fermeture ? `⛔ Route signalée fermée dans ${distanceAffichee(d)}` : `🚧 Travaux dans ${distanceAffichee(d)}${travaux.retard_min >= 1 ? ` (+${travaux.retard_min} min)` : ""}`;
+    const [voix, icone] = travaux.fermeture ? ["Attention, route signalée fermée", "⛔ Route signalée fermée"] : travaux.bouchon ? ["Ralentissement", "🚗 Ralentissement"] : ["Travaux", "🚧 Travaux"];
+    if (etat.prefs.voixTravaux) parler(`${voix} dans ${distanceParlee(d)}${travaux.fermeture ? "" : retard}.`);
+    const texte = `${icone} dans ${distanceAffichee(d)}${!travaux.fermeture && travaux.retard_min >= 1 ? ` (+${travaux.retard_min} min)` : ""}`;
     if ($("ev-nav-alerte").classList.contains("hidden")) {
       afficherAlerte(texte, travaux.fermeture ? { libelle: "🚧 Éviter", action: routeBarree } : null);
       setTimeout(() => {
@@ -935,14 +944,45 @@ async function recalculer(raison) {
     if (raison === "hors_route") afficherAlerte("⚠️ Recalcul impossible pour le moment (réseau ?). Nouvel essai sous peu.");
     return;
   }
+  // Mise à jour du trafic : même chemin → nouvelle heure d'arrivée ; autre
+  // chemin → proposé s'il fait gagner du temps (façon Waze), sinon ignoré.
+  if (raison === "trafic" && partDifferente(route.coords, etat.route.coords, etat.route.cum) > PART_ROUTE_DIFFERENTE) {
+    const gain = ancienneDuree - route.troncons.reduce((t, x) => t + x.duree, 0);
+    if (gain >= GAIN_MIN_PROPOSITION_S) proposerRoute(route, gain);
+    return;
+  }
   installerRoute(route);
   etat.horsRoute = 0;
   afficherAlerte(null);
-  if (raison === "trafic") {
-    const gain = ancienneDuree - secondesRestantesJusqua(route.total);
-    if (gain > 300) parler(`Itinéraire plus rapide trouvé, ${Math.round(gain / 60)} minutes de gagnées.`);
-  }
   majEcran();
+}
+
+const PART_ROUTE_DIFFERENTE = 0.1;
+const GAIN_MIN_PROPOSITION_S = 180;
+const DUREE_PROPOSITION_MS = 25000;
+
+function proposerRoute(route, gain) {
+  const min = Math.round(gain / 60);
+  etat.proposition = route;
+  const texte = `⚡ Itinéraire plus rapide : ${min} min de gagnées`;
+  afficherAlerte(texte, {
+    libelle: "✅ Le prendre",
+    action: () => {
+      if (etat?.proposition !== route) return;
+      etat.proposition = null;
+      installerRoute(route);
+      etat.horsRoute = 0;
+      afficherAlerte(null);
+      parler("Nouvel itinéraire.", true);
+      majEcran();
+    },
+  });
+  parler(`Un itinéraire plus rapide est disponible, ${min} minutes de gagnées. Touchez « Le prendre » pour l'accepter.`);
+  setTimeout(() => {
+    if (etat?.proposition !== route) return;
+    etat.proposition = null;
+    if ($("ev-nav-alerte").textContent.startsWith(texte)) afficherAlerte(null);
+  }, DUREE_PROPOSITION_MS);
 }
 
 async function replanifier() {
@@ -1283,6 +1323,14 @@ function cablerBoutons() {
   });
   $("ev-nav-3d-btn").addEventListener("click", basculerVue);
   $("ev-nav-barree-btn").addEventListener("click", routeBarree);
+  $("ev-nav-menu-btn").addEventListener("click", () => $("ev-nav-menu").classList.toggle("hidden"));
+  $("ev-nav-menu").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    $("ev-nav-menu").classList.add("hidden");
+    actionMenu(b.dataset.navAction);
+  });
+  $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
   $("ev-nav-apercu-btn").addEventListener("click", () => {
     etat.suivi = false;
     $("ev-nav-recentrer-btn").classList.remove("hidden");
@@ -1323,6 +1371,62 @@ function cablerBoutons() {
     if (etat) arreterNavigation({ depuisRetour: true });
   });
   document.addEventListener("visibilitychange", surVisibilite);
+}
+
+// Menu « ⋯ » : les actions moins fréquentes.
+function actionMenu(action) {
+  if (!etat) return;
+  if (action === "hud") basculerHud(true);
+}
+
+// Tête haute (HUD) : téléphone posé sous le pare-brise la nuit, l'essentiel
+// en grand et à l'envers pour se refléter à l'endroit. Un appui en sort.
+function basculerHud(actif) {
+  document.body.classList.toggle("ev-hud", actif);
+  if (actif) {
+    parler("Mode tête haute. Touchez l'écran pour en sortir.");
+    majEcran();
+  }
+}
+
+function majHud(kmh, limite) {
+  const fleche = $("ev-nav-fleche").innerHTML;
+  if ($("ev-hud-fleche").dataset.contenu !== fleche) {
+    $("ev-hud-fleche").dataset.contenu = fleche;
+    $("ev-hud-fleche").innerHTML = fleche;
+  }
+  $("ev-hud-distance").textContent = $("ev-nav-distance").textContent;
+  $("ev-hud-texte").textContent = ($("ev-nav-rue").classList.contains("hidden") ? "" : $("ev-nav-rue").textContent) || $("ev-nav-instruction").textContent;
+  $("ev-hud-vitesse").textContent = String(kmh);
+  $("ev-hud-vitesse").classList.toggle("exces", !!limite && kmh > limite + 3);
+  $("ev-hud-limite").textContent = limite || "";
+  $("ev-hud-limite").classList.toggle("hidden", !limite);
+}
+
+// Frise du trajet restant (comme Sygic) : bouchons, travaux, zones de
+// danger, bornes et arrivée, la voiture qui avance dessus.
+function majFrise() {
+  const el = $("ev-nav-frise");
+  const route = etat.route;
+  if (!route || etat.arrive || !(route.total > 0)) {
+    el.classList.add("hidden");
+    return;
+  }
+  const cle = `${route.total}|${Math.round((etat.offset / route.total) * 300)}|${route.troncons.length}|${(route.zonesDanger || []).length}`;
+  if (el.dataset.cle === cle) return;
+  el.dataset.cle = cle;
+  const pct = (m) => Math.max(0, Math.min(100, (m / route.total) * 100));
+  const bande = (a, b, classe) => `<span class="${classe}" style="left:${pct(a).toFixed(2)}%;width:${Math.max(0.8, pct(b) - pct(a)).toFixed(2)}%"></span>`;
+  let html = bande(0, etat.offset, "fait");
+  for (const t of route.travaux) if ((t.fin ?? t.offset) > etat.offset) html += bande(t.offset, t.fin ?? t.offset + 200, t.bouchon ? "bouchon" : "travaux");
+  for (const z of route.zonesDanger || []) if (z.fin > etat.offset) html += bande(z.debut, z.fin, "danger");
+  html += route.troncons
+    .slice(0, -1)
+    .map((t) => `<i class="borne" style="left:${pct(t.fin).toFixed(2)}%">🔋</i>`)
+    .join("");
+  html += `<i class="voiture" style="left:${pct(etat.offset).toFixed(2)}%"></i><i class="arrivee">🏁</i>`;
+  el.innerHTML = html;
+  el.classList.remove("hidden");
 }
 
 // Même fond (nuit, jour, satellite) et mêmes réglages que la carte des bornes.
@@ -1475,6 +1579,10 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   document.body.classList.add("ev-mode-navigation");
   document.body.classList.toggle("ev-mode-voiture", reglages.mode_voiture === true);
   document.body.classList.toggle("ev-bandeau-compact", reglages.grand_bandeau === false);
+  carte2D.definirIconeVoiture(reglages.icone_voiture);
+  carte3D.definirIconeVoiture(reglages.icone_voiture);
+  $("ev-nav-menu").classList.add("hidden");
+  $("ev-nav-frise").classList.add("hidden");
   $("ev-navigation").classList.remove("hidden");
   $("ev-nav-etape-borne").classList.add("hidden");
   $("ev-nav-batterie-panneau").classList.add("hidden");
@@ -1590,7 +1698,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   etat = null;
   vue.montrerBornes(false);
   vue.quitterNavigation();
-  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact");
+  document.body.classList.remove("ev-mode-navigation", "ev-mode-voiture", "ev-bandeau-compact", "ev-hud");
   $("ev-navigation").classList.add("hidden");
   if (!depuisRetour && history.state?.navigation) {
     retourEnCours = true;

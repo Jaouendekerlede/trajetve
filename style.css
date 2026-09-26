@@ -840,3 +840,32 @@ body.ev-mode-voiture .ev-nav-direction { font-size: 22px; }
 .ev-echangeur .ev-num { font-size: 13px; padding: 1px 6px; }
 .ev-echangeur-km { min-width: 58px; font-weight: 800; color: var(--texte-att); }
 .ev-echangeur-dir { font-weight: 700; }
+
+/* Menu « ⋯ » de la navigation */
+.ev-nav-menu { bottom: calc(112px + var(--securite-bas)); }
+.ev-nav-menu-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
+.ev-nav-menu-grille button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; border-radius: 14px; border: 1px solid var(--bordure-forte); background: var(--bloc); color: var(--texte); font-size: 24px; cursor: pointer; }
+.ev-nav-menu-grille button span { font-size: 13px; font-weight: 700; text-align: center; }
+/* Frise du trajet restant */
+.ev-nav-frise { position: absolute; left: 12px; right: 12px; bottom: calc(92px + var(--securite-bas)); height: 12px; border-radius: 6px; background: rgba(34, 229, 160, 0.55); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+.ev-nav-frise span { position: absolute; top: 0; bottom: 0; }
+.ev-nav-frise .fait { background: #6b7385; border-radius: 6px 0 0 6px; }
+.ev-nav-frise .bouchon { background: #e53935; }
+.ev-nav-frise .travaux { background: #ff9800; }
+.ev-nav-frise .danger { top: -3px; bottom: auto; height: 4px; background: #ff6d00; }
+.ev-nav-frise i { position: absolute; top: 50%; transform: translate(-50%, -50%); font-style: normal; font-size: 14px; line-height: 1; }
+.ev-nav-frise .voiture { width: 16px; height: 16px; border-radius: 50%; background: #3d8bff; border: 3px solid #fff; }
+.ev-nav-frise .arrivee { left: 100%; }
+/* Tête haute : à l'envers, pour le reflet dans le pare-brise */
+.ev-nav-hud { display: none; }
+body.ev-hud .ev-nav-hud { display: flex; position: fixed; inset: 0; z-index: 5000; background: #000; align-items: center; justify-content: center; }
+.ev-hud-contenu { transform: scaleY(-1); display: flex; flex-direction: column; align-items: center; gap: 10px; color: #7dffcf; text-align: center; padding: 20px; }
+.ev-hud-fleche svg { width: 180px; height: 180px; }
+.ev-hud-fleche svg path { stroke: #7dffcf; }
+.ev-hud-fleche svg polygon { stroke: #7dffcf; fill: #7dffcf; }
+.ev-hud-distance { font-size: 72px; font-weight: 900; line-height: 1; }
+.ev-hud-texte { font-size: 34px; font-weight: 800; max-width: 90vw; }
+.ev-hud-vitesses { display: flex; gap: 24px; align-items: center; margin-top: 10px; }
+.ev-hud-vitesse { font-size: 84px; font-weight: 900; }
+.ev-hud-vitesse.exces { color: #ff5252; }
+.ev-hud-limite { width: 84px; height: 84px; border-radius: 50%; border: 9px solid #ff5252; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 900; color: #fff; }

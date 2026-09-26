@@ -41,6 +41,7 @@
     <button class="ev-chip" type="button" data-filtre="h24">🕐 24h/24</button>
     <button class="ev-chip" type="button" data-filtre="gratuit">🎁 Gratuit</button>
     <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
+    <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
   </div>
   <div id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : ouvre l'onglet 🚗 Profil pour les ajouter.</div>
 </header>
@@ -391,8 +392,18 @@
         <label class="ev-check"><input type="checkbox" id="ev-reglage-zoom-renforce"> 🔍 Zoom renforcé aux ronds-points, grands carrefours, sorties et entrées de voie rapide</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix"> 🔊 Guidage vocal (on peut aussi le couper en route avec 🔊)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-voies"> 🛣️ Dire quelle voie prendre (« prenez la voie de droite »)</label>
-        <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-travaux"> 🚧 Annoncer les travaux et routes fermées</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-travaux"> 🚧 Annoncer les travaux, routes fermées et ralentissements</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-bornes"> 🔋 Annoncer les bornes de recharge prévues</label>
+        <label class="ev-champ">Icône de la voiture
+          <select id="ev-reglage-icone" class="ev-input">
+            <option value="fleche_bleue">Flèche bleue</option>
+            <option value="fleche_verte">Flèche verte</option>
+            <option value="fleche_orange">Flèche orange</option>
+            <option value="fleche_rouge">Flèche rouge</option>
+            <option value="voiture">Voiture vue de dessus</option>
+            <option value="point">Point avec direction</option>
+          </select>
+        </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-vue-carrefour"> 🗺️ Dessin du vrai carrefour dans le panneau (ronds-points, carrefours à plusieurs routes)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-fenetre-voies"> 🛣️ Fenêtre des voies (comme Sygic) quand il faut choisir sa file</label>
@@ -455,7 +466,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 22 : sorties et échangeurs dans le résumé du trajet</div>
+      <div class="ev-hint ev-lien-centre">Version 23 : itinéraire plus rapide proposé, trafic en couleur, frise, tête haute</div>
     </div>
   </div>
 </section>
@@ -512,12 +523,31 @@
     <button id="ev-nav-voix-btn" class="ev-fab" type="button" title="Couper / remettre la voix">🔊</button>
     <button id="ev-nav-orientation-btn" class="ev-fab" type="button" title="Sens de marche / nord en haut">🧭</button>
     <button id="ev-nav-3d-btn" class="ev-fab ev-fab-texte" type="button" title="Vue 3D / 2D">3D</button>
-    <button id="ev-nav-apercu-btn" class="ev-fab" type="button" title="Aperçu du trajet restant">🗺️</button>
     <button id="ev-nav-barree-btn" class="ev-fab" type="button" title="Route barrée devant : chercher un autre chemin">🚧</button>
+    <button id="ev-nav-menu-btn" class="ev-fab ev-fab-texte" type="button" title="Plus d'options">⋯</button>
   </div>
   <button id="ev-nav-recentrer-btn" class="ev-nav-recentrer hidden" type="button">🎯 Recentrer</button>
 
   <div id="ev-nav-etape-borne" class="ev-nav-carte hidden"></div>
+
+  <div id="ev-nav-menu" class="ev-nav-carte ev-nav-menu hidden">
+    <div class="ev-nav-carte-titre">Options</div>
+    <div class="ev-nav-menu-grille">
+      <button id="ev-nav-apercu-btn" type="button">🗺️<span>Aperçu du trajet</span></button>
+      <button type="button" data-nav-action="hud">🪞<span>Tête haute</span></button>
+    </div>
+  </div>
+
+  <div id="ev-nav-hud" class="ev-nav-hud" aria-label="Mode tête haute">
+    <div class="ev-hud-contenu">
+      <div id="ev-hud-fleche" class="ev-hud-fleche"></div>
+      <div id="ev-hud-distance" class="ev-hud-distance"></div>
+      <div id="ev-hud-texte" class="ev-hud-texte"></div>
+      <div class="ev-hud-vitesses"><span id="ev-hud-vitesse" class="ev-hud-vitesse">0</span><span id="ev-hud-limite" class="ev-hud-limite hidden"></span></div>
+    </div>
+  </div>
+
+  <div id="ev-nav-frise" class="ev-nav-frise hidden" aria-label="Trajet restant"></div>
 
   <div id="ev-nav-batterie-panneau" class="ev-nav-carte hidden">
     <div class="ev-nav-carte-titre">🔋 Batterie réelle</div>
