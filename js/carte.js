@@ -39,8 +39,10 @@ const ATTRIBUTION_OSM = '© <a href="https://www.openstreetmap.org/copyright">Op
 // densité, donc nettes sur les écrans de téléphone, là où les tuiles OSM
 // sont agrandies et floues. Sans clé, ou si TomTom refuse les tuiles, on
 // retombe sur OSM (le fond sombre est alors OSM inversé par un filtre CSS).
-const osmSombre = () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" });
-const osmPlan = () => L.tileLayer(OSM, { maxZoom: 19, attribution: ATTRIBUTION_OSM });
+// detectRetina : sur un écran dense, on charge le niveau de zoom au-dessus
+// (2× plus de pixels) au lieu d'agrandir une tuile 256 px.
+const osmSombre = () => L.tileLayer(OSM, { maxZoom: 19, detectRetina: true, attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" });
+const osmPlan = () => L.tileLayer(OSM, { maxZoom: 19, detectRetina: true, attribution: ATTRIBUTION_OSM });
 
 // Après un refus (quota, clé), on ne réessaie TomTom qu'au bout d'un moment,
 // sinon chaque changement de fond repasse par un écran noir.
@@ -78,9 +80,9 @@ const FONDS = {
   plan: () => fondTomTom("main", osmPlan),
   satellite: () =>
     L.layerGroup([
-      L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, attribution: "Imagerie © Esri" }),
-      L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19 }),
-      L.tileLayer(`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19 }),
+      L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true, attribution: "Imagerie © Esri" }),
+      L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true }),
+      L.tileLayer(`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true }),
     ]),
 };
 export const ORDRE_FONDS = ["sombre", "plan", "satellite"];

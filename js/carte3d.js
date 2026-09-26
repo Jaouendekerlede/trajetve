@@ -430,6 +430,11 @@ async function creerCarte(fournisseur, fond, relief) {
     pitchWithRotate: false,
     touchPitch: false,
     fadeDuration: 0,
+    // Bords lissés (désactivé par défaut dans MapLibre : routes et bâtiments
+    // en escalier) et rendu à la densité réelle de l'écran, sans jamais
+    // descendre sous 2 (un écran d'ordinateur gagne alors en finesse).
+    antialias: true,
+    pixelRatio: Math.min(3, Math.max(window.devicePixelRatio || 1, 2)),
   });
   // Seules les ressources du style (icônes, polices) sont attendues : les
   // tuiles arrivent ensuite.
