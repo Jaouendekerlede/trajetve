@@ -1,4 +1,4 @@
-import { initialiserUI } from "./ui.js";
+import { initialiserUI, executerAction } from "./ui.js";
 import { navigationActive } from "./navigation.js";
 import { restaurerDepuisAdresse, proposerRappelSauvegarde } from "./ui-sauvegarde.js";
 import { proposerInstallation } from "./ui-installation.js";
@@ -14,6 +14,13 @@ if (restaures) {
   toast(`✅ Données restaurées (${restaures} éléments)`);
   proposerInstallation({ insister: true });
 } else setTimeout(proposerRappelSauvegarde, DELAI_RAPPEL_SAUVEGARDE_MS);
+
+// Ouverte par un raccourci de l'icône (appui long sur l'icône du téléphone).
+const actionRaccourci = new URLSearchParams(location.search).get("action");
+if (actionRaccourci) {
+  history.replaceState(null, "", location.pathname + location.hash);
+  executerAction(actionRaccourci);
+}
 // Lien ouvert alors que l'appli l'était déjà : même page, pas de nouveau
 // démarrage, on le provoque.
 window.addEventListener("hashchange", () => {

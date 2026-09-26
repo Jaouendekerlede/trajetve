@@ -23,6 +23,7 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
+import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
@@ -558,6 +559,16 @@ function cablerCarte() {
   cablerTrafic();
   cablerVoitureGaree();
   cablerSuggestions(["ev-depart-input", "ev-destination-input"]);
+  // 🎤 Dicter la destination : « Nantes », « aller à la gare de Rennes »…
+  $("ev-destination-micro").addEventListener("click", async () => {
+    if (!reconnaissanceDispo()) return toast("🎤 Dictée indisponible sur ce navigateur");
+    toast("🎤 Dites votre destination…");
+    const texte = await ecouter();
+    if (!texte) return toast("🎤 Je n'ai pas compris");
+    const c = interpreterCommande(texte);
+    $("ev-destination-input").value = c.action === "aller" ? c.lieu : texte;
+    lancerTrajet();
+  });
 
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
@@ -2066,6 +2077,26 @@ function cablerProfil() {
 }
 
 // ── Démarrage ──────────────────────────────────────────────────────────────
+
+// Raccourcis de l'icône de l'appli (appui long) : ?action=maison, bornes, voiture.
+export function executerAction(action) {
+  if (action === "maison") {
+    if (!lireReglages().adresse_domicile) {
+      afficherVue("profil");
+      return toast("🏠 Indique d'abord l'adresse du domicile dans le Profil.");
+    }
+    afficherVue("trajet");
+    $("ev-depart-input").value = "Ma position";
+    $("ev-destination-input").value = "Chez moi";
+    lancerTrajet();
+  } else if (action === "bornes") {
+    afficherVue("bornes");
+    localiser();
+  } else if (action === "voiture") {
+    afficherVue("bornes");
+    $("ev-voiture-chip")?.click();
+  }
+}
 
 export function initialiserUI() {
   initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || fondParDefaut(), onDeplacement: surDeplacementCarte });

@@ -8,6 +8,7 @@
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture } from "./storage.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
+import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
@@ -1349,7 +1350,7 @@ function cablerBoutons() {
   });
   $("ev-nav-orientation-btn").addEventListener("click", () => {
     etat.sensDeMarche = !etat.sensDeMarche;
-    $("ev-nav-orientation-btn").textContent = etat.sensDeMarche ? "🧭" : "🅽";
+    majBoutonOrientation();
     etat.suivi = true;
     $("ev-nav-recentrer-btn").classList.add("hidden");
     if (etat.pos) vue.cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
@@ -1364,6 +1365,7 @@ function cablerBoutons() {
     actionMenu(b.dataset.navAction);
   });
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
+  $("ev-nav-micro-btn").addEventListener("click", commandeVocale);
   $("ev-nav-recherche-cats").innerHTML = CATEGORIES_TRAJET.map((c) => `<button type="button" data-requete="${escapeHtml(c.requete)}">${c.icone}<span>${escapeHtml(c.nom)}</span></button>`).join("");
   $("ev-nav-recherche").addEventListener("click", (e) => {
     if (e.target.closest("[data-fermer]")) return $("ev-nav-recherche").classList.add("hidden");
@@ -1425,6 +1427,97 @@ function actionMenu(action) {
   if (action === "hud") basculerHud(true);
   else if (action === "recherche") $("ev-nav-recherche").classList.remove("hidden");
   else if (action === "parkings") proposerParkings(true);
+  else if (action === "partage") partagerArrivee();
+}
+
+function majBoutonOrientation() {
+  $("ev-nav-orientation-btn").innerHTML = etat.sensDeMarche ? "🧭<span>Nord en haut</span>" : "🅽<span>Sens de marche</span>";
+}
+
+// Temps jusqu'à l'arrivée, recharges comprises (s).
+function secondesJusquArrivee() {
+  const charges = etat.arretsRestants.reduce((s, a) => s + (a.temps_charge_min || 0) * 60, 0);
+  return secondesRestantesJusqua(etat.route.total) + charges;
+}
+
+function nomCourtLieu(nom) {
+  return String(nom || "destination").split(",").slice(0, 2).join(",").trim();
+}
+
+// « J'arrive à Nantes vers 18 h 40 » par SMS, WhatsApp… (ou copié).
+async function partagerArrivee() {
+  if (!etat?.route) return;
+  const secondes = secondesJusquArrivee();
+  const dest = nomCourtLieu((etat.destinationFinale || etat.destination).nom);
+  const texte = `🚗 J'arrive à ${dest} vers ${heure(Date.now() + secondes * 1000)} (dans ${formaterMinutes(secondes / 60)}).`;
+  const position = etat.pos && !etat.demo ? `\nMa position : https://www.google.com/maps?q=${etat.pos.lat.toFixed(5)},${etat.pos.lon.toFixed(5)}` : "";
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: texte + position });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(texte + position);
+    afficherAlerte("📋 Message copié : colle-le dans un SMS.");
+  } catch {
+    afficherAlerte(texte);
+  }
+}
+
+// 🎤 Commande vocale pendant la conduite.
+async function commandeVocale() {
+  if (!reconnaissanceDispo()) return afficherAlerte("🎤 Commande vocale indisponible sur ce navigateur.");
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  afficherAlerte("🎤 Je vous écoute…");
+  const texte = await ecouter();
+  if (!etat) return;
+  afficherAlerte(null);
+  if (!texte) return parler("Je n'ai pas compris.", true);
+  const c = interpreterCommande(texte);
+  const arret = etat.arretsRestants[0];
+  switch (c.action) {
+    case "voix":
+      etat.voix = c.valeur;
+      $("ev-nav-voix-btn").textContent = etat.voix ? "🔊" : "🔇";
+      if (etat.voix) parler("Voix activée.", true);
+      break;
+    case "barree":
+      routeBarree();
+      break;
+    case "hud":
+      basculerHud(true);
+      break;
+    case "partage":
+      partagerArrivee();
+      break;
+    case "parkings":
+      proposerParkings(true);
+      break;
+    case "batterie":
+      parler(`Batterie estimée : ${Math.round(batterieEstimee())} pour cent.`, true);
+      break;
+    case "arrivee": {
+      const s = secondesJusquArrivee();
+      parler(`Arrivée prévue à ${heure(Date.now() + s * 1000)}, dans ${formaterMinutes(s / 60)}.`, true);
+      break;
+    }
+    case "borne":
+      parler(arret ? `Prochain arrêt : ${arret.nom_borne}, dans ${distanceParlee(Math.max(0, etat.route.troncons[0].fin - etat.offset))}.` : "Plus aucune recharge prévue d'ici l'arrivée.", true);
+      break;
+    case "recherche":
+      $("ev-nav-recherche").classList.remove("hidden");
+      parler(`Je cherche sur votre trajet : ${c.requete}.`, true);
+      chercherLeLongDuTrajet(c.requete);
+      break;
+    case "aller":
+      parler("Pour changer de destination, arrêtez d'abord la navigation.", true);
+      break;
+    default:
+      parler(`Je n'ai pas compris : ${texte}.`, true);
+  }
 }
 
 // ── Le long du trajet : café, boulangerie… ajoutés comme étape ──────────────
@@ -1730,7 +1823,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-batterie-panneau").classList.add("hidden");
   $("ev-nav-recentrer-btn").classList.add("hidden");
   $("ev-nav-voix-btn").textContent = etat.voix ? "🔊" : "🔇";
-  $("ev-nav-orientation-btn").textContent = "🧭";
+  majBoutonOrientation();
   $("ev-nav-fleche").textContent = "⏳";
   $("ev-nav-rue").classList.add("hidden");
   $("ev-nav-danger").classList.add("hidden");

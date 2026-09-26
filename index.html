@@ -101,7 +101,10 @@
             <input type="text" id="ev-depart-input" class="ev-input" placeholder="Départ" value="Ma position" aria-label="Départ">
             <button id="ev-depart-gps-btn" class="ev-mini-btn" type="button" title="Ma position">📍</button>
           </span>
-          <input type="text" id="ev-destination-input" class="ev-input" placeholder="Destination (ville, adresse…)" enterkeyhint="go" aria-label="Destination">
+          <span class="ev-input-row">
+            <input type="text" id="ev-destination-input" class="ev-input" placeholder="Destination (ville, adresse…)" enterkeyhint="go" aria-label="Destination">
+            <button id="ev-destination-micro" class="ev-mini-btn" type="button" title="Dicter la destination">🎤</button>
+          </span>
         </div>
         <button id="ev-inverser-btn" class="ev-mini-btn ev-inverser" type="button" title="Inverser départ et destination">⇅</button>
       </div>
@@ -468,7 +471,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 24 : suggestions d'adresses, le long du trajet, parking à l'arrivée, ma voiture</div>
+      <div class="ev-hint ev-lien-centre">Version 25 : commandes vocales, partage de l'arrivée, raccourcis de l'icône</div>
     </div>
   </div>
 </section>
@@ -523,7 +526,7 @@
 
   <div class="ev-nav-boutons">
     <button id="ev-nav-voix-btn" class="ev-fab" type="button" title="Couper / remettre la voix">🔊</button>
-    <button id="ev-nav-orientation-btn" class="ev-fab" type="button" title="Sens de marche / nord en haut">🧭</button>
+    <button id="ev-nav-micro-btn" class="ev-fab" type="button" title="Commande vocale">🎤</button>
     <button id="ev-nav-3d-btn" class="ev-fab ev-fab-texte" type="button" title="Vue 3D / 2D">3D</button>
     <button id="ev-nav-barree-btn" class="ev-fab" type="button" title="Route barrée devant : chercher un autre chemin">🚧</button>
     <button id="ev-nav-menu-btn" class="ev-fab ev-fab-texte" type="button" title="Plus d'options">⋯</button>
@@ -536,6 +539,8 @@
     <div class="ev-nav-carte-titre">Options</div>
     <div class="ev-nav-menu-grille">
       <button id="ev-nav-apercu-btn" type="button">🗺️<span>Aperçu du trajet</span></button>
+      <button id="ev-nav-orientation-btn" type="button">🧭<span>Nord en haut</span></button>
+      <button type="button" data-nav-action="partage">📤<span>Partager mon arrivée</span></button>
       <button type="button" data-nav-action="hud">🪞<span>Tête haute</span></button>
       <button type="button" data-nav-action="recherche">🔍<span>Le long du trajet</span></button>
       <button type="button" data-nav-action="parkings">🅿️<span>Parkings à l'arrivée</span></button>
