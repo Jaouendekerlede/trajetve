@@ -9,7 +9,7 @@ import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerSc
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import { initCarte, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, ICONES_FONDS, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur } from "./carte.js";
+import { initCarte, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur } from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
@@ -603,6 +603,21 @@ function cablerCarte() {
   cablerVoitureGaree();
   cablerStats();
   cablerSOS();
+  // Liste d'essais sur la route : cases mémorisées sur ce téléphone.
+  const essais = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("tve_essais")) || {};
+    } catch {
+      return {};
+    }
+  })();
+  for (const c of document.querySelectorAll("[data-essai]")) {
+    c.checked = !!essais[c.dataset.essai];
+    c.addEventListener("change", () => {
+      essais[c.dataset.essai] = c.checked;
+      localStorage.setItem("tve_essais", JSON.stringify(essais));
+    });
+  }
   $("ev-urgence-btn").addEventListener("click", () => ouvrirSOS({ bornes: () => $("ev-urgence-bornes-interne").click() }));
   $("ev-arret-impose").addEventListener("change", majKmCurseurs);
   $("ev-reglages-conseilles-btn").addEventListener("click", () => {
