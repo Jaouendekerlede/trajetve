@@ -18,10 +18,21 @@ const INCLINAISON = 55;
 // À échelle égale, le zoom MapLibre (tuiles 512 px) vaut celui de Leaflet
 // moins 1 ; l'inclinaison éloigne l'horizon, on rapproche un peu.
 const ECART_ZOOM = -0.7;
-const COULEUR_RESTANT = "#22e5a0";
+// Tracé : vert sur la carte de nuit, bleu franc sur la carte claire (plus
+// lisible sur les routes jaunes et le fond beige).
+const COULEUR_RESTANT_NUIT = "#22e5a0";
+const COULEUR_RESTANT_JOUR = "#1a6fe8";
+let COULEUR_RESTANT = COULEUR_RESTANT_NUIT;
+let fondActif = "sombre";
 const COULEUR_PARCOURU = "#6b7385";
 // line-gradient n'accepte qu'une expression fondée sur line-progress.
-const DEGRADE_RESTANT = ["step", ["line-progress"], COULEUR_RESTANT, 1, COULEUR_RESTANT];
+let DEGRADE_RESTANT = ["step", ["line-progress"], COULEUR_RESTANT, 1, COULEUR_RESTANT];
+
+function couleursSelonFond(fond) {
+  fondActif = fond;
+  COULEUR_RESTANT = fond === "plan" ? COULEUR_RESTANT_JOUR : COULEUR_RESTANT_NUIT;
+  DEGRADE_RESTANT = ["step", ["line-progress"], COULEUR_RESTANT, 1, COULEUR_RESTANT];
+}
 
 export const FOURNISSEURS = {
   libre: "OpenFreeMap",
@@ -276,7 +287,7 @@ function ajouterCouchesTrajet() {
   }
   carte.addSource("trajet", { type: "geojson", data: { type: "FeatureCollection", features: [] }, lineMetrics: true });
   const dessous = coucheSousLesNoms();
-  carte.addLayer({ id: "trajet-halo", type: "line", source: "trajet", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#062a1e", "line-opacity": 0.55, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 8, 17, 22] } }, dessous);
+  carte.addLayer({ id: "trajet-halo", type: "line", source: "trajet", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": fondActif === "plan" ? "#0b3a7a" : "#062a1e", "line-opacity": 0.55, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 8, 17, 22] } }, dessous);
   carte.addLayer({
     id: "trajet-ligne",
     type: "line",
@@ -466,6 +477,7 @@ export function preparer(options) {
 
 async function preparerMaintenant({ sombre = true, fond = sombre ? "sombre" : "plan", fournisseur = "libre", relief = false } = {}) {
   avertissement = "";
+  couleursSelonFond(fond);
   if (!webglDisponible()) {
     raisonEchec = "WebGL absent sur ce navigateur";
     return false;

@@ -178,7 +178,7 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
   coucheFleche = null;
   const ll = coords.map(([lon, lat]) => [lat, lon]);
   L.polyline(ll, { color: "#062a1e", weight: 14, opacity: 0.55, interactive: false }).addTo(coucheNav);
-  ligneRestante = L.polyline(ll, { color: "#22e5a0", weight: 9, opacity: 0.95, interactive: false }).addTo(coucheNav);
+  ligneRestante = L.polyline(ll, { color: fondCourant() === "plan" ? "#1a6fe8" : "#22e5a0", weight: 9, opacity: 0.95, interactive: false }).addTo(coucheNav);
   ligneParcourue = L.polyline([], { color: "#6b7385", weight: 9, opacity: 0.9, interactive: false }).addTo(coucheNav);
   for (const a of arrets || []) {
     L.marker([a.lat, a.lon], { icon: pastille(32, "rgba(79,224,255,.95)", "🔋"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);

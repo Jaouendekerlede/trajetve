@@ -2046,6 +2046,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-meteo-route").checked = reglages.meteo_route !== false;
   $("ev-reglage-aires").checked = reglages.aires_autoroute !== false;
   $("ev-reglage-epure").checked = reglages.ecran_epure !== false;
+  $("ev-reglage-reponses-voix").checked = reglages.reponses_voix !== false;
   $("ev-reglage-prechauffage").checked = reglages.prechauffage !== false;
   $("ev-reglage-taille-texte").value = String(reglages.taille_texte_nav || 100);
   $("ev-reglage-taille-texte-val").textContent = String(reglages.taille_texte_nav || 100);
@@ -2149,6 +2150,7 @@ function cablerProfil() {
       meteo_route: $("ev-reglage-meteo-route").checked,
       aires_autoroute: $("ev-reglage-aires").checked,
       ecran_epure: $("ev-reglage-epure").checked,
+      reponses_voix: $("ev-reglage-reponses-voix").checked,
       prechauffage: $("ev-reglage-prechauffage").checked,
       taille_texte_nav: Number($("ev-reglage-taille-texte").value),
       vibration: $("ev-reglage-vibration").checked,

@@ -453,6 +453,7 @@
           </select>
         </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-reponses-voix"> 🗣️ Mains sur le volant : répondre à la voix (« oui », « non », « le premier »…) aux propositions</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-epure"> 🧘 Écran épuré en longue ligne droite (bandeau replié, autoroute : l'essentiel)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-vibration"> 📳 Vibrer avant chaque manœuvre</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-nuit-douce"> 🌙 Écran moins lumineux la nuit</label>
@@ -536,7 +537,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 37 : tracé recalé sur la carte, « Puis » dans le bandeau, borne en bas</div>
+      <div class="ev-hint ev-lien-centre">Version 38 : mains sur le volant (réponses à la voix), tracé bleu de jour</div>
     </div>
   </div>
 </section>
@@ -627,9 +628,12 @@
 
   <div id="ev-nav-recherche" class="ev-nav-carte hidden">
     <div class="ev-nav-carte-titre ev-titre-fermer">🔍 Le long du trajet <button type="button" class="ev-fermer" data-fermer aria-label="Fermer">✕</button></div>
+    <div class="ev-nav-carte-sous">🎤 En roulant, dites plutôt « trouve une boulangerie » : je vous lis les résultats.</div>
     <div id="ev-nav-recherche-cats" class="ev-nav-menu-grille"></div>
     <div id="ev-nav-recherche-res" class="ev-nav-resultats"></div>
   </div>
+
+  <div id="ev-nav-ecoute" class="ev-nav-ecoute hidden" aria-live="polite">🎤 J'écoute…</div>
 
   <div id="ev-nav-feuille" class="ev-nav-feuille hidden" aria-label="Feuille de route">
     <div class="ev-nav-carte-titre">🧾 Prochaines étapes <small>(toucher pour fermer)</small></div>

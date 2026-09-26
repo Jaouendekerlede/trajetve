@@ -17,3 +17,19 @@ test("commandes vocales comprises", () => {
   assert.deepEqual(c("emmène-moi à la maison"), { action: "aller", lieu: "Chez moi" });
   assert.equal(c("bla bla").action, "inconnu");
 });
+
+test("réponses à la voix : oui / non, et choix dans une liste", async () => {
+  const { interpreterOuiNon: on, interpreterChoix: ch } = await import("../js/commandes-vocales.js");
+  assert.equal(on("oui"), true);
+  assert.equal(on("ouais vas-y"), true);
+  assert.equal(on("non merci"), false);
+  assert.equal(on("pas maintenant"), false);
+  assert.equal(on("euh"), null);
+  assert.equal(on(null), null);
+  assert.equal(ch("la deuxième", 3), 1);
+  assert.equal(ch("le premier", 3), 0);
+  assert.equal(ch("3", 3), 2);
+  assert.equal(ch("troisième", 2), null, "seulement deux choix");
+  assert.equal(ch("aucun", 3), -1);
+  assert.equal(c("autre borne s'il te plaît").action, "secours");
+});

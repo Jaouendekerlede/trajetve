@@ -11,7 +11,7 @@ import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
 import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
-import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
+import { reconnaissanceDispo, ecouter, interpreterCommande, interpreterOuiNon, interpreterChoix } from "./commandes-vocales.js";
 import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
@@ -73,6 +73,11 @@ function distanceParlee(m) {
     return `${String(km).replace(".", ",")} kilomètre${km >= 2 ? "s" : ""}`;
   }
   return `${m >= 100 ? Math.round(m / 50) * 50 : Math.round(m / 10) * 10} mètres`;
+}
+
+// Petites fautes des instructions TomTom en français.
+function corrigerFrancais(message) {
+  return message.replace(/\bla premier\b/g, "la première").replace(/\bLa premier\b/g, "La première");
 }
 
 // « Puis… » en une ligne : l'essentiel de la manœuvre suivante.
@@ -259,7 +264,7 @@ function construireRoute(r) {
     .map((i) => ({
       offset: cum[Math.min(Math.max(0, i.pointIndex ?? 0), dernier)],
       // « …, direction Nantes » quand TomTom ne le dit pas (voix et panneau).
-      message: (i.message || "") + (i.signpostText && i.message && !i.message.includes(i.signpostText) ? `, direction ${i.signpostText}` : ""),
+      message: corrigerFrancais(i.message || "") + (i.signpostText && i.message && !i.message.includes(i.signpostText) ? `, direction ${i.signpostText}` : ""),
       manoeuvre: i.maneuver || "",
       type: i.instructionType || "",
       jonction: i.junctionType || "",
@@ -839,6 +844,42 @@ function phraseVoies(instr) {
   return k === 1 ? `Prenez la ${suivies[0] + 1}${suivies[0] === 0 ? "re" : "e"} voie en partant de la gauche.` : "";
 }
 
+// ── Mains sur le volant : questions à la voix ───────────────────────────────
+// L'appli pose la question, attend la fin de sa phrase, puis écoute la
+// réponse. Pas de réponse claire → rien ne change (choix le plus sûr).
+
+function direPuisEcouter(texte) {
+  return new Promise((resolve) => {
+    if (!etat?.voix || !etat.prefs.reponsesVoix || !reconnaissanceDispo() || !("speechSynthesis" in window)) {
+      parler(texte);
+      return resolve(null);
+    }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(texte);
+    u.lang = "fr-FR";
+    u.onend = async () => {
+      if (!etat) return resolve(null);
+      $("ev-nav-ecoute").classList.remove("hidden");
+      const r = await ecouter();
+      $("ev-nav-ecoute").classList.add("hidden");
+      resolve(r);
+    };
+    u.onerror = () => resolve(null);
+    speechSynthesis.speak(u);
+  });
+}
+
+const ORDRES = ["Premier", "Deuxième", "Troisième"];
+
+// Lit jusqu'à 3 possibilités et écoute « le premier », « la deuxième »…
+async function choisirALaVoix(intro, elements, decrire) {
+  const n = Math.min(3, elements.length);
+  if (!n) return -1;
+  const liste = elements.slice(0, n).map((x, i) => `${ORDRES[i]} : ${decrire(x)}`).join(". ");
+  const r = await direPuisEcouter(`${intro} ${liste}. Lequel ? Dites premier${n > 1 ? ", deuxième" : ""}${n > 2 ? ", troisième" : ""}, ou non.`);
+  return interpreterChoix(r, n);
+}
+
 // Double bip court (sans fichier son) : dépassement de la limitation.
 let contexteAudio = null;
 function bip() {
@@ -975,7 +1016,11 @@ async function verifierEtatBorne(arret) {
   const occupee = !horsService && e.total && e.libres === 0 && e.occupes > 0;
   if (!horsService && !occupee) return;
   afficherAlerte(`⚠️ ${arret.nom_borne} : ${horsService ? "signalée hors service" : "toutes les places occupées (dernier état connu)"}`, { libelle: "🔌 Autre borne", action: afficherSecours });
-  parler(horsService ? "Attention, la borne prévue est signalée hors service. Touchez « Autre borne »." : "La borne prévue semble occupée. Une autre borne vous est proposée.");
+  const alt = arret.alternatives?.[0];
+  const debut = horsService ? "Attention, la borne prévue est signalée hors service." : "La borne prévue semble occupée.";
+  if (!alt) return parler(debut);
+  const r = await direPuisEcouter(`${debut} Voulez-vous aller plutôt à ${alt.nom} ? Dites oui ou non.`);
+  if (etat && interpreterOuiNon(r) === true) remplacerBorne(0);
 }
 
 // ── Minuteur de recharge (fin estimée, notification) ─────────────────────────
@@ -1202,19 +1247,26 @@ function proposerRoute(route, gain) {
   const min = Math.round(gain / 60);
   etat.proposition = route;
   const texte = `⚡ Itinéraire plus rapide : ${min} min de gagnées`;
-  afficherAlerte(texte, {
-    libelle: "✅ Le prendre",
-    action: () => {
-      if (etat?.proposition !== route) return;
+  const accepter = () => {
+    if (etat?.proposition !== route) return;
+    etat.proposition = null;
+    installerRoute(route);
+    etat.horsRoute = 0;
+    afficherAlerte(null);
+    parler("Nouvel itinéraire.", true);
+    majEcran();
+  };
+  afficherAlerte(`${texte} · dites « oui »`, { libelle: "✅ Le prendre", action: accepter });
+  direPuisEcouter(`Un itinéraire plus rapide est disponible, ${min} minutes de gagnées. Voulez-vous le prendre ? Dites oui ou non.`).then((r) => {
+    if (etat?.proposition !== route) return;
+    const ok = interpreterOuiNon(r);
+    if (ok === true) accepter();
+    else if (ok === false) {
       etat.proposition = null;
-      installerRoute(route);
-      etat.horsRoute = 0;
       afficherAlerte(null);
-      parler("Nouvel itinéraire.", true);
-      majEcran();
-    },
+      parler("D'accord, on garde l'itinéraire actuel.");
+    }
   });
-  parler(`Un itinéraire plus rapide est disponible, ${min} minutes de gagnées. Touchez « Le prendre » pour l'accepter.`);
   setTimeout(() => {
     if (etat?.proposition !== route) return;
     etat.proposition = null;
@@ -2043,6 +2095,7 @@ async function commandeVocale() {
       partagerArrivee();
       break;
     case "parkings":
+      etat.parVoix = true;
       proposerParkings(true);
       break;
     case "batterie":
@@ -2059,8 +2112,20 @@ async function commandeVocale() {
     case "recherche":
       $("ev-nav-recherche").classList.remove("hidden");
       parler(`Je cherche sur votre trajet : ${c.requete}.`, true);
+      etat.parVoix = true;
       chercherLeLongDuTrajet(c.requete);
       break;
+    case "secours": {
+      const b = prochaineBorne();
+      const alts = b?.arret.alternatives || [];
+      if (!alts.length) {
+        parler("Pas d'autre borne connue près de celle-ci.", true);
+        break;
+      }
+      const i = await choisirALaVoix(`À la place de ${b.arret.nom_borne}.`, alts, (a) => `${a.nom}${a.puissance_max_kw ? `, ${Math.round(a.puissance_max_kw)} kilowatts` : ""}`);
+      if (etat && i >= 0) remplacerBorne(i);
+      break;
+    }
     case "aller":
       parler("Pour changer de destination, arrêtez d'abord la navigation.", true);
       break;
@@ -2086,6 +2151,14 @@ async function chercherLeLongDuTrajet(requete) {
     .filter((l) => l.devant_m > 0)
     .slice(0, 8);
   etat.lieuxTrouves = lieux;
+  if (etat.parVoix) {
+    etat.parVoix = false;
+    if (!lieux.length) parler("Rien de trouvé devant vous.");
+    else {
+      const i = await choisirALaVoix("Voici ce que j'ai trouvé.", lieux, (l) => `${l.nom}, dans ${distanceParlee(l.devant_m)}, détour ${l.detour_min} minute${l.detour_min > 1 ? "s" : ""}`);
+      if (etat && i >= 0) return ajouterEtape(lieux[i]);
+    }
+  }
   zone.innerHTML = lieux.length
     ? lieux
         .map((l, i) => `<div class="ev-nav-resultat"><div><strong>${escapeHtml(l.nom)}</strong><div class="ev-nav-carte-sous">dans ${distanceAffichee(l.devant_m)} · détour +${l.detour_min} min</div></div><button type="button" class="ev-btn" data-etape="${i}">➕ Étape</button></div>`)
@@ -2143,7 +2216,18 @@ async function proposerParkings(manuel = false) {
     })
     .join("");
   $("ev-nav-parkings").classList.remove("hidden");
-  if (!manuel) parler("Vous approchez de l'arrivée. Des parkings sont proposés à l'écran.");
+  const decrire = (p) => `${p.nom}, à ${p.distM} mètres de l'arrivée`;
+  if (!manuel) {
+    const r = await direPuisEcouter(`Vous approchez de l'arrivée. Parking le plus proche : ${decrire(liste[0])}. Voulez-vous y aller ? Dites oui ou non.`);
+    if (!etat) return;
+    const ok = interpreterOuiNon(r);
+    if (ok === true) allerAuParking(liste[0]);
+    else if (ok === false) $("ev-nav-parkings").classList.add("hidden");
+  } else if (etat.parVoix) {
+    etat.parVoix = false;
+    const i = await choisirALaVoix("Parkings près de l'arrivée.", liste, decrire);
+    if (etat && i >= 0) allerAuParking(liste[i]);
+  }
 }
 
 async function allerAuParking(p) {
@@ -2369,6 +2453,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       vibration: reglages.vibration === true,
       nuitDouce: reglages.nuit_douce !== false,
       notifGuidage: reglages.notif_guidage !== false,
+      reponsesVoix: reglages.reponses_voix !== false,
       prechauffage: reglages.prechauffage !== false,
     },
     sensDeMarche: true,

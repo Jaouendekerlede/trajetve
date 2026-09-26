@@ -1002,3 +1002,7 @@ body.ev-borne-bas .ev-nav-frise { bottom: calc(116px + var(--securite-bas)); }
 body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bottom: calc(134px + var(--securite-bas)); }
 .ev-nav-manoeuvre-texte .ev-nav-ensuite .ev-nav-fleche-emoji { display: inline; font-size: 14px; line-height: 1; }
 .ev-nav-manoeuvre-texte .ev-nav-ensuite-fleche { display: inline; }
+
+/* Écoute d'une réponse à la voix (mains sur le volant) */
+.ev-nav-ecoute { position: absolute; left: 50%; bottom: calc(160px + var(--securite-bas)); transform: translateX(-50%); z-index: 40; padding: 10px 18px; border-radius: 22px; background: #c62828; color: #fff; font-size: 17px; font-weight: 800; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); animation: ev-pulse 1.2s infinite; }
+@keyframes ev-pulse { 50% { opacity: 0.7; } }

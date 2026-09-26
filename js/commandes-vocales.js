@@ -52,6 +52,7 @@ export function interpreterCommande(texte) {
   if (/(route|rue|c'est) (est )?(barr[ée]|coup[ée]|ferm[ée])/.test(t)) return { action: "barree" };
   if (/(t[êe]te haute|hud|pare-brise)/.test(t)) return { action: "hud" };
   if (/(partag|envoi|pr[ée]vien)/.test(t)) return { action: "partage" };
+  if (/(autre borne|changer de borne|borne (en panne|occup|hors))/.test(t)) return { action: "secours" };
   if (/(parking|garer|stationner)/.test(t)) return { action: "parkings" };
   for (const [motif, requete] of RECHERCHES) if (motif.test(t)) return { action: "recherche", requete };
   if (/(batterie|autonomie|pourcentage)/.test(t)) return { action: "batterie" };
@@ -61,4 +62,25 @@ export function interpreterCommande(texte) {
   const m = /^(?:aller|va|allons|emm[eè]ne[- ]moi|conduis[- ]moi|direction|trajet|itin[ée]raire|je veux aller|guide[- ]moi)\s+(?:à|a|au|aux|vers|jusqu'à|jusqu'au|pour|en)?\s*(.+)$/.exec(t);
   if (m) return { action: "aller", lieu: m[1].charAt(0).toUpperCase() + m[1].slice(1) };
   return { action: "inconnu", texte: t };
+}
+
+// Réponse « oui / non » à une question posée à la voix : true, false, ou
+// null (pas compris, pas de réponse → on ne change rien).
+export function interpreterOuiNon(texte) {
+  const t = String(texte || "").toLowerCase();
+  if (!t.trim()) return null;
+  if (/\b(non|pas|laisse|annule|surtout pas|jamais)\b/.test(t)) return false;
+  if (/\b(oui|ouais|d'accord|ok|okay|vas-y|allez|volontiers|prends|go|bien sûr|exact)\b/.test(t)) return true;
+  return null;
+}
+
+// « la deuxième », « le premier », « 3 »… → index (0, 1, 2), -1 pour
+// « non / aucun », null si pas compris.
+export function interpreterChoix(texte, nombre) {
+  const t = String(texte || "").toLowerCase();
+  if (!t.trim()) return null;
+  if (/\b(non|aucun|aucune|rien|annule|laisse)\b/.test(t)) return -1;
+  const mots = [/\b(premi[eè]re?|un|une|1)\b/, /\b(deuxi[eè]me|second|seconde|deux|2)\b/, /\b(troisi[eè]me|trois|3)\b/];
+  for (let i = 0; i < Math.min(nombre, mots.length); i++) if (mots[i].test(t)) return i;
+  return null;
 }
