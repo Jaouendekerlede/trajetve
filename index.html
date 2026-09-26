@@ -430,6 +430,7 @@
           </select>
         </label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-aires"> 🛣️ Sur autoroute et voie express : prochaine borne et aires (en bas à gauche)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-meteo-route"> 🌦️ Annoncer la météo devant soi (orage, neige, verglas, forte pluie, vent)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-parking-arrivee"> 🅿️ Proposer des parkings à 2 km de l'arrivée</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-vue-carrefour"> 🗺️ Dessin du vrai carrefour dans le panneau (ronds-points, carrefours à plusieurs routes)</label>
@@ -494,7 +495,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 28 : aire de recharge préférée imposée au départ</div>
+      <div class="ev-hint ev-lien-centre">Version 29 : bornes et aires sur autoroute, en bas à gauche</div>
     </div>
   </div>
 </section>
@@ -543,6 +544,7 @@
   </div>
 
   <div class="ev-nav-vitesse-bloc">
+    <div id="ev-nav-aires" class="ev-nav-aires hidden" aria-label="Aires et bornes devant"></div>
     <div id="ev-nav-limite" class="ev-nav-limite hidden"></div>
     <div id="ev-nav-vitesse" class="ev-nav-vitesse"><strong>0</strong><span>km/h</span></div>
   </div>

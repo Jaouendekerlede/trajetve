@@ -15,9 +15,9 @@ import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
-import { radarsLeLongDu, feuxLeLongDe, routesAutourDe } from "./osm-route.js";
+import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
-import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace } from "./alertes-route.js";
+import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
 import { escapeHtml, lienAPied } from "./util.js";
@@ -387,6 +387,7 @@ function installerRoute(route) {
   etat.demoOffset = null;
   etat.flecheCarte = undefined;
   route.zonesDanger = etat.radars ? zonesDeDanger(etat.radars, route.coords, route.cum, route.limites) : [];
+  route.aires = etat.airesOsm ? airesSurRoute(etat.airesOsm, route.coords, route.cum, route.autoroutes || []) : [];
   appliquerFeux(route);
   vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   if (etat.pos) {
@@ -580,6 +581,7 @@ function majEcran() {
   majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
   majZoneDanger();
   majFrise();
+  majAires();
 
   afficherVoies(instr);
 
@@ -651,6 +653,61 @@ async function chercherRadars() {
   if (!etat?.route || !r.ok) return;
   etat.radars = r.radars;
   etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+}
+
+// Aires et bornes sur autoroute / voie express : chargées une fois (et
+// après un nouveau plan), pour les seuls tronçons rapides du trajet.
+// Par fenêtres de 200 km devant, complétées en roulant (50 km avant la fin).
+const FENETRE_AIRES_M = 200000;
+const RELANCE_AIRES_M = 50000;
+
+async function chercherAires() {
+  if (!etat?.prefs.aires || !etat.route?.autoroutes?.length || etat.airesEnCours) return;
+  const route = etat.route;
+  const [debut, fin] = [etat.offset, etat.offset + FENETRE_AIRES_M];
+  const morceaux = route.autoroutes
+    .filter(([a, b]) => b > debut && a < fin)
+    .map(([a, b]) => route.coords.filter((_, i) => route.cum[i] >= Math.max(a, debut) && route.cum[i] <= Math.min(b, fin)));
+  etat.airesEnCours = true;
+  etat.airesOdometreFin = etat.odometre + Math.min(fin, route.total) - debut;
+  const r = await airesLeLongDe(morceaux);
+  if (!etat) return;
+  etat.airesEnCours = false;
+  if (!etat.route || !r.ok) {
+    etat.airesOdometreFin = etat.odometre + 20000; // nouvel essai un peu plus loin
+    return;
+  }
+  const connus = new Set((etat.airesOsm || []).map((l) => `${l.lat},${l.lon}`));
+  etat.airesOsm = [...(etat.airesOsm || []), ...r.lieux.filter((l) => !connus.has(`${l.lat},${l.lon}`))];
+  etat.route.aires = airesSurRoute(etat.airesOsm, etat.route.coords, etat.route.cum, etat.route.autoroutes || []);
+}
+
+// Colonne en bas à gauche (comme Sygic) : prochaine borne sur la route,
+// puis les deux aires suivantes, avec la distance.
+const HORIZON_AIRES_M = 150000;
+
+function majAires() {
+  const el = $("ev-nav-aires");
+  const route = etat.route;
+  const surRapide = (route.autoroutes || []).some(([a, b]) => etat.offset >= a - 200 && etat.offset <= b);
+  const devant = surRapide && etat.prefs.aires && !etat.aLaBorne ? (route.aires || []).filter((x) => x.offset > etat.offset && x.offset - etat.offset < HORIZON_AIRES_M) : [];
+  const borne = devant.find((x) => x.type === "recharge");
+  const aires = devant.filter((x) => x.type !== "recharge").slice(0, 2);
+  const liste = [borne, ...aires].filter(Boolean).sort((a, b) => a.offset - b.offset);
+  const html = liste
+    .map((x) => {
+      const d = distanceAffichee(x.offset - etat.offset);
+      const icone = x.type === "recharge" ? "⚡" : x.type === "service" ? "🍴" : "🌳";
+      const plus = x.type === "recharge" && x.puissance_kw ? `<small>${Math.round(x.puissance_kw)} kW</small>` : x.recharge ? "<small>⚡</small>" : "";
+      const titre = `${x.type === "recharge" ? "Borne" : x.type === "service" ? "Aire de service" : "Aire de repos"}${x.nom ? ` ${x.nom}` : ""}`;
+      return `<div class="ev-aire ev-aire-${x.type}" title="${escapeHtml(titre)}"><span>${icone}</span><strong>${d}</strong>${plus}</div>`;
+    })
+    .join("");
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
+  el.classList.toggle("hidden", !html);
 }
 
 function majZoneDanger() {
@@ -1044,6 +1101,7 @@ async function replanifier() {
   if (route) {
     installerRoute(route);
     chercherRadars();
+    chercherAires();
   }
   afficherAlerte(null);
   parler(
@@ -1170,6 +1228,7 @@ function surPosition(p) {
   rafraichirBornesProches();
   preparerCarrefours();
   verifierMeteo();
+  if (etat.prefs.aires && etat.airesOdometreFin != null && etat.odometre > etat.airesOdometreFin - RELANCE_AIRES_M && etat.offset < etat.route.total - RELANCE_AIRES_M) chercherAires();
   if (etat.prefs.parkingArrivee && !etat.parkingsProposes && !etat.arretsRestants.length && !etat.destinationFinale && etat.odometre > 500 && etat.route.total - etat.offset < DISTANCE_PROPOSITION_PARKING_M) {
     proposerParkings();
   }
@@ -1948,6 +2007,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     carrefours: new Map(),
     mesuresBatterie: [{ km: 0, pct: chargeDepartPct ?? 80 }],
     alertesMeteo: new Set(),
+    airesOsm: null,
     debut: Date.now(),
     kmPlan: 0,
     pctDepartPlan: chargeDepartPct ?? 80,
@@ -1969,6 +2029,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       vueCarrefour: reglages.vue_carrefour !== false,
       parkingArrivee: reglages.parking_arrivee !== false,
       meteo: reglages.meteo_route !== false,
+      aires: reglages.aires_autoroute !== false,
     },
     sensDeMarche: true,
     suivi: true,
@@ -2035,6 +2096,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   }
   installerRoute(route);
   chercherRadars();
+  chercherAires();
   const premiere = route.instructions.find((i) => i.type !== "LOCATION_DEPARTURE");
   parler(`C'est parti. ${premiere ? premiere.message : ""}`, true);
   if (demo) demarrerDemo();

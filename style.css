@@ -914,3 +914,13 @@ body.ev-hud .ev-nav-hud { display: flex; position: fixed; inset: 0; z-index: 500
 .ev-qp-valeur { font-weight: 800; white-space: nowrap; }
 .ev-qp-valeur small { margin-left: 6px; font-weight: 600; color: var(--texte-att); }
 .ev-stats-periodes { margin-bottom: 8px; }
+
+/* Aires et bornes sur autoroute (colonne comme Sygic, au-dessus du compteur) */
+.ev-nav-aires { display: flex; flex-direction: column; gap: 6px; }
+.ev-aire { width: 66px; padding: 6px 2px 5px; border-radius: 12px; background: #1f63c6; color: #fff; display: flex; flex-direction: column; align-items: center; line-height: 1.1; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); border: 2px solid rgba(255, 255, 255, 0.85); }
+.ev-aire span { font-size: 20px; }
+.ev-aire strong { font-size: 13px; font-weight: 900; white-space: nowrap; }
+.ev-aire small { font-size: 11px; font-weight: 700; opacity: 0.9; }
+.ev-aire-recharge { background: #0f8a5f; }
+body.ev-mode-voiture .ev-aire { width: 78px; }
+body.ev-mode-voiture .ev-aire strong { font-size: 15px; }

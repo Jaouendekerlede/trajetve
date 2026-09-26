@@ -22,7 +22,8 @@ export function projeterSurTrace(lat, lon, coords, cum) {
     const l2 = dx * dx + dy * dy;
     const t = l2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
     const d = Math.hypot(ax + t * dx, ay + t * dy);
-    if (d < meilleur.d) meilleur = { d, offset: cum[i] + t * (cum[i + 1] - cum[i]) };
+    // gauche : le point est à gauche du sens de circulation.
+    if (d < meilleur.d) meilleur = { d, offset: cum[i] + t * (cum[i + 1] - cum[i]), gauche: dy * ax - dx * ay > 0 };
   }
   return meilleur;
 }
@@ -113,4 +114,41 @@ export function partDifferente(coordsNouveau, coordsAncien, cumAncien, { pasM = 
     if (projeterSurTrace(lat, lon, coordsAncien, cumAncien).d > ecartM) loin++;
   }
   return total ? loin / total : 0;
+}
+
+// Aires et bornes vraiment sur la route (pas en sortant) : à moins de
+// 350 m du tracé, du bon côté (à droite), sur un tronçon rapide
+// (intervalles [début, fin] en m), et pour les bornes, dans une aire.
+// Les bornes d'une même aire sont regroupées. Renvoie [{ type, nom, offset,
+// puissance_kw }] triés.
+const ECART_MAX_AIRE_M = 350;
+const MEME_AIRE_M = 400;
+
+export function airesSurRoute(lieux, coords, cum, intervalles) {
+  const surRoute = [];
+  for (const l of lieux) {
+    const p = projeterSurTrace(l.lat, l.lon, coords, cum);
+    if (p.d > ECART_MAX_AIRE_M || !intervalles.some(([a, b]) => p.offset >= a - 500 && p.offset <= b + 500)) continue;
+    // On roule à droite : l'aire d'en face (autre sens) n'est pas accessible.
+    if (p.gauche) continue;
+    surRoute.push({ ...l, offset: p.offset });
+  }
+  surRoute.sort((a, b) => a.offset - b.offset);
+  const resultat = [];
+  for (const l of surRoute) {
+    const proche = resultat.find((r) => r.type === l.type && Math.abs(r.offset - l.offset) < MEME_AIRE_M);
+    if (proche) {
+      if (l.puissance_kw) proche.puissance_kw = Math.max(proche.puissance_kw || 0, l.puissance_kw);
+      if (!proche.nom && l.nom) proche.nom = l.nom;
+      continue;
+    }
+    resultat.push({ type: l.type, nom: l.nom, offset: l.offset, puissance_kw: l.puissance_kw });
+  }
+  // Borne seulement si elle est dans une aire : près d'un échangeur, elle
+  // est dans une zone commerciale, il faudrait sortir.
+  const dansUneAire = (x) => resultat.some((r) => r.type !== "recharge" && Math.abs(r.offset - x.offset) < MEME_AIRE_M);
+  const garde = resultat.filter((x) => x.type !== "recharge" || dansUneAire(x));
+  // Aire avec bornes : signalée comme telle.
+  for (const r of garde) if (r.type !== "recharge") r.recharge = garde.some((x) => x.type === "recharge" && Math.abs(x.offset - r.offset) < MEME_AIRE_M);
+  return garde;
 }

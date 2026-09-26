@@ -1984,6 +1984,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-parking-arrivee").checked = reglages.parking_arrivee !== false;
   $("ev-reglage-privilegier-abos").checked = reglages.privilegier_abonnements !== false;
   $("ev-reglage-meteo-route").checked = reglages.meteo_route !== false;
+  $("ev-reglage-aires").checked = reglages.aires_autoroute !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
@@ -2078,6 +2079,7 @@ function cablerProfil() {
       parking_arrivee: $("ev-reglage-parking-arrivee").checked,
       privilegier_abonnements: $("ev-reglage-privilegier-abos").checked,
       meteo_route: $("ev-reglage-meteo-route").checked,
+      aires_autoroute: $("ev-reglage-aires").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
     });

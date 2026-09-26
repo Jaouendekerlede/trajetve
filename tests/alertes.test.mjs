@@ -60,3 +60,23 @@ test("itinéraire proposé : même chemin (trafic à jour) ou vraiment un autre"
   const autre = coords.map(([lon, lat]) => [lon, lat + 0.009]);
   assert.ok(a.partDifferente(autre, coords, cum) > 0.9);
 });
+
+test("aires sur autoroute : à droite, sur la route, bornes d'une aire regroupées", () => {
+  // Route vers l'est : à droite = au sud (latitude plus petite).
+  const troncon = [[0, 10000]];
+  const lieux = [
+    { type: "service", nom: "Aire de la Vendée", lat: 48.0985, lon: coords[40][0] }, // 170 m à droite, km 4
+    { type: "recharge", nom: "Ionity", lat: 48.0984, lon: coords[41][0], puissance_kw: 350 },
+    { type: "recharge", nom: "", lat: 48.0983, lon: coords[41][0] + 0.0005, puissance_kw: 50 },
+    { type: "service", nom: "Aire d'en face", lat: 48.1015, lon: coords[45][0] }, // à gauche : autre sens
+    { type: "repos", nom: "", lat: 48.0995, lon: coords[70][0] }, // km 7
+    { type: "recharge", nom: "Borne en ville", lat: 48.08, lon: coords[20][0] }, // 2 km : en sortant
+    { type: "recharge", nom: "Zone commerciale", lat: 48.0985, lon: coords[55][0] }, // près mais hors aire
+  ];
+  const r = a.airesSurRoute(lieux, coords, cum, troncon);
+  assert.deepEqual(r.map((x) => x.type), ["service", "recharge", "repos"]);
+  assert.equal(r[1].puissance_kw, 350);
+  assert.equal(r[0].recharge, true, "aire de service avec bornes");
+  assert.equal(r[2].recharge, false);
+  assert.equal(a.airesSurRoute(lieux, coords, cum, [[8000, 9000]]).length, 0, "hors tronçon rapide");
+});
