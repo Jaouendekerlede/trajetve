@@ -325,3 +325,16 @@ export function voitureGaree() {
 export function oublierVoitureGaree() {
   localStorage.removeItem(CLE_VOITURE_GAREE);
 }
+
+// ── Trajets faits en navigation (statistiques) ──────────────────────────────
+
+const CLE_TRAJETS_FAITS = "trajetve_trajets_faits";
+const MAX_TRAJETS_FAITS = 1000;
+
+export function listerTrajetsFaits() {
+  return lireJson(CLE_TRAJETS_FAITS, []);
+}
+
+export function ajouterTrajetFait(trajet) {
+  ecrireJson(CLE_TRAJETS_FAITS, [{ date: Date.now(), ...trajet }, ...listerTrajetsFaits()].slice(0, MAX_TRAJETS_FAITS));
+}

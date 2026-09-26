@@ -6,7 +6,8 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait } from "./storage.js";
+import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
 import { rechercherLeLongDu, CATEGORIES_TRAJET } from "./recherche-route.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { svgBatterie, tableauBatterie, pctPrevuA } from "./graphique-batterie.js";
@@ -1168,6 +1169,7 @@ function surPosition(p) {
   majEcran();
   rafraichirBornesProches();
   preparerCarrefours();
+  verifierMeteo();
   if (etat.prefs.parkingArrivee && !etat.parkingsProposes && !etat.arretsRestants.length && !etat.destinationFinale && etat.odometre > 500 && etat.route.total - etat.offset < DISTANCE_PROPOSITION_PARKING_M) {
     proposerParkings();
   }
@@ -1449,6 +1451,37 @@ function actionMenu(action) {
   else if (action === "partage") partagerArrivee();
   else if (action === "secours") afficherSecours();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
+}
+
+// ── Météo devant soi (toutes les 15 min) ────────────────────────────────────
+
+const INTERVALLE_METEO_MS = 15 * 60 * 1000;
+const DISTANCES_METEO_M = [10000, 30000, 60000];
+
+async function verifierMeteo() {
+  if (!etat?.route || !etat.prefs.meteo || Date.now() - (etat.derniereMeteo || 0) < INTERVALLE_METEO_MS) return;
+  etat.derniereMeteo = Date.now();
+  const points = DISTANCES_METEO_M.map((d) => etat.offset + d)
+    .filter((o) => o < etat.route.total)
+    .map((o) => {
+      const p = pointSurRoute(o);
+      return { o, lat: p.lat, lon: p.lon, quandS: Math.round(Date.now() / 1000 + secondesRestantesJusqua(o)) };
+    });
+  const mesures = await meteoDesPoints(points);
+  if (!etat || !mesures) return;
+  for (let i = 0; i < points.length; i++) {
+    const a = mesures[i] && alerteMeteo(mesures[i]);
+    if (!a || etat.alertesMeteo.has(a.type)) continue;
+    etat.alertesMeteo.add(a.type);
+    const km = Math.max(1, Math.round((points[i].o - etat.offset) / 1000));
+    const texte = `${a.texte} dans ~${km} km`;
+    parler(`${a.voix} dans environ ${km} kilomètres.`);
+    if ($("ev-nav-alerte").classList.contains("hidden")) {
+      afficherAlerte(texte);
+      setTimeout(() => etat && $("ev-nav-alerte").textContent === texte && afficherAlerte(null), 20000);
+    }
+    break;
+  }
 }
 
 // ── Batterie prévue / réelle ────────────────────────────────────────────────
@@ -1914,6 +1947,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     manoeuvresFeux: new Set(),
     carrefours: new Map(),
     mesuresBatterie: [{ km: 0, pct: chargeDepartPct ?? 80 }],
+    alertesMeteo: new Set(),
+    debut: Date.now(),
     kmPlan: 0,
     pctDepartPlan: chargeDepartPct ?? 80,
     carrefoursDemandes: new Set(),
@@ -1933,6 +1968,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       fenetreVoies: reglages.fenetre_voies !== false,
       vueCarrefour: reglages.vue_carrefour !== false,
       parkingArrivee: reglages.parking_arrivee !== false,
+      meteo: reglages.meteo_route !== false,
     },
     sensDeMarche: true,
     suivi: true,
@@ -2059,6 +2095,11 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
     /* déjà relâché */
   }
   if ("speechSynthesis" in window) speechSynthesis.cancel();
+  // Statistiques : trajet réellement roulé (pas la démo, pas un faux départ).
+  if (!etat.demo && etat.odometre > 1000) {
+    const km = etat.odometre / 1000;
+    ajouterTrajetFait({ km: Math.round(km * 10) / 10, kwh: Math.round(km * etat.consoKwhKm * 10) / 10, duree_min: Math.round((Date.now() - etat.debut) / 60000), destination: (etat.destinationFinale || etat.destination).nom || "" });
+  }
   const onFin = etat.onFin;
   const plan = etat.plan;
   etat = null;

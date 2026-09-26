@@ -903,3 +903,14 @@ body.ev-hud .ev-nav-hud { display: flex; position: fixed; inset: 0; z-index: 500
 .ev-batt-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
 .ev-batt-table th, .ev-batt-table td { padding: 3px 6px; text-align: right; border-bottom: 1px solid var(--bordure); }
 #ev-nav-batterie-panneau { max-height: calc(100vh - 220px); overflow-y: auto; }
+
+/* Quand partir ? (une seule couleur : la durée) */
+.ev-quand-partir { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ev-qp-ligne { display: grid; grid-template-columns: 84px 1fr 124px; align-items: center; gap: 8px; font-size: 14px; }
+.ev-qp-heure { font-weight: 700; }
+.ev-qp-barre { height: 12px; border-radius: 6px; background: var(--bordure); overflow: hidden; }
+.ev-qp-barre i { display: block; height: 100%; border-radius: 0 4px 4px 0; background: #3987e5; }
+:root[data-theme="clair"] .ev-qp-barre i { background: #2a78d6; }
+.ev-qp-valeur { font-weight: 800; white-space: nowrap; }
+.ev-qp-valeur small { margin-left: 6px; font-weight: 600; color: var(--texte-att); }
+.ev-stats-periodes { margin-bottom: 8px; }

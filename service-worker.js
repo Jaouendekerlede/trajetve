@@ -6,7 +6,7 @@
 // prÃ©parÃ©es. Les autres services (TomTom, bornes, mÃ©tÃ©o) ne passent pas ici :
 // TomTom interdit de stocker ses cartes, et les autres doivent Ãªtre frais.
 
-const CACHE_NOM = "trajetve-v26";
+const CACHE_NOM = "trajetve-v27";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -42,6 +42,10 @@ const FICHIERS_COQUILLE = [
   "./js/ui-voiture.js",
   "./js/commandes-vocales.js",
   "./js/graphique-batterie.js",
+  "./js/meteo-route.js",
+  "./js/statistiques.js",
+  "./js/ui-stats.js",
+  "./js/ui-quand-partir.js",
   "./js/irve.js",
   "./js/ocm.js",
   "./js/tomtom.js",

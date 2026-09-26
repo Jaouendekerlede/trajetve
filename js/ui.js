@@ -23,6 +23,8 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
+import { rendreStats, cablerStats } from "./ui-stats.js";
+import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -189,7 +191,10 @@ function afficherVue(vue, { etat, historique = true } = {}) {
   if (vue === "borne" && vueCourante !== "borne") vueAvantBorne = vueCourante;
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
-  if (vue === "outils") rendreJournal();
+  if (vue === "outils") {
+    rendreJournal();
+    rendreStats();
+  }
   // Mesures et abonnements ont pu changer depuis (navigation, autre écran).
   if (vue === "profil") {
     majConsoMesuree();
@@ -558,6 +563,7 @@ function cablerCarte() {
   cablerParkings();
   cablerTrafic();
   cablerVoitureGaree();
+  cablerStats();
   cablerSuggestions(["ev-depart-input", "ev-destination-input"]);
   // 🎤 Dicter la destination : « Nantes », « aller à la gare de Rennes »…
   $("ev-destination-micro").addEventListener("click", async () => {
@@ -1166,7 +1172,8 @@ function afficherResultat(p) {
   alerteCout.textContent = p.depasse_seuil_cout ? `⚠️ Le coût estimé (${euros(p.cout_total_eur)}) dépasse le seuil que tu as fixé.` : "";
   alerteCout.classList.toggle("hidden", !p.depasse_seuil_cout);
 
-  $("ev-etapes").innerHTML = etapesHtml(p) + echangeursHtml(p);
+  $("ev-etapes").innerHTML = etapesHtml(p) + echangeursHtml(p) + boutonQuandPartir();
+  $("ev-quand-partir-btn").addEventListener("click", () => quandPartir(p));
   $("ev-etapes")
     .querySelectorAll("[data-arret]")
     .forEach((el) => el.addEventListener("click", () => {
@@ -1969,6 +1976,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-icone").value = reglages.icone_voiture || "fleche_bleue";
   $("ev-reglage-parking-arrivee").checked = reglages.parking_arrivee !== false;
   $("ev-reglage-privilegier-abos").checked = reglages.privilegier_abonnements !== false;
+  $("ev-reglage-meteo-route").checked = reglages.meteo_route !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
@@ -2062,6 +2070,7 @@ function cablerProfil() {
       icone_voiture: $("ev-reglage-icone").value,
       parking_arrivee: $("ev-reglage-parking-arrivee").checked,
       privilegier_abonnements: $("ev-reglage-privilegier-abos").checked,
+      meteo_route: $("ev-reglage-meteo-route").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
     });
