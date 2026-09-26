@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="author" content="Jean-Luc RIO">
+<meta name="copyright" content="© 2026 Jean-Luc RIO — Tous droits réservés">
 <title>Trajet VE</title>
 <meta name="theme-color" content="#05080e" />
 <script>
@@ -21,6 +23,14 @@
 <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
+<div id="ev-presentation" class="ev-presentation hidden" role="dialog" aria-label="Présentation">
+  <img src="./icons/icon-192.png" alt="" width="96" height="96">
+  <h1>Trajet VE</h1>
+  <p class="ev-presentation-sous">Vos trajets et recharges en voiture électrique</p>
+  <p class="ev-presentation-mention"></p>
+  <p class="ev-presentation-legal"></p>
+  <p class="ev-presentation-suite">Toucher pour continuer</p>
+</div>
 
 <!-- Carte plein écran -->
 <div id="ev-carte" class="ev-carte"></div>
@@ -605,7 +615,9 @@
         </details>
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 47 : Drive protégé contre l'écrasement par des données vides</div>
+      <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
+      <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
+      <div class="ev-hint ev-lien-centre">Version 48 : présentation, droits d'auteur</div>
     </div>
   </div>
 </section>

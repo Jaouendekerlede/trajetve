@@ -1,6 +1,8 @@
 {
   "name": "trajetve",
   "private": true,
+  "author": "Jean-Luc RIO",
+  "license": "UNLICENSED",
   "description": "Trajet VE : bornes de recharge et trajets en voiture électrique (appli web autonome)",
   "type": "module",
   "scripts": {

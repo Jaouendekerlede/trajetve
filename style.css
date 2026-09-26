@@ -1029,3 +1029,14 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 .ev-sos-ligne small { font-weight: 600; color: var(--texte-att); font-size: 12.5px; }
 .ev-sos-appel { display: block; text-align: center; padding: 14px; border-radius: 14px; background: #d32f2f; color: #fff; font-size: 20px; font-weight: 900; text-decoration: none; }
 .ev-menu-sos { border-color: #d32f2f !important; }
+
+/* Présentation à l'ouverture */
+.ev-presentation { position: fixed; inset: 0; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; background: linear-gradient(160deg, #0b1220, #12324a); color: #fff; transition: opacity 0.5s; }
+.ev-presentation img { border-radius: 22px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); margin-bottom: 10px; }
+.ev-presentation h1 { margin: 0; font-size: 34px; font-weight: 900; letter-spacing: 0.5px; }
+.ev-presentation-sous { margin: 0 0 22px; color: #9fd8ff; font-size: 15px; }
+.ev-presentation-mention { margin: 0; font-size: 16px; font-weight: 800; }
+.ev-presentation-legal { margin: 10px 0 0; max-width: 460px; font-size: 11.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.62); }
+.ev-presentation-suite { margin: 26px 0 0; font-size: 12.5px; color: rgba(255, 255, 255, 0.5); }
+.ev-presentation.ev-presentation-fermee { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .ev-presentation { transition: none; } }

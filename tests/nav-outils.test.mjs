@@ -49,3 +49,13 @@ test("textes courts et flèches du bandeau", () => {
   assert.ok(svgFleche({ manoeuvre: "TURN_LEFT" }).startsWith("<svg"));
   assert.ok(svgFleche({ manoeuvre: "ARRIVE" }).includes("🏁"));
 });
+
+test("présentation : pas devant une navigation, un raccourci ou un lien de restauration", async () => {
+  const { presentationAutorisee, MENTION_COURTE, MENTION_LEGALE } = await import("../js/presentation.js");
+  assert.equal(presentationAutorisee({ search: "", hash: "" }, false), true);
+  assert.equal(presentationAutorisee({ search: "", hash: "" }, true), false, "navigation à reprendre");
+  assert.equal(presentationAutorisee({ search: "?action=maison", hash: "" }, false), false, "raccourci de l'icône");
+  assert.equal(presentationAutorisee({ search: "", hash: "#restaurer=abc" }, false), false);
+  assert.ok(MENTION_COURTE.includes("Jean-Luc RIO") && MENTION_COURTE.includes("Tous droits réservés"));
+  assert.ok(MENTION_LEGALE.includes("L.122-4"));
+});
