@@ -193,9 +193,9 @@ export function dessinerFlecheManoeuvre(fleche) {
   if (!fleche || !coucheNav) return;
   const ll = (pts) => pts.map(([lon, lat]) => [lat, lon]);
   coucheFleche = L.layerGroup([
-    L.polyline(ll(fleche.ligne), { color: "#0a2a5c", weight: 15, lineCap: "butt", lineJoin: "round", interactive: false }),
-    L.polyline(ll(fleche.ligne), { color: "#ffffff", weight: 10, lineCap: "butt", lineJoin: "round", interactive: false }),
-    L.polygon(ll(fleche.pointe), { color: "#0a2a5c", weight: 2, fillColor: "#ffffff", fillOpacity: 1, interactive: false }),
+    L.polyline(ll(fleche.ligne), { color: "#0a2a5c", opacity: 0.5, weight: 10, lineCap: "round", lineJoin: "round", interactive: false }),
+    L.polyline(ll(fleche.ligne), { color: "#ffffff", opacity: 0.92, weight: 6, lineCap: "round", lineJoin: "round", interactive: false }),
+    L.polygon(ll(fleche.pointe), { stroke: false, fillColor: "#ffffff", fillOpacity: 0.92, interactive: false }),
   ]).addTo(coucheNav);
 }
 

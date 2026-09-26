@@ -53,3 +53,33 @@ export async function feuxLeLongDe(morceaux) {
   const r = await interrogerOverpass(requete);
   return r.ok ? { ok: true, feux: r.elements.map((e) => ({ lat: e.lat, lon: e.lon })) } : r;
 }
+
+// Routes (pour voitures) autour de chaque point : de quoi dessiner le
+// carrefour vu de dessus. Renvoie { ok, routes } avec, pour chaque point,
+// ses routes en [lon, lat][] (coupées à `rayonM` + 40 m), ou { ok: false, erreur }.
+const TYPES_ROUTES = "^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$";
+
+export async function routesAutourDe(points, rayonM) {
+  if (!points.length) return { ok: true, routes: [] };
+  const requete = `[out:json][timeout:25];${points.map((p) => `way["highway"~"${TYPES_ROUTES}"](around:${rayonM},${p.lat.toFixed(5)},${p.lon.toFixed(5)});out geom;`).join("")}`;
+  const r = await interrogerOverpass(requete);
+  if (!r.ok) return r;
+  const garde = rayonM + 40;
+  const routes = points.map((p) => {
+    const proche = ({ lat, lon }) => haversineKm(p.lat, p.lon, lat, lon) * 1000 <= garde;
+    const morceaux = [];
+    for (const w of r.elements) {
+      let courant = [];
+      for (const n of w.geometry || []) {
+        if (proche(n)) courant.push([n.lon, n.lat]);
+        else {
+          if (courant.length >= 2) morceaux.push(courant);
+          courant = [];
+        }
+      }
+      if (courant.length >= 2) morceaux.push(courant);
+    }
+    return morceaux;
+  });
+  return { ok: true, routes };
+}

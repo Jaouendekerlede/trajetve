@@ -10,7 +10,8 @@ import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, 
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { guidageHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessesAutour } from "./zoom-nav.js";
-import { radarsLeLongDu, feuxLeLongDe } from "./osm-route.js";
+import { radarsLeLongDu, feuxLeLongDe, routesAutourDe } from "./osm-route.js";
+import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
 import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre, sortieRondPoint } from "./geo.js";
 import { formaterMinutes } from "./planner.js";
@@ -142,14 +143,68 @@ function svgFleche(instr) {
   return `<svg viewBox="0 0 100 100" aria-hidden="true">${dessin}</svg>`;
 }
 
-// Bandeau : la rue en gros, l'action (« Tournez à droite ») en petit.
-function textesManoeuvre(instr) {
-  const message = instr.message || "Continuez tout droit";
-  const vers = instr.direction && !message.includes(instr.direction) ? ` · vers ${instr.direction}` : "";
-  if (!instr.rue) return { rue: "", action: message };
-  const i = message.indexOf(instr.rue);
-  const action = i > 0 ? message.slice(0, i).replace(/[\s,]*(sur|à|au|dans|vers|par)?\s*$/i, "").trim() : message;
-  return { rue: instr.rue, action: (action || message) + vers };
+// ── Carrefour réel dans le panneau ──────────────────────────────────────────
+// Ronds-points et carrefours en ville : les routes autour (OpenStreetMap),
+// vues de dessus, l'arrivée en bas, et le chemin à suivre en blanc. Chargés
+// un peu à l'avance (4 km), par petits paquets.
+const INTERVALLE_CARREFOURS_MS = 15000;
+const HORIZON_CARREFOURS_M = 4000;
+const RAYON_CARREFOUR_M = 70;
+const VITESSE_MAX_CARREFOUR = 90;
+const MAX_CARREFOURS_PAR_REQUETE = 10;
+
+function centreCarrefour(instr) {
+  if (!instr.centreCarrefour) {
+    const p = pointSurRoute(instr.offsetSortie ? (instr.offset + instr.offsetSortie) / 2 : instr.offset);
+    instr.centreCarrefour = p;
+    instr.cleCarrefour = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`;
+  }
+  return instr.centreCarrefour;
+}
+
+function carrefourADessiner(instr) {
+  return !instr.synthetique && instr.type !== "LOCATION_DEPARTURE" && !/WAYPOINT|ARRIVE/.test(instr.manoeuvre) && (instr.vitesseAvant || 50) <= VITESSE_MAX_CARREFOUR;
+}
+
+async function preparerCarrefours() {
+  if (!etat?.route || !etat.prefs.vueCarrefour || etat.carrefoursEnCours || Date.now() - (etat.dernierCarrefours || 0) < INTERVALLE_CARREFOURS_MS) return;
+  etat.dernierCarrefours = Date.now();
+  const manquants = etat.route.instructions
+    .filter((i) => i.offset > etat.offset && i.offset - etat.offset < HORIZON_CARREFOURS_M && carrefourADessiner(i))
+    .filter((i) => {
+      centreCarrefour(i);
+      return !etat.carrefours.has(i.cleCarrefour) && !etat.carrefoursDemandes.has(i.cleCarrefour);
+    })
+    .slice(0, MAX_CARREFOURS_PAR_REQUETE);
+  if (!manquants.length) return;
+  for (const i of manquants) etat.carrefoursDemandes.add(i.cleCarrefour);
+  etat.carrefoursEnCours = true;
+  const r = await routesAutourDe(manquants.map((i) => i.centreCarrefour), RAYON_CARREFOUR_M);
+  if (!etat) return;
+  etat.carrefoursEnCours = false;
+  if (!r.ok) {
+    for (const i of manquants) etat.carrefoursDemandes.delete(i.cleCarrefour);
+    return;
+  }
+  manquants.forEach((i, k) => etat.carrefours.set(i.cleCarrefour, r.routes[k]));
+}
+
+// Dessin du carrefour réel, ou "" (pas encore chargé : flèche simple).
+function pictoCarrefour(instr) {
+  if (!etat.prefs.vueCarrefour || !carrefourADessiner(instr)) return "";
+  if (instr.svgCarrefour) return instr.svgCarrefour;
+  const centre = centreCarrefour(instr);
+  const routes = etat.carrefours.get(instr.cleCarrefour);
+  if (!routes?.length) return "";
+  const debut = instr.offset - 45;
+  const fin = (instr.offsetSortie ?? instr.offset) + 45;
+  const a = pointSurRoute(Math.max(0, debut));
+  const b = pointSurRoute(Math.min(etat.route.total, fin));
+  const chemin = [[a.lon, a.lat], ...etat.route.coords.filter((_, i) => etat.route.cum[i] > debut && etat.route.cum[i] < fin), [b.lon, b.lat]];
+  const p1 = pointSurRoute(Math.max(0, instr.offset - 40));
+  const p2 = pointSurRoute(Math.max(0, instr.offset - 5));
+  instr.svgCarrefour = svgCarrefour(routes, chemin, [centre.lon, centre.lat], capEntre(p1.lat, p1.lon, p2.lat, p2.lon));
+  return instr.svgCarrefour;
 }
 
 // Flèche blanche sur la carte, à l'approche du virage.
@@ -184,12 +239,15 @@ function construireRoute(r) {
     .filter((i) => i.message || i.maneuver)
     .map((i) => ({
       offset: cum[Math.min(Math.max(0, i.pointIndex ?? 0), dernier)],
-      message: i.message || "",
+      // « …, direction Nantes » quand TomTom ne le dit pas (voix et panneau).
+      message: (i.message || "") + (i.signpostText && i.message && !i.message.includes(i.signpostText) ? `, direction ${i.signpostText}` : ""),
       manoeuvre: i.maneuver || "",
       type: i.instructionType || "",
       jonction: i.junctionType || "",
       // Pour le bandeau : nom de la rue (ou numéro de route) en gros.
-      rue: i.street || (i.roadNumbers || []).join("/") || "",
+      rue: i.street || "",
+      numeros: i.roadNumbers || [],
+      sortie: i.exitNumber || "",
       direction: i.signpostText || "",
       sortieRondPoint: i.roundaboutExitNumber || null,
       annonces: new Set(),
@@ -212,7 +270,7 @@ function construireRoute(r) {
     instr.angleSortie = s.angle;
     instr.offsetSortie = s.offset;
     if (instructions.some((i) => i !== instr && Math.abs(i.offset - s.offset) < 40)) continue;
-    instructions.push({ offset: s.offset, message: `Sortez ici${instr.rue ? ` sur ${instr.rue}` : ""}`, manoeuvre: "EXIT_RIGHT", type: "TURN", jonction: "ROUNDABOUT", rue: instr.rue, direction: "", sortieRondPoint: null, annonces: new Set([1, 2]) });
+    instructions.push({ offset: s.offset, message: `Sortez ici${instr.rue ? ` sur ${instr.rue}` : ""}`, manoeuvre: "EXIT_RIGHT", type: "TURN", jonction: "ROUNDABOUT", rue: instr.rue, numeros: [], sortie: "", direction: "", sortieRondPoint: null, synthetique: true, annonces: new Set([1, 2]) });
   }
   instructions.sort((a, b) => a.offset - b.offset);
 
@@ -250,7 +308,11 @@ function construireRoute(r) {
     })
     .sort((a, b) => a.offset - b.offset);
 
-  return { coords, cum, total: cum[dernier], instructions, limites, troncons, voies, travaux };
+  // Tronçons d'autoroute : le panneau passe en bleu.
+  const borne = (i) => cum[Math.min(Math.max(0, i ?? 0), dernier)];
+  const autoroutes = (r.sections || []).filter((s) => String(s.sectionType || "").toUpperCase() === "MOTORWAY").map((s) => [borne(s.startPointIndex), borne(s.endPointIndex)]);
+
+  return { coords, cum, total: cum[dernier], instructions, limites, troncons, voies, travaux, autoroutes };
 }
 
 
@@ -458,6 +520,15 @@ function majEcran() {
     $("ev-nav-fleche").innerHTML = contenu;
   };
   rue.classList.add("hidden");
+  const panneau = $("ev-nav-panneau");
+  panneau.classList.add("hidden");
+  // Bleu sur autoroute et vers une autoroute, comme les panneaux.
+  // Autoroute = route « A… », ou section rapide limitée à 130 (TomTom classe
+  // aussi les voies express en « motorway », or leurs panneaux sont verts).
+  const passee = route.instructions.filter((i) => i.offset <= etat.offset && !i.synthetique).pop();
+  const surAutoroute = (passee?.numeros || []).some(estAutoroute) || ((route.autoroutes || []).some(([a, b]) => etat.offset >= a && etat.offset <= b) && (route.limites[etat.idx] || 0) >= 130);
+  const bleu = !!instr && (surAutoroute || (instr.numeros || []).some(estAutoroute));
+  $("ev-nav-manoeuvre").classList.toggle("autoroute", bleu);
   if (etat.arrive) {
     flecheBandeau(svgFleche({ manoeuvre: "ARRIVE" }));
     $("ev-nav-distance").textContent = "Arrivé";
@@ -468,11 +539,22 @@ function majEcran() {
     $("ev-nav-instruction").textContent = etat.aLaBorne.nom_borne;
   } else if (instr) {
     const d = instr.offset - etat.offset;
-    flecheBandeau(svgFleche(instr));
+    flecheBandeau(pictoCarrefour(instr) || svgFleche(instr));
     $("ev-nav-distance").textContent = distanceAffichee(d);
-    const t = textesManoeuvre(instr);
+    const t = textesPanneau(instr);
     rue.textContent = t.rue;
     rue.classList.toggle("hidden", !t.rue);
+    // Comme sur les panneaux : n° de sortie, n° de route, direction.
+    const html = [
+      t.sortie ? `<span class="ev-num ev-num-sortie">Sortie ${escapeHtml(t.sortie)}</span>` : "",
+      ...t.numeros.map((n) => `<span class="ev-num ev-num-${classeNumero(n)}">${escapeHtml(n)}</span>`),
+      t.direction ? `<span class="ev-nav-direction">➜ ${escapeHtml(t.direction)}</span>` : "",
+    ].join("");
+    if (etat.panneauAffiche !== html) {
+      etat.panneauAffiche = html;
+      panneau.innerHTML = html;
+    }
+    panneau.classList.toggle("hidden", !html);
     $("ev-nav-instruction").textContent = t.action;
     const suivante = prochaines[1];
     if (suivante && suivante.offset - instr.offset < 400) {
@@ -1006,6 +1088,7 @@ function surPosition(p) {
   annonces();
   majEcran();
   rafraichirBornesProches();
+  preparerCarrefours();
 }
 
 // ── Animation fluide de la voiture ──────────────────────────────────────────
@@ -1367,6 +1450,8 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     radars: null,
     feuxConnus: new Map(),
     manoeuvresFeux: new Set(),
+    carrefours: new Map(),
+    carrefoursDemandes: new Set(),
     capacite: obtenirProfilVehicule().capacite_kwh,
     consoKwhKm: (plan.energie_totale_necessaire_kwh || 13) / Math.max(1, plan.distance_km),
     margePct: options.marge_pct ?? plan.arrets?.[0]?.pct_arrivee_borne ?? 12,
@@ -1381,6 +1466,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       dangers: reglages.zones_danger !== false,
       feux: reglages.feux !== false,
       fenetreVoies: reglages.fenetre_voies !== false,
+      vueCarrefour: reglages.vue_carrefour !== false,
     },
     sensDeMarche: true,
     suivi: true,

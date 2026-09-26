@@ -139,7 +139,7 @@ export function traceTraverseCarres(coords, carres) {
 // Flèche de manœuvre dessinée sur la route (comme les GPS) : le tracé de
 // `avantM` avant à `apresM` après le point de la manœuvre (offset, m), et
 // une pointe triangulaire au bout. Renvoie { ligne, pointe } en [lon, lat].
-export function flecheManoeuvre(coords, cum, offset, { avantM = 35, apresM = 28, pointeM = 10, demiLargeurM = 7 } = {}) {
+export function flecheManoeuvre(coords, cum, offset, { avantM = 35, apresM = 28, pointeM = 8, demiLargeurM = 5 } = {}) {
   const total = cum[cum.length - 1];
   if (coords.length < 2 || !(total > 0)) return null;
   const debut = Math.max(0, offset - avantM);
@@ -154,6 +154,8 @@ export function flecheManoeuvre(coords, cum, offset, { avantM = 35, apresM = 28,
   const ligne = [point(debut)];
   for (let i = 0; i < cum.length; i++) if (cum[i] > debut && cum[i] < fin) ligne.push(coords[i]);
   ligne.push(point(fin));
+  // Coins arrondis : une flèche qui épouse la route, sans angles.
+  const lissee = lisser(ligne);
   // Direction du dernier morceau (au moins 3 m, pour un sens fiable).
   const [lonF, latF] = ligne[ligne.length - 1];
   const [lonP, latP] = point(Math.max(debut, fin - 3));
@@ -166,7 +168,7 @@ export function flecheManoeuvre(coords, cum, offset, { avantM = 35, apresM = 28,
   dy /= n;
   const versLonLat = (x, y) => [lonF + x / kx, latF + y / ky];
   const pointe = [versLonLat(-dy * demiLargeurM, dx * demiLargeurM), versLonLat(dx * pointeM, dy * pointeM), versLonLat(dy * demiLargeurM, -dx * demiLargeurM)];
-  return { ligne, pointe };
+  return { ligne: lissee, pointe };
 }
 
 // Sortie réelle d'un rond-point, d'après le tracé : dans l'anneau on tourne
@@ -202,4 +204,20 @@ export function sortieRondPoint(coords, cum, offsetEntree) {
     }
   }
   return null;
+}
+
+// Lissage (coins arrondis) d'une ligne de points [x, y] : méthode de
+// Chaikin, les extrémités restent en place.
+export function lisser(points, passes = 2) {
+  let pts = points;
+  for (let p = 0; p < passes && pts.length > 2; p++) {
+    const suivants = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      suivants.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    suivants.push(pts[pts.length - 1]);
+    pts = suivants;
+  }
+  return pts;
 }

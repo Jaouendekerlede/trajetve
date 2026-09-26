@@ -1930,6 +1930,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-voix-bornes").checked = reglages.voix_bornes !== false;
   $("ev-reglage-bip").checked = reglages.bip_vitesse !== false;
   $("ev-reglage-fenetre-voies").checked = reglages.fenetre_voies !== false;
+  $("ev-reglage-vue-carrefour").checked = reglages.vue_carrefour !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
 
@@ -2019,6 +2020,7 @@ function cablerProfil() {
       voix_bornes: $("ev-reglage-voix-bornes").checked,
       bip_vitesse: $("ev-reglage-bip").checked,
       fenetre_voies: $("ev-reglage-fenetre-voies").checked,
+      vue_carrefour: $("ev-reglage-vue-carrefour").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
     });

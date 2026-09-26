@@ -288,9 +288,9 @@ function ajouterCouchesTrajet() {
   carte.addSource("nav-fleche", { type: "geojson", data: VIDE });
   const trait = ["==", ["geometry-type"], "LineString"];
   const pointe = ["==", ["geometry-type"], "Polygon"];
-  carte.addLayer({ id: "nav-fleche-contour", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#0a2a5c", "line-width": largeurMetres(6.5) } }, dessous);
-  carte.addLayer({ id: "nav-fleche-trait", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": largeurMetres(4.2) } }, dessous);
-  carte.addLayer({ id: "nav-fleche-pointe", type: "fill", source: "nav-fleche", filter: pointe, paint: { "fill-color": "#ffffff", "fill-outline-color": "#0a2a5c" } }, dessous);
+  carte.addLayer({ id: "nav-fleche-contour", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "rgba(10,42,92,0.5)", "line-width": largeurMetres(4.2) } }, dessous);
+  carte.addLayer({ id: "nav-fleche-trait", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-opacity": 0.92, "line-width": largeurMetres(2.6) } }, dessous);
+  carte.addLayer({ id: "nav-fleche-pointe", type: "fill", source: "nav-fleche", filter: pointe, paint: { "fill-color": "#ffffff", "fill-opacity": 0.92, "fill-antialias": true } }, dessous);
 }
 
 // Largeur de ligne correspondant à `m` mètres au sol (vers 46° de latitude).

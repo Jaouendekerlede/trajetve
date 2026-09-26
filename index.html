@@ -394,6 +394,7 @@
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-travaux"> 🚧 Annoncer les travaux et routes fermées</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-voix-bornes"> 🔋 Annoncer les bornes de recharge prévues</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-bip"> 🔔 Bip en cas d'excès de vitesse</label>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-vue-carrefour"> 🗺️ Dessin du vrai carrefour dans le panneau (ronds-points, carrefours à plusieurs routes)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-fenetre-voies"> 🛣️ Fenêtre des voies (comme Sygic) quand il faut choisir sa file</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-feux"> 🚦 « Au feu, tournez… » (feux d'OpenStreetMap)</label>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-zones-danger"> ⚠️ Zones de danger (radars fixes, comme la loi l'autorise : zone sans emplacement précis)</label>
@@ -454,7 +455,7 @@
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
-      <div class="ev-hint ev-lien-centre">Version 20 : fenêtre des voies, feux, zones de danger, routes coupées</div>
+      <div class="ev-hint ev-lien-centre">Version 21 : panneaux comme sur la route, carrefours réels, flèche plus fine</div>
     </div>
   </div>
 </section>
@@ -480,13 +481,14 @@
 <!-- Navigation GPS -->
 <div id="ev-navigation" class="ev-navigation hidden">
   <div class="ev-nav-haut">
-    <div class="ev-nav-manoeuvre">
+    <div id="ev-nav-manoeuvre" class="ev-nav-manoeuvre">
       <div class="ev-nav-manoeuvre-gauche">
         <div id="ev-nav-fleche" class="ev-nav-fleche">⏳</div>
         <div id="ev-nav-distance" class="ev-nav-distance"></div>
       </div>
       <div class="ev-nav-manoeuvre-texte">
         <div id="ev-nav-rue" class="ev-nav-rue hidden"></div>
+        <div id="ev-nav-panneau" class="ev-nav-panneau hidden"></div>
         <div id="ev-nav-instruction" class="ev-nav-instruction">Calcul du guidage…</div>
       </div>
     </div>

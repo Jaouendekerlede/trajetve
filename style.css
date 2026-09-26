@@ -817,3 +817,18 @@ body.ev-mode-voiture .ev-nav-vue-voies { width: 180px; }
 .ev-visee::after { top: 50%; left: -12px; right: -12px; height: 3px; margin-top: -1.5px; }
 .ev-visee-barre { position: fixed; z-index: 950; left: 12px; right: 12px; top: calc(12px + var(--securite-haut)); display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--panneau); border: 1px solid #ff3b3b; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); font-size: 14px; font-weight: 600; }
 .ev-visee-barre div { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Panneau comme sur la route : bleu sur autoroute, numéros de route aux
+   couleurs françaises, numéro de sortie, direction. */
+.ev-nav-manoeuvre { transition: background 0.6s; }
+.ev-nav-manoeuvre.autoroute { background: linear-gradient(135deg, #1f63c6, #164a99); }
+.ev-nav-panneau { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.ev-num { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 16px; font-weight: 900; line-height: 1.3; border: 2px solid rgba(255, 255, 255, 0.9); }
+.ev-num-rouge { background: #d4232b; color: #fff; }
+.ev-num-jaune { background: #f6c700; color: #111; border-color: #111; }
+.ev-num-vert { background: #178a3c; color: #fff; }
+.ev-num-cyan { background: #00a0e0; color: #fff; }
+.ev-num-gris { background: #5b6475; color: #fff; }
+.ev-num-sortie { background: #fff; color: #111; border-color: #111; }
+.ev-nav-direction { font-size: 19px; font-weight: 800; }
+body.ev-mode-voiture .ev-nav-direction { font-size: 22px; }
