@@ -1,3 +1,4 @@
+import { brancherCapture, noter } from "./journal-erreurs.js";
 import { initialiserUI, executerAction, proposerRechargeMaison } from "./ui.js";
 import { navigationActive, navigationInterrompue } from "./navigation.js";
 import { afficherPresentation, retirerPresentation, presentationAutorisee, MENTION_COURTE, MENTION_LEGALE } from "./presentation.js";
@@ -7,6 +8,9 @@ import { toast } from "./ui-commun.js";
 import { proposerSauvegardeDrive } from "./ui-drive.js";
 
 const DELAI_RAPPEL_SAUVEGARDE_MS = 8000;
+
+brancherCapture();
+noter("appli", "ouverture");
 
 // Présentation légère à l'ouverture (jamais devant une navigation à reprendre).
 if (presentationAutorisee(location, navigationActive() || !!navigationInterrompue())) afficherPresentation();

@@ -614,6 +614,15 @@
             <label class="ev-check"><input type="checkbox" data-essai="11"> Arrivée : bilan, puis « 🚗 Ma voiture » sur la carte</label>
           </div>
         </details>
+        <details class="ev-sous-menu" id="ev-diag-bloc">
+          <summary>🛟 Signaler un problème</summary>
+          <div class="ev-hint">Quelque chose n'a pas marché ? En roulant, dites <strong>« signale un problème »</strong> : l'instant est noté. À l'arrêt, envoyez le rapport ci-dessous. Il contient l'état de l'appli et les derniers événements, <strong>sans vos clés ni vos adresses</strong>.</div>
+          <div class="ev-grille-2">
+            <button id="ev-diag-envoyer" type="button" class="ev-btn">📤 Envoyer le rapport</button>
+            <button id="ev-diag-effacer" type="button" class="ev-btn">🗑️ Effacer le journal</button>
+          </div>
+          <div id="ev-diag-info" class="ev-hint"></div>
+        </details>
         <details class="ev-sous-menu">
           <summary>Sur la carte et dans Outils</summary>
           <ul class="ev-aide-liste">
@@ -626,7 +635,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 49 : reprise automatique après coupure, carte de la région hors ligne</div>
+      <div class="ev-hint ev-lien-centre">Version 50 : bouton « Signaler un problème » et journal de diagnostic</div>
     </div>
   </div>
 </section>
@@ -700,6 +709,7 @@
       <button type="button" data-nav-action="batterie">🔋<span>Batterie prévue / réelle</span></button>
       <button type="button" data-nav-action="secours">🔌<span>Changer de borne</span></button>
       <button type="button" data-nav-action="aide">❓<span>Astuces (à l'arrêt)</span></button>
+      <button type="button" data-nav-action="signaler">🛟<span>Signaler un problème</span></button>
       <button type="button" data-nav-action="hud">🪞<span>Tête haute</span></button>
       <button type="button" data-nav-action="recherche">🔍<span>Le long du trajet</span></button>
       <button type="button" data-nav-action="parkings">🅿️<span>Parkings à l'arrivée</span></button>

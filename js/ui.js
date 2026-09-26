@@ -38,6 +38,7 @@ import { afficherAccueil } from "./ui-accueil.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
 import { ageTexte } from "./reprise.js";
+import { cablerDiagnostic } from "./ui-diagnostic.js";
 import { estimerPreparation, preparerHorsLigne, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
 
 const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
@@ -604,6 +605,7 @@ function cablerCarte() {
   cablerVoitureGaree();
   cablerStats();
   cablerSOS();
+  cablerDiagnostic();
   // Liste d'essais sur la route : cases mémorisées sur ce téléphone.
   const essais = (() => {
     try {

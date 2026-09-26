@@ -20,6 +20,7 @@ import { calculerItineraireTomTom, appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from 
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation } from "./zoom-nav.js";
 import { enregistrerReprise, oublierReprise, lireReprise } from "./reprise.js";
+import { noter } from "./journal-erreurs.js";
 import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitiale, capEntre, fleche, svgFleche, construireRoute, traceRestante, FLECHES_VOIE, dessinVoies } from "./nav-outils.js";
 // Réexportés pour les autres modules (ui.js, essais).
 export { traceRestante, dessinVoies } from "./nav-outils.js";
@@ -328,6 +329,7 @@ function afficherAlerte(texte, bouton) {
     el.classList.add("hidden");
     return;
   }
+  noter("alerte", texte);
   el.innerHTML = `<span>${escapeHtml(texte)}</span>${bouton ? `<button type="button" class="ev-btn" id="ev-nav-alerte-btn">${escapeHtml(bouton.libelle)}</button>` : ""}`;
   el.classList.remove("hidden");
   if (bouton) $("ev-nav-alerte-btn").addEventListener("click", bouton.action);
@@ -638,6 +640,7 @@ function direPuisEcouter(texte) {
       $("ev-nav-ecoute").classList.remove("hidden");
       const r = await ecouter();
       $("ev-nav-ecoute").classList.add("hidden");
+      noter("voix", `réponse entendue : ${r || "(rien)"}`);
       resolve(r);
     };
     u.onerror = () => resolve(null);
@@ -995,6 +998,7 @@ async function recalculer(raison) {
   if (raison === "trafic" && appelsTomTomDuJour() > QUOTA_TOMTOM_JOUR * 0.9) return;
   etat.recalculEnCours = true;
   etat.dernierRecalcul = Date.now();
+  noter("nav", `recalcul (${raison})`);
   if (raison === "hors_route") {
     afficherAlerte("🔄 Recalcul de l'itinéraire…");
     parler("Recalcul de l'itinéraire.", true);
@@ -1333,6 +1337,7 @@ function demarrerGps() {
     },
     (err) => {
       if (!etat) return;
+      noter("gps", `erreur ${err.code} : ${err.message}`);
       etat.alerteGps = true;
       afficherAlerte(err.code === err.PERMISSION_DENIED ? "⚠️ Accès à la position refusé : autorise la localisation pour cette appli." : "⚠️ Signal GPS perdu, recherche…");
     },
@@ -1660,6 +1665,7 @@ async function garderPourHorsLigne() {
 }
 
 function surReseau() {
+  noter("reseau", navigator.onLine ? "réseau revenu" : "réseau perdu");
   if (!etat) return;
   if (!navigator.onLine) {
     afficherAlerte("📡 Hors réseau : le guidage continue avec l'itinéraire gardé.");
@@ -1677,6 +1683,11 @@ function actionMenu(action) {
   else if (action === "parkings") proposerParkings(true);
   else if (action === "partage") partagerArrivee();
   else if (action === "sos") ouvrirSOSNavigation(false);
+  else if (action === "signaler") {
+    signalerProbleme("menu");
+    afficherAlerte("🛟 Noté. Envoyez le rapport à l'arrêt : Profil › Aide › Signaler un problème.");
+    setTimeout(() => etat && $("ev-nav-alerte").textContent.startsWith("🛟") && afficherAlerte(null), 8000);
+  }
   else if (action === "secours") afficherSecours();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
   else if (action === "aide") {
@@ -1822,6 +1833,33 @@ async function remplacerBorne(i) {
   majEcran();
 }
 
+// Marque l'instant dans le journal, avec l'endroit approximatif : le rapport
+// retrouvera ce qui s'est passé juste avant.
+function signalerProbleme(origine) {
+  const p = etat?.pos;
+  noter("signalement", `${origine}${etat ? `, km ${Math.round(etat.odometre / 1000)}, vitesse ${Math.round((p?.vitesse || 0) * 3.6)} km/h` : ""}`);
+}
+
+// Résumé de la navigation pour le rapport (aucune adresse, position à ~1 km).
+export function etatDiagnostic() {
+  if (!etat) return null;
+  const p = etat.pos;
+  return {
+    demo: !!etat.demo,
+    vue: vue === carte3D ? "3D" : "2D",
+    km_faits: Math.round(etat.odometre / 1000),
+    km_restants: Math.round(((etat.route?.total || 0) - etat.offset) / 1000),
+    bornes_restantes: etat.arretsRestants.length,
+    batterie_estimee: Math.round(batterieEstimee()),
+    gps_precision_m: p?.precision != null ? Math.round(p.precision) : "?",
+    vitesse_kmh: Math.round((p?.vitesse || 0) * 3.6),
+    position_approx: p ? `${p.lat.toFixed(2)},${p.lon.toFixed(2)}` : "?",
+    zoom: etat.zoom,
+    voix: etat.voix ? "oui" : "non",
+    eco: etat.eco ? "oui" : "non",
+  };
+}
+
 // SOS depuis la navigation : dernière position connue, sens de circulation
 // (direction des panneaux, sinon la destination), position lue à voix haute.
 function ouvrirSOSNavigation(aVoix) {
@@ -1881,6 +1919,7 @@ async function commandeVocale() {
   const texte = await ecouter();
   if (!etat) return;
   afficherAlerte(null);
+  noter("voix", `commande entendue : ${texte || "(rien)"}`);
   if (!texte) return parler("Je n'ai pas compris.", true);
   const c = interpreterCommande(texte);
   const arret = etat.arretsRestants[0];
@@ -1905,6 +1944,10 @@ async function commandeVocale() {
       break;
     case "sos":
       ouvrirSOSNavigation(true);
+      break;
+    case "signaler":
+      signalerProbleme("à la voix");
+      parler("C'est noté. Envoyez le rapport à l'arrêt : Profil, aide, signaler un problème.", true);
       break;
     case "batterie":
       parler(`Batterie estimée : ${Math.round(batterieEstimee())} pour cent.`, true);
@@ -2178,6 +2221,7 @@ async function basculerVue() {
 carte3D.definirSurPanne((raison) => {
   if (!etat || vue !== carte3D) return;
   changerVue(carte2D);
+  noter("carte", `3D interrompue : ${raison}`);
   const texte = `⚠️ Vue 3D interrompue (${raison}) : passage en 2D. Touchez « 2D » pour réessayer.`;
   afficherAlerte(texte);
   setTimeout(() => {
@@ -2198,6 +2242,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     return;
   }
   cablerBoutons();
+  noter("nav", `navigation démarrée${demo ? " (démo)" : ""}, ${plan.distance_km ?? "?"} km, ${(plan.arrets || []).length} borne(s)`);
   const reglages = lireReglages();
   etat = {
     plan,
@@ -2385,6 +2430,7 @@ export function navigationInterrompue() {
 
 export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
+  noter("nav", `navigation arrêtée à ${Math.round(etat.odometre / 1000)} km`);
   clearInterval(etat.minuteurSauvegarde);
   clearInterval(etat.minuteurRechargeId);
   window.removeEventListener("pagehide", sauverNavigation);
