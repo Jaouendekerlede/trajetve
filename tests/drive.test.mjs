@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { installerFetch } from "./aide.mjs";
-import { envoyerSauvegarde, lireSauvegarde } from "../js/drive.js";
+import { envoyerSauvegarde, lireSauvegarde, sauvegardeEstPlusPauvre } from "../js/drive.js";
 
 const sauvegarde = { format: "trajetve-sauvegarde", donnees: { trajetve_reglages: "{}" } };
 let fichiers;
@@ -38,4 +38,14 @@ test("Drive : restauration de la dernière sauvegarde (ou rien)", async () => {
 test("Drive : une erreur de Google est rapportée avec son message", async () => {
   installerFetch((url) => (url.includes("spaces=appDataFolder") ? { statut: 400, json: { error: { code: 400, message: "Invalid value for: orderBy" } } } : { json: {} }));
   await assert.rejects(envoyerSauvegarde("JETON", sauvegarde), /HTTP 400 : Invalid value for: orderBy/);
+});
+
+test("Drive : garde-fou contre l'écrasement d'une sauvegarde avec clés par des données sans clés", () => {
+  const avec = { donnees: { trajetve_api_keys: JSON.stringify({ tomtom: "K", openChargeMap: "" }) } };
+  const sans = { donnees: { trajetve_reglages: "{}" } };
+  assert.equal(sauvegardeEstPlusPauvre(sans, avec), true);
+  assert.equal(sauvegardeEstPlusPauvre(avec, sans), false);
+  assert.equal(sauvegardeEstPlusPauvre(avec, avec), false);
+  assert.equal(sauvegardeEstPlusPauvre(sans, sans), false);
+  assert.equal(sauvegardeEstPlusPauvre({ donnees: { trajetve_api_keys: "pas du json" } }, avec), true);
 });

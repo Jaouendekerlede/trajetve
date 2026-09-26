@@ -3,7 +3,7 @@
 
 import { $, toast, bandeau } from "./ui-commun.js";
 import { exporterDonnees, importerDonnees, lireReglages, sauverReglages } from "./storage.js";
-import { obtenirJeton, envoyerSauvegarde, lireSauvegarde } from "./drive.js";
+import { obtenirJeton, envoyerSauvegarde, lireSauvegarde, sauvegardeEstPlusPauvre } from "./drive.js";
 import { empreinteDonnees } from "./restauration.js";
 import { DRIVE_CLIENT_ID } from "./config.js";
 
@@ -33,6 +33,12 @@ export async function sauvegarderSurDrive({ silencieux = false } = {}) {
   try {
     const jeton = await obtenirJeton(clientId(), { silencieux });
     const donnees = exporterDonnees();
+    // Ne pas écraser une sauvegarde riche (clés, voiture…) par des données vides.
+    const distante = await lireSauvegarde(jeton).catch(() => null);
+    if (distante && sauvegardeEstPlusPauvre(donnees, distante.sauvegarde)) {
+      const quand = new Date(distante.date).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+      if (silencieux || !confirm(`La sauvegarde Drive du ${quand} contient vos clés API, mais cet appareil n'en a pas. La remplacer quand même (vous perdriez les clés sauvegardées) ?`)) return false;
+    }
     await envoyerSauvegarde(jeton, donnees);
     localStorage.setItem(CLE_SUIVI, JSON.stringify({ le: Date.now(), empreinte: empreinteDonnees(donnees.donnees) }));
     sauverReglages({ drive_actif: true });

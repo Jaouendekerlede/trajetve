@@ -101,3 +101,19 @@ export async function lireSauvegarde(jetonAcces) {
 export function oublierJeton() {
   jeton = null;
 }
+
+// Garde-fou : remplacer une sauvegarde qui contient des clés API par des
+// données qui n'en ont pas (ordinateur ou téléphone neuf) effacerait
+// l'essentiel. Renvoie true si la locale est plus pauvre que la distante.
+const aDesCles = (sauvegarde) => {
+  try {
+    const k = JSON.parse(sauvegarde?.donnees?.trajetve_api_keys || "{}");
+    return !!(k.tomtom || k.openChargeMap);
+  } catch {
+    return false;
+  }
+};
+
+export function sauvegardeEstPlusPauvre(locale, distante) {
+  return aDesCles(distante) && !aDesCles(locale);
+}
