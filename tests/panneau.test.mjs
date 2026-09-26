@@ -39,3 +39,16 @@ test("dessin du carrefour : arrivée en bas, chemin blanc avec pointe", () => {
   const d2 = svg2.match(/<path d="M([\d.]+) ([\d.]+)[^"]*" fill="none" stroke="#fff"/);
   assert.ok(Number(d2[2]) > 52 && Math.abs(Number(d2[1]) - 50) < 2);
 });
+
+test("feuille de route : entrées, sorties numérotées, échangeurs (pas les ronds-points)", async () => {
+  const { echangeursDuTrajet } = await import("../js/panneau-nav.js");
+  const e = echangeursDuTrajet([
+    { maneuver: "TURN_LEFT", junctionType: "REGULAR", routeOffsetInMeters: 500 },
+    { maneuver: "TAKE_EXIT", junctionType: "ROUNDABOUT", routeOffsetInMeters: 2000 },
+    { maneuver: "ENTER_MOTORWAY", junctionType: "REGULAR", routeOffsetInMeters: 12340, roadNumbers: ["A81", "E50"], signpostText: "Laval" },
+    { maneuver: "KEEP_LEFT", junctionType: "BIFURCATION", routeOffsetInMeters: 30000, roadNumbers: ["N157"] },
+    { maneuver: "TAKE_EXIT", junctionType: "REGULAR", routeOffsetInMeters: 45000, exitNumber: "4", roadNumbers: ["D31"], signpostText: "Laval-Centre" },
+  ]);
+  assert.deepEqual(e.map((x) => [x.km, x.type, x.sortie]), [[12.3, "entree", ""], [30, "echangeur", ""], [45, "sortie", "4"]]);
+  assert.equal(e[2].direction, "Laval-Centre");
+});

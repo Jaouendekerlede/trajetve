@@ -6,6 +6,7 @@ import { getApiKeys, PALIERS_TEMPERATURE, MODES_TRAJET, MULTIPLICATEUR_CHARGE_LO
 import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements, rectanglesZonesEvitees } from "./storage.js";
 import { resoudreLieu, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
+import { echangeursDuTrajet } from "./panneau-nav.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km } from "./planner.js";
 import { construireProfilEnergie, fonctionsEnergie, fonctionsEnergieConstante } from "./energie.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
@@ -65,6 +66,8 @@ async function calculerItineraire(depart, destination, opts) {
     maxAlternatives: opts.avec_alternatives && !opts.trace_imposee ? MAX_ALTERNATIVES : 0,
     traceImposee: opts.trace_imposee,
     zonesEvitees: rectanglesZonesEvitees(),
+    // Pour la feuille de route (sorties et échangeurs du trajet).
+    instructions: true,
   });
   if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
 
@@ -108,6 +111,7 @@ function itineraireDepuisRoute(route, a, b, departMs, suivreTrace) {
     retard_trafic_min: Math.round((route.summary.trafficDelayInSeconds || 0) / 60),
     km_autoroute: kmSurSections(route.coords, route.sections, "MOTORWAY"),
     km_peage: kmSurSections(route.coords, route.sections, "TOLLROAD"),
+    echangeurs: echangeursDuTrajet(route.guidance?.instructions),
     suivre_trace: suivreTrace,
     coords: route.coords,
   };

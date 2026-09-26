@@ -20,6 +20,7 @@ import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
 import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
 import { cablerZonesEvitees } from "./ui-zones.js";
+import { classeNumero } from "./panneau-nav.js";
 import { cablerParkings, planifierParkings } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { estimerPreparation, preparerHorsLigne } from "./hors-ligne.js";
@@ -1149,7 +1150,7 @@ function afficherResultat(p) {
   alerteCout.textContent = p.depasse_seuil_cout ? `⚠️ Le coût estimé (${euros(p.cout_total_eur)}) dépasse le seuil que tu as fixé.` : "";
   alerteCout.classList.toggle("hidden", !p.depasse_seuil_cout);
 
-  $("ev-etapes").innerHTML = etapesHtml(p);
+  $("ev-etapes").innerHTML = etapesHtml(p) + echangeursHtml(p);
   $("ev-etapes")
     .querySelectorAll("[data-arret]")
     .forEach((el) => el.addEventListener("click", () => {
@@ -1239,6 +1240,24 @@ function carteItineraire(i, plan, route, badges, affiche) {
   if (plan.retard_trafic_min >= 5) details.push(`🚦 ${formaterMinutes(plan.retard_trafic_min)} de bouchons`);
   if (!choisi && affiche?.ok) details.push(`${ecartMinutes((plan.duree_totale_min ?? 0) - (affiche.duree_totale_min ?? 0))} par rapport à l'affiché`);
   return `<button type="button" class="ev-itineraire${choisi ? " choisi" : ""}" data-itin="${i}">${titre}${pastilles}<div class="ev-itin-ligne">${ligne}</div><div class="ev-itin-sous">${details.join(" · ")}</div></button>`;
+}
+
+// Feuille de route des voies rapides : « km 45 · Sortie 4 · D31 ➜ Laval ».
+const LIBELLES_ECHANGEUR = { entree: "↗️ Entrée", sortie: "↘️ Sortie", echangeur: "🔀 Échangeur" };
+
+function echangeursHtml(p) {
+  const liste = p.echangeurs || [];
+  if (!liste.length) return "";
+  const lignes = liste
+    .map((e) => {
+      const badges = [
+        e.sortie ? `<span class="ev-num ev-num-sortie">${escapeHtml(e.sortie)}</span>` : "",
+        ...e.numeros.map((n) => `<span class="ev-num ev-num-${classeNumero(n)}">${escapeHtml(n)}</span>`),
+      ].join("");
+      return `<div class="ev-echangeur"><span class="ev-echangeur-km">km ${nombre(e.km, e.km < 10 ? 1 : 0)}</span><span>${LIBELLES_ECHANGEUR[e.type]}</span>${badges}${e.direction ? `<span class="ev-echangeur-dir">➜ ${escapeHtml(e.direction)}</span>` : ""}</div>`;
+    })
+    .join("");
+  return `<details class="ev-accordeon ev-echangeurs"><summary>🛣️ Sorties et échangeurs (${liste.length})</summary><div class="ev-echangeurs-liste">${lignes}</div></details>`;
 }
 
 function choisirItineraire(i) {

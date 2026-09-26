@@ -80,3 +80,25 @@ export function svgCarrefour(routes, chemin, centre, cap) {
   const m = TAILLE_SVG / 2;
   return `<svg viewBox="0 0 ${TAILLE_SVG} ${TAILLE_SVG}" aria-hidden="true"><defs><clipPath id="${id}"><circle cx="${m}" cy="${m}" r="${m - 1}"/></clipPath></defs><g clip-path="url(#${id})"><circle cx="${m}" cy="${m}" r="${m - 1}" fill="rgba(0,0,0,0.22)"/><g opacity="0.38" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${fonds}</g><path d="${chemins(trace)}" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><polygon points="${pointe.map((p) => p.map((v) => v.toFixed(1)).join(",")).join(" ")}" fill="#fff"/></g></svg>`;
 }
+
+// Feuille de route : entrées, sorties et échangeurs sur voies rapides, avec
+// leur kilomètre, numéro de sortie, routes et direction (instructions TomTom).
+const ENTREES_RAPIDES = /ENTER_(MOTORWAY|FREEWAY|HIGHWAY)|ENTRANCE_RAMP/;
+const SORTIES_RAPIDES = /TAKE_EXIT|MOTORWAY_EXIT/;
+
+export function echangeursDuTrajet(instructions) {
+  // Première mention d'une autoroute (« Suivez A81 ») : c'est l'entrée.
+  const autoroutesVues = new Set();
+  return (instructions || [])
+    .filter((i) => i.junctionType !== "ROUNDABOUT")
+    .map((i) => {
+      const m = i.maneuver || "";
+      const numeros = i.roadNumbers || [];
+      const nouvelleAutoroute = numeros.some((n) => estAutoroute(n) && !autoroutesVues.has(n));
+      for (const n of numeros) if (estAutoroute(n)) autoroutesVues.add(n);
+      const type = ENTREES_RAPIDES.test(m) || (nouvelleAutoroute && !/TURN_|ROUNDABOUT/.test(m)) ? "entree" : SORTIES_RAPIDES.test(m) || i.exitNumber ? "sortie" : i.junctionType === "BIFURCATION" && numeros.some((n) => /^[AN]\s?\d/i.test(n)) ? "echangeur" : null;
+      const utile = i.exitNumber || numeros.length || i.signpostText;
+      return type && utile && { km: Math.round((i.routeOffsetInMeters || 0) / 100) / 10, type, sortie: i.exitNumber || "", numeros, direction: i.signpostText || "" };
+    })
+    .filter(Boolean);
+}

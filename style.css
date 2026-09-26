@@ -832,3 +832,11 @@ body.ev-mode-voiture .ev-nav-vue-voies { width: 180px; }
 .ev-num-sortie { background: #fff; color: #111; border-color: #111; }
 .ev-nav-direction { font-size: 19px; font-weight: 800; }
 body.ev-mode-voiture .ev-nav-direction { font-size: 22px; }
+
+/* Feuille de route : sorties et échangeurs */
+.ev-echangeurs { margin-top: 10px; }
+.ev-echangeurs-liste { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.ev-echangeur { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; background: var(--chip); font-size: 14px; }
+.ev-echangeur .ev-num { font-size: 13px; padding: 1px 6px; }
+.ev-echangeur-km { min-width: 58px; font-weight: 800; color: var(--texte-att); }
+.ev-echangeur-dir { font-weight: 700; }
