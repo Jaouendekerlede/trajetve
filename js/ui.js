@@ -647,6 +647,7 @@ function cablerCarte() {
   });
   cablerArretsImposes();
   $("ev-reglage-taille-texte").addEventListener("input", (e) => ($("ev-reglage-taille-texte-val").textContent = e.target.value));
+  $("ev-reglage-inclinaison").addEventListener("input", (e) => ($("ev-reglage-inclinaison-val").textContent = e.target.value));
   for (const id of ["ev-charge-pct-input", "ev-marge-pct-input", "ev-cible-pct-input"]) $(id).addEventListener("input", majKmCurseurs);
   majKmCurseurs();
   // Autorisation des notifications demandée au moment où l'on coche.
@@ -2086,6 +2087,8 @@ function rendreReglagesProfil() {
   $("ev-reglage-epure").checked = reglages.ecran_epure !== false;
   $("ev-reglage-reponses-voix").checked = reglages.reponses_voix !== false;
   $("ev-reglage-prechauffage").checked = reglages.prechauffage !== false;
+  $("ev-reglage-inclinaison").value = String(reglages.inclinaison_3d ?? 70);
+  $("ev-reglage-inclinaison-val").textContent = String(reglages.inclinaison_3d ?? 70);
   $("ev-reglage-taille-texte").value = String(reglages.taille_texte_nav || 100);
   $("ev-reglage-taille-texte-val").textContent = String(reglages.taille_texte_nav || 100);
   $("ev-reglage-vibration").checked = reglages.vibration === true;
@@ -2191,6 +2194,7 @@ function cablerProfil() {
       reponses_voix: $("ev-reglage-reponses-voix").checked,
       prechauffage: $("ev-reglage-prechauffage").checked,
       taille_texte_nav: Number($("ev-reglage-taille-texte").value),
+      inclinaison_3d: Number($("ev-reglage-inclinaison").value),
       vibration: $("ev-reglage-vibration").checked,
       nuit_douce: $("ev-reglage-nuit-douce").checked,
       notif_guidage: $("ev-reglage-notif").checked,

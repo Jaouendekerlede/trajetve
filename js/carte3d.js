@@ -14,7 +14,11 @@ import { svgVoiture } from "./icones-voiture.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
 const DELAI_CHARGEMENT_MS = 30000;
-const INCLINAISON = 55;
+// Inclinaison de la caméra en navigation (degrés) : plus elle est grande,
+// plus on voit loin devant, jusqu'à l'horizon. Réglable dans le Profil.
+let INCLINAISON = 70;
+const INCLINAISON_MIN = 40;
+const INCLINAISON_MAX = 78;
 // À échelle égale, le zoom MapLibre (tuiles 512 px) vaut celui de Leaflet
 // moins 1 ; l'inclinaison éloigne l'horizon, on rapproche un peu.
 const ECART_ZOOM = -0.7;
@@ -427,6 +431,7 @@ async function creerCarte(fournisseur, fond, relief) {
     pitch: INCLINAISON,
     attributionControl: { compact: true },
     dragRotate: false,
+    maxPitch: 80, // 60 par défaut : trop peu pour une vue « horizon »
     pitchWithRotate: false,
     touchPitch: false,
     fadeDuration: 0,
@@ -1119,6 +1124,15 @@ export function majVoiture(lat, lon, cap) {
 const INCLINAISON_PLATE = 22;
 let inclinaisonCible = INCLINAISON;
 let inclinaisonActuelle = INCLINAISON;
+
+// Réglage Profil › Navigation (40 à 78°), appliqué tout de suite.
+export function definirInclinaison3D(degres) {
+  const d = Number(degres);
+  if (!Number.isFinite(d)) return;
+  INCLINAISON = Math.max(INCLINAISON_MIN, Math.min(INCLINAISON_MAX, d));
+  inclinaisonCible = INCLINAISON;
+  inclinaisonActuelle = INCLINAISON;
+}
 export function inclinaisonNavigation(mode) {
   inclinaisonCible = mode === "plat" ? INCLINAISON_PLATE : INCLINAISON;
 }

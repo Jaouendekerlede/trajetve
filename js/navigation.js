@@ -2258,6 +2258,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   document.documentElement.style.setProperty("--echelle-nav", String((reglages.taille_texte_nav || 100) / 100));
   reveillerBoutons();
   carte2D.definirIconeVoiture(reglages.icone_voiture);
+  carte3D.definirInclinaison3D(reglages.inclinaison_3d ?? 70);
   carte3D.definirIconeVoiture(reglages.icone_voiture);
   $("ev-nav-menu").classList.add("hidden");
   $("ev-nav-frise").classList.add("hidden");
