@@ -14,6 +14,20 @@ import { rechercherBornesProches, rechercherBornesZone, borneCompatible } from "
 
 const arrondi1 = (x) => Math.round(x * 10) / 10;
 
+// Estimation rapide (consommation constante, sans réseau) : sert seulement à
+// décider si ça vaut la peine de forcer un détour vers l'aire préférée --
+// le vrai plan (courbe de charge, météo, dénivelé...) est calculé juste
+// après par calculerTrajetElectrique. Repéré sur un cas réel : Niort →
+// Bordeaux (260 km, largement à portée sans charger) forçait quand même un
+// détour de 67 km vers une aire préférée choisie pour un trajet bien plus
+// long (Saint-Nazaire → Bordeaux) -- aucune recharge n'était même prévue
+// à l'arrivée (0 arrêt), le détour ne servait donc littéralement à rien.
+function chargeProbablementNecessaire(distanceKm, chargePct, margePct, profil) {
+  const kwhDisponible = Math.max(0, (profil.capacite_kwh * ((chargePct ?? 100) - (margePct ?? 0))) / 100);
+  const kmSansCharge = (kwhDisponible / consommationEffectiveKwh100km(profil)) * 100;
+  return kmSansCharge < distanceKm;
+}
+
 function messageOcm(erreur) {
   return erreur === "cle_manquante"
     ? "Clé Open Charge Map manquante ou invalide (🚗 Profil véhicule > Clés API)."
@@ -81,10 +95,15 @@ async function calculerItineraire(depart, destination, opts) {
     // faisait quand même faire 46 km de plus -- un artefact du point
     // raccroché au mauvais côté de la chaussée, pas un vrai détour. On ne
     // force donc l'étape (et son vrai risque de détour) que si l'aire n'est
-    // pas déjà sur le trajet libre (même seuil que le planificateur, 2 km).
+    // pas déjà sur le trajet libre (même seuil que le planificateur, 2 km)
+    // ET qu'il faut de toute façon recharger quelque part sur ce trajet --
+    // sinon (départ plus proche de l'arrivée, ou aire choisie pour un autre
+    // trajet) le détour ne servirait à rien.
     const libre = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, { ...optsRoute, maxAlternatives: 0 });
     if (libre.erreur) return { ok: false, erreur: messageTomTom(libre.erreur, a.nom, b.nom) };
-    if (kmSurTrace(libre.coords, opts.arret_impose.lat, opts.arret_impose.lon).ecartKm <= 2) {
+    const surTrajet = kmSurTrace(libre.coords, opts.arret_impose.lat, opts.arret_impose.lon).ecartKm <= 2;
+    const chargeNecessaire = chargeProbablementNecessaire(libre.summary.lengthInMeters / 1000, opts.charge_pct, opts.marge_pct, obtenirProfilVehicule());
+    if (surTrajet || !chargeNecessaire) {
       it = libre;
     } else {
       it = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, {
