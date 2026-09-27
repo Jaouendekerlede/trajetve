@@ -11,6 +11,7 @@ import { haversineKm, densifier, recalerSurRoutes, pointSurLigne } from "./geo.j
 import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 import { svgVoiture } from "./icones-voiture.js";
+import { icone } from "./icones.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
 const DELAI_CHARGEMENT_MS = 30000;
@@ -50,6 +51,7 @@ let conteneur = null;
 let voiture = null;
 let marqueursRoute = [];
 let marqueursBornes = [];
+let marqueursRadars = [];
 let bornesVisibles = false;
 let cumRoute = null;
 // Dernier tracé de navigation : à redessiner si la carte est recréée en
@@ -1088,6 +1090,15 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
   for (const m of marqueursRoute) m.remove();
   marqueursRoute = (arrets || []).map((a) => new maplibregl.Marker({ element: pastille(32, "rgba(79,224,255,.95)", "🔋") }).setLngLat([a.lon, a.lat]).addTo(carte));
   if (destination) marqueursRoute.push(new maplibregl.Marker({ element: pastille(26, "#ff6b35", "🏁") }).setLngLat([destination.lon, destination.lat]).addTo(carte));
+}
+
+// Radars (officiels OSM ou signalés soi-même) sur le tracé : un symbole de
+// radar plutôt qu'une épingle générique -- demande explicite de
+// l'utilisateur le 2026-09-27.
+export function dessinerRadars(radars) {
+  for (const m of marqueursRadars) m.remove();
+  const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
+  marqueursRadars = (radars || []).map((r) => new maplibregl.Marker({ element: pastille(28, "rgba(255,70,60,.95)", symbole) }).setLngLat([r.lon, r.lat]).addTo(carte));
 }
 
 // Parcouru en gris, restant en vert : un dégradé à seuil le long du tracé,

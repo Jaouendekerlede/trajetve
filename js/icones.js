@@ -11,6 +11,9 @@ const TRAITS = {
   lune: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   plan: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
   satellite: '<path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/>',
+  // Radar routier (caméra sur pied) : symbole propre à la place d'une
+  // épingle générique -- demande explicite de l'utilisateur.
+  radar: '<rect x="5" y="3" width="14" height="10" rx="2"/><circle cx="12" cy="8" r="3"/><path d="M12 13v8"/><path d="M8 21h8"/>',
 };
 
 export function icone(nom, taille = 24) {

@@ -28,7 +28,7 @@ export { traceRestante, dessinVoies } from "./nav-outils.js";
 
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
-import { zonesDeDanger, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
+import { zonesDeDanger, radarsSurTrace, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre } from "./geo.js";
 import { formaterMinutes, calculerTempsCharge } from "./planner.js";
 import { escapeHtml, lienAPied, estNuit } from "./util.js";
@@ -211,9 +211,11 @@ function installerRoute(route) {
   etat.demoOffset = null;
   etat.flecheCarte = undefined;
   route.zonesDanger = etat.radars ? zonesDeDanger(etat.radars, route.coords, route.cum, route.limites) : [];
+  route.radarsSurTrace = etat.radars ? radarsSurTrace(etat.radars, route.coords, route.cum) : [];
   route.aires = etat.airesOsm ? airesSurRoute(etat.airesOsm, route.coords, route.cum, route.autoroutes || []) : [];
   appliquerFeux(route);
   vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
+  vue.dessinerRadars(route.radarsSurTrace);
   if (etat.pos) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
     etat.idx = m.i;
@@ -434,6 +436,7 @@ function majEcran() {
   majNuitDouce();
   majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
   majZoneDanger();
+  verifierApprocheRadar();
   majFrise();
   majAires();
   document.body.classList.toggle("ev-borne-bas", !$("ev-nav-borne").classList.contains("hidden"));
@@ -496,6 +499,17 @@ function majEcran() {
   $("ev-nav-batt").className = pct >= 50 ? "good" : pct >= 20 ? "warn" : "bad";
 }
 
+// Recalcule à la fois les zones de danger (fusionnées, pour le bandeau
+// légal) et les positions individuelles des radars sur ce tracé (pour les
+// marqueurs sur la carte et les avertissements gradués, voir
+// verifierApprocheRadar) à partir de etat.radars.
+function recalculerRadars() {
+  if (!etat?.route) return;
+  etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+  etat.route.radarsSurTrace = radarsSurTrace(etat.radars, etat.route.coords, etat.route.cum);
+  vue.dessinerRadars(etat.route.radarsSurTrace);
+}
+
 // Radars fixes du trajet, une fois (et après un nouveau plan) : on n'en
 // montre que les « zones de danger » permises par la loi.
 async function chercherRadars() {
@@ -506,7 +520,7 @@ async function chercherRadars() {
   // ces derniers passent par la même conversion en « zone de danger » que
   // les officiels juste en dessous, jamais un point précis.
   etat.radars = [...r.radars, ...listerRadarsPersonnels()];
-  etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+  recalculerRadars();
 }
 
 // « Signaler un radar ici » : ajoute la position actuelle à la liste
@@ -525,7 +539,7 @@ export function signalerRadarIci() {
     return;
   }
   etat.radars = [...(etat.radars || []), radars[0]];
-  if (etat.route) etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+  recalculerRadars();
   parler("Radar enregistré. Vous serez prévenu la prochaine fois.", true);
   toast("📍 Radar enregistré pour vos prochains trajets.");
 }
@@ -598,6 +612,29 @@ function majZoneDanger() {
     etat.dansZoneDanger = true;
     parler(`Zone de danger${zone.limite ? `, limitée à ${zone.limite}` : ""}.`);
     if (etat.prefs.bip) bip();
+  }
+}
+
+// Avertissements gradués façon Radarbot/Coyote, en plus du bandeau « zone
+// de danger » légal ci-dessus (qui, lui, commence parfois plusieurs
+// centaines de mètres avant sur autoroute) : 200 m, 100 m et 50 m avant
+// chaque radar (fixe officiel OU signalé soi-même), chacun une seule fois.
+// Demande explicite de l'utilisateur le 2026-09-27.
+const SEUILS_APPROCHE_RADAR_M = [200, 100, 50];
+
+function verifierApprocheRadar() {
+  if (!etat.prefs.dangers || etat.aLaBorne) return;
+  for (const r of etat.route.radarsSurTrace || []) {
+    const d = r.offset - etat.offset;
+    if (d < 0 || d > 200) continue;
+    for (const seuil of SEUILS_APPROCHE_RADAR_M) {
+      if (d > seuil) continue;
+      const cle = `${Math.round(r.offset)}|${seuil}`;
+      if (etat.radarsAnnonces.has(cle)) continue;
+      etat.radarsAnnonces.add(cle);
+      parler(`Radar dans ${seuil} mètres.`, true);
+      if (etat.prefs.bip) bip();
+    }
   }
 }
 
@@ -1946,7 +1983,7 @@ export function etatDiagnostic() {
     position_approx: p ? `${p.lat.toFixed(2)},${p.lon.toFixed(2)}` : "?",
     zoom: etat.zoom,
     voix: etat.voix ? "oui" : "non",
-    eco: etat.eco ? "oui" : "non",
+    eco: etat.prefs.modeEco ? "oui" : "non",
   };
 }
 
@@ -2379,6 +2416,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     coutRecharges: 0,
     rappelsFaits: new Set(),
     alertesMeteo: new Set(),
+    radarsAnnonces: new Set(),
     airesOsm: null,
     debut: Date.now(),
     kmPlan: 0,

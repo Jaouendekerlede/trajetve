@@ -13,6 +13,7 @@ import { getApiKeys } from "./config.js";
 import { lireReglages } from "./storage.js";
 import * as c3d from "./carte3d.js";
 import { svgVoiture } from "./icones-voiture.js";
+import { icone } from "./icones.js";
 
 let explo3D = false;
 let surDeplacement = null;
@@ -92,6 +93,7 @@ let rotationDispo = false;
 let coucheNav = null;
 let ligneParcourue = null;
 let ligneRestante = null;
+let marqueursRadars = [];
 let marqueurVoiture = null;
 let surDeplacementManuel = null;
 
@@ -186,6 +188,17 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
     L.marker([a.lat, a.lon], { icon: pastille(32, "rgba(79,224,255,.95)", "🔋"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
   }
   if (destination) L.marker([destination.lat, destination.lon], { icon: pastille(26, "#ff6b35", "🏁"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
+  marqueursRadars = [];
+}
+
+// Radars (officiels OSM ou signalés soi-même) sur le tracé : un symbole de
+// radar plutôt qu'une épingle générique -- demande explicite de
+// l'utilisateur le 2026-09-27. Ajoutés à coucheNav (donc effacés avec le
+// reste au prochain dessinerRouteNavigation -- à rappeler ensuite).
+export function dessinerRadars(radars) {
+  for (const m of marqueursRadars) m.remove();
+  const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
+  marqueursRadars = (radars || []).map((r) => L.marker([r.lat, r.lon], { icon: pastille(28, "rgba(255,70,60,.95)", symbole), zIndexOffset: 4500, interactive: false }).addTo(coucheNav));
 }
 
 // Flèche blanche du prochain virage sur le tracé (null : l'effacer).

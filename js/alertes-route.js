@@ -35,14 +35,28 @@ export function longueurZoneDanger(limiteKmh) {
   return 300;
 }
 
+// radars : [{ lat, lon }] ; garde ceux à moins de 40 m du tracé (les autres
+// sont sur une autre route), avec leur position exacte le long du tracé --
+// utile à la fois pour les marqueurs sur la carte et les avertissements
+// gradués façon Radarbot (200/100/50 m), séparément de zonesDeDanger()
+// ci-dessous qui, elle, fusionne tout en zones larges pour l'affichage
+// "zone de danger" légal.
+export function radarsSurTrace(radars, coords, cum) {
+  const surTrace = [];
+  for (const r of radars) {
+    const p = projeterSurTrace(r.lat, r.lon, coords, cum);
+    if (p.d <= 40) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset });
+  }
+  return surTrace;
+}
+
 // radars : [{ lat, lon }] ; limites : limitation de chaque point du tracé.
 // Renvoie les zones [{ debut, fin, limite }] (m), fusionnées si elles se
 // chevauchent. Un radar à plus de 40 m du tracé est sur une autre route.
 export function zonesDeDanger(radars, coords, cum, limites) {
   const zones = [];
-  for (const r of radars) {
-    const p = projeterSurTrace(r.lat, r.lon, coords, cum);
-    if (p.d > 40) continue;
+  for (const r of radarsSurTrace(radars, coords, cum)) {
+    const p = r;
     let i = 0;
     while (i < cum.length - 2 && cum[i + 1] < p.offset) i++;
     const limite = limites[i] || null;
