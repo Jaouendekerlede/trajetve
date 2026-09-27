@@ -391,12 +391,15 @@ function panne(raison) {
 // carte. Demande explicite de l'utilisateur le 2026-09-27.
 function ajouterCiel(sombre) {
   if (carte.getLayer("ciel")) carte.removeLayer("ciel");
+  // "sky-type": "gradient" ne s'affichait pas (resté noir, confirmé par
+  // capture d'écran) -- le type "atmosphere" est celui documenté et
+  // démontré par MapLibre, plus fiable.
   carte.addLayer({
     id: "ciel",
     type: "sky",
     paint: sombre
-      ? { "sky-type": "gradient", "sky-gradient": ["interpolate", ["linear"], ["sky-radial-progress"], 0.5, "#0b1530", 1, "#000814"], "sky-gradient-center": [0, 0], "sky-gradient-radius": 90, "sky-opacity": 1 }
-      : { "sky-type": "gradient", "sky-gradient": ["interpolate", ["linear"], ["sky-radial-progress"], 0.5, "#cfe8ff", 1, "#4d90d9"], "sky-gradient-center": [0, 0], "sky-gradient-radius": 90, "sky-opacity": 1 },
+      ? { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 100], "sky-atmosphere-sun-intensity": 2, "sky-atmosphere-color": "#0b1530", "sky-atmosphere-halo-color": "#0b1530" }
+      : { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 90], "sky-atmosphere-sun-intensity": 15, "sky-atmosphere-color": "#cfe8ff", "sky-atmosphere-halo-color": "#ffffff" },
   });
 }
 
