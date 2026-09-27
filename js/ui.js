@@ -2394,6 +2394,14 @@ export function executerAction(action) {
 }
 
 export function initialiserUI() {
+  // Champs départ/destination toujours vides à l'ouverture -- demande
+  // explicite de l'utilisateur le 2026-09-27. Sur téléphone, l'appli
+  // "rouverte" ne recharge souvent pas vraiment la page (le système
+  // Android/Chrome reprend l'onglet tel qu'il était laissé) : sans ce
+  // vidage explicite, le champ garde le texte tapé lors du dernier essai,
+  // ce qui ressemble à une adresse "encore là" au prochain démarrage.
+  $("ev-depart-input").value = "";
+  $("ev-destination-input").value = "";
   initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || fondParDefaut(), onDeplacement: surDeplacementCarte });
   cablerTheme();
   cablerFeuille();
