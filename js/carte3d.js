@@ -436,10 +436,17 @@ async function creerCarte(fournisseur, fond, relief) {
     touchPitch: false,
     fadeDuration: 0,
     // Bords lissés (désactivé par défaut dans MapLibre : routes et bâtiments
-    // en escalier) et rendu à la densité réelle de l'écran, sans jamais
-    // descendre sous 2 (un écran d'ordinateur gagne alors en finesse).
+    // en escalier) et rendu à la densité réelle de l'écran. Sur ordinateur
+    // (souris, grand écran), on force au moins 2x : un écran d'ordinateur
+    // gagne alors en finesse et le GPU s'en sort largement. Sur téléphone
+    // (écran tactile, celui qui navigue réellement en conduisant), on
+    // plafonne à 2x SANS forcer de plancher : demander jusqu'à 3x sur un
+    // petit GPU de milieu de gamme, en pleine navigation avec bâtiments en
+    // relief et caméra qui bouge en continu, provoquait des saccades
+    // visibles (tracé qui clignote, flèche qui saute, bascule en vue
+    // horizon hachée -- signalé par l'utilisateur le 2026-09-27).
     antialias: true,
-    pixelRatio: Math.min(3, Math.max(window.devicePixelRatio || 1, 2)),
+    pixelRatio: matchMedia("(pointer: coarse)").matches ? Math.min(2, window.devicePixelRatio || 1) : Math.min(3, Math.max(window.devicePixelRatio || 1, 2)),
   });
   // Seules les ressources du style (icônes, polices) sont attendues : les
   // tuiles arrivent ensuite.
