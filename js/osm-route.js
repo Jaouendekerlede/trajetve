@@ -52,9 +52,34 @@ function rectanglesLeLongDu(coords, marge = MARGE_RECTANGLE_DEG, parRectangle = 
 // point-virgule, encodage Latin-1 -- sans conséquence ici : aucune des
 // colonnes utilisées (Type de radar, VMA, Latitude, Longitude) ne contient
 // de caractère accentué, seul "Numéro de radar" (non utilisé) en a.
-const URL_RADARS_GOUV = "https://static.data.gouv.fr/resources/liste-des-radars-fixes-en-france/20251230-134204/jeu-de-donnees-liste-des-radars-fixes-en-france-12-2025.csv";
+// Secours si l'API du dataset (ci-dessous) est indisponible : le fichier
+// connu au moment d'écrire ce code (décembre 2025).
+const URL_RADARS_GOUV_SECOURS = "https://static.data.gouv.fr/resources/liste-des-radars-fixes-en-france/20251230-134204/jeu-de-donnees-liste-des-radars-fixes-en-france-12-2025.csv";
+// Chaque nouvelle publication du fichier a une URL différente (le chemin
+// contient la date) -- impossible de la deviner à l'avance. On interroge
+// donc l'API du jeu de données lui-même (CORS ouvert, vérifié) pour
+// retrouver la ressource CSV la plus récente, plutôt que de dépendre d'une
+// URL figée qui finirait par pointer sur une version périmée.
+const URL_DATASET_RADARS_GOUV = "https://www.data.gouv.fr/api/1/datasets/liste-des-radars-fixes-en-france/";
 const CACHE_RADARS_GOUV = "trajetve-radars-gouv";
-const DUREE_RADARS_GOUV_MS = 30 * 24 * 3600 * 1000; // fichier figé à cette date : pas la peine de revérifier souvent
+// Demande explicite de l'utilisateur : revérifier une mise à jour tous les
+// 6 mois (le fichier lui-même n'est republié qu'une à deux fois par an).
+const DUREE_RADARS_GOUV_MS = 6 * 30 * 24 * 3600 * 1000;
+
+async function urlRadarsGouvActuelle() {
+  try {
+    const resp = await fetch(URL_DATASET_RADARS_GOUV);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const dataset = await resp.json();
+    const csv = (dataset.resources || [])
+      .filter((r) => r.format === "csv")
+      .sort((a, b) => new Date(b.last_modified) - new Date(a.last_modified))[0];
+    return csv?.url || URL_RADARS_GOUV_SECOURS;
+  } catch (e) {
+    console.warn("[RADARS_GOUV] Recherche de mise à jour impossible, secours utilisé", e);
+    return URL_RADARS_GOUV_SECOURS;
+  }
+}
 let radarsGouv = null;
 let chargementRadarsGouv = null;
 
@@ -96,7 +121,8 @@ async function chargerRadarsGouv() {
         radarsGouv = await garde.json();
         return radarsGouv;
       }
-      const resp = await fetch(URL_RADARS_GOUV);
+      const url = await urlRadarsGouvActuelle();
+      const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       radarsGouv = lireRadarsGouvCsv(await resp.text());
       await cache?.put("radars.json", new Response(JSON.stringify(radarsGouv), { headers: { "content-type": "application/json", "x-date": String(Date.now()) } }));
