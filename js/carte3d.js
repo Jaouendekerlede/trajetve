@@ -252,26 +252,45 @@ function adapterStyleLibre(style, sombre) {
   return style;
 }
 
+// Style JSON brut (avant adaptation), gardé en mémoire pour la durée de la
+// page seulement -- jamais sur disque (le style TomTom n'a pas le droit
+// d'être stocké). But : éviter de retélécharger le même style à chaque
+// navigation démarrée/arrêtée dans la même session -- l'utilisateur a
+// signalé le 2026-09-27 consommer son quota TomTom "Maps" au fil de la
+// journée (le routage, sur un quota séparé, tient toute la journée sans
+// souci). Ça ne supprime pas le quota, mais réduit vraiment le nombre
+// d'appels à ce produit précis.
+const cacheStyles = new Map();
+
 // Le style est téléchargé ici (et non par MapLibre) pour lire la raison
 // d'un éventuel refus.
 async function telechargerStyle(fournisseur, sombre) {
-  const controleur = new AbortController();
-  const minuteur = setTimeout(() => controleur.abort(), DELAI_CHARGEMENT_MS);
-  try {
-    const r = await fetch(urlStyle(fournisseur, sombre), { signal: controleur.signal });
-    if (!r.ok) {
-      const detail = await lireRefusTomTom(r);
-      throw new Error(`carte ${FOURNISSEURS[fournisseur]} refusée (HTTP ${r.status}${detail ? ` : « ${detail} »` : ""})`);
+  const url = urlStyle(fournisseur, sombre);
+  let styleBrut = cacheStyles.get(url);
+  if (!styleBrut) {
+    const controleur = new AbortController();
+    const minuteur = setTimeout(() => controleur.abort(), DELAI_CHARGEMENT_MS);
+    try {
+      const r = await fetch(url, { signal: controleur.signal });
+      if (!r.ok) {
+        const detail = await lireRefusTomTom(r);
+        throw new Error(`carte ${FOURNISSEURS[fournisseur]} refusée (HTTP ${r.status}${detail ? ` : « ${detail} »` : ""})`);
+      }
+      styleBrut = await r.json();
+      cacheStyles.set(url, styleBrut);
+    } catch (e) {
+      if (e.name === "AbortError") throw new Error(`réseau trop lent pour la carte ${FOURNISSEURS[fournisseur]}`);
+      if (e instanceof TypeError) throw new Error(`carte ${FOURNISSEURS[fournisseur]} inaccessible (réseau ?)`);
+      throw e;
+    } finally {
+      clearTimeout(minuteur);
     }
-    const style = await r.json();
-    return fournisseur === "libre" ? adapterStyleLibre(style, sombre) : style;
-  } catch (e) {
-    if (e.name === "AbortError") throw new Error(`réseau trop lent pour la carte ${FOURNISSEURS[fournisseur]}`);
-    if (e instanceof TypeError) throw new Error(`carte ${FOURNISSEURS[fournisseur]} inaccessible (réseau ?)`);
-    throw e;
-  } finally {
-    clearTimeout(minuteur);
   }
+  // Clone : adapterStyleLibre modifie l'objet en place (ajout de la couche
+  // bâtiments, textes en français...) -- le refaire sur le même objet en
+  // cache doublerait la couche à chaque navigation.
+  const style = JSON.parse(JSON.stringify(styleBrut));
+  return fournisseur === "libre" ? adapterStyleLibre(style, sombre) : style;
 }
 
 // Nos tracés vont au-dessus de toutes les routes du fond (pointillés,
