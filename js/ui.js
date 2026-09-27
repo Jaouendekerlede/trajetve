@@ -978,6 +978,14 @@ function cablerFormulaire() {
     }),
   );
   $("ev-depart-gps-btn").addEventListener("click", () => ($("ev-depart-input").value = "Ma position"));
+  $("ev-depart-clear-btn").addEventListener("click", () => {
+    $("ev-depart-input").value = "";
+    $("ev-depart-input").focus();
+  });
+  $("ev-destination-clear-btn").addEventListener("click", () => {
+    $("ev-destination-input").value = "";
+    $("ev-destination-input").focus();
+  });
   $("ev-inverser-btn").addEventListener("click", () => {
     const d = $("ev-depart-input").value;
     $("ev-depart-input").value = $("ev-destination-input").value;

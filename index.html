@@ -109,10 +109,12 @@
         <div class="ev-itineraire-saisies">
           <span class="ev-input-row">
             <input type="text" id="ev-depart-input" class="ev-input" placeholder="Départ (vide = ma position)" aria-label="Départ">
+            <button id="ev-depart-clear-btn" class="ev-mini-btn" type="button" title="Effacer le départ">🧹</button>
             <button id="ev-depart-gps-btn" class="ev-mini-btn" type="button" title="Ma position">📍</button>
           </span>
           <span class="ev-input-row">
             <input type="text" id="ev-destination-input" class="ev-input" placeholder="Destination (ville, adresse…)" enterkeyhint="go" aria-label="Destination">
+            <button id="ev-destination-clear-btn" class="ev-mini-btn" type="button" title="Effacer la destination">🧹</button>
             <button id="ev-destination-micro" class="ev-mini-btn" type="button" title="Dicter la destination">🎤</button>
           </span>
           <div class="ev-raccourcis-dest">
@@ -643,7 +645,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 71 : bouton pour oublier un radar signalé par erreur</div>
+      <div class="ev-hint ev-lien-centre">Version 72 : balai pour effacer le départ ou la destination</div>
     </div>
   </div>
 </section>
