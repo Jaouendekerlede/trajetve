@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   journal: "trajetve_journal",
   zonesEvitees: "trajetve_zones_evitees",
   radarsPersonnels: "trajetve_radars_personnels",
+  bornesPersonnelles: "trajetve_bornes_personnelles",
 };
 
 export function getApiKeys() {

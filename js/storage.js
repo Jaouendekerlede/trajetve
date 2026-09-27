@@ -373,6 +373,47 @@ export function retirerDernierRadarPersonnel() {
   return { retire, radars: reste };
 }
 
+// ── Bornes personnelles ──────────────────────────────────────────────────
+// Bornes vues sur le terrain mais absentes des bases publiques (Open Charge
+// Map, IRVE gouvernement) -- ex. très récentes ou d'un réseau fermé (type
+// Chargemap) non interrogeable. Forme compatible avec les bornes normales
+// (carte.js, fiche borne) pour s'afficher et s'ouvrir sans code séparé.
+// Demande explicite de l'utilisateur le 2026-09-27.
+const MAX_BORNES_PERSONNELLES = 200;
+
+export function listerBornesPersonnelles() {
+  return lireJson(STORAGE_KEYS.bornesPersonnelles, []);
+}
+
+export function ajouterBornePersonnelle(lat, lon, { puissance_kw = 0, connecteur = "", note = "" } = {}) {
+  // Pas de doublon à moins de 50 m d'une borne déjà signalée.
+  const proche = listerBornesPersonnelles().find((b) => haversineKm(b.lat, b.lon, lat, lon) < 0.05);
+  if (proche) return { deja: true, bornes: listerBornesPersonnelles() };
+  const borne = {
+    id: `borne_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    lat,
+    lon,
+    nom: note.trim() || "Borne signalée",
+    note: note.trim(),
+    puissance_max_kw: puissance_kw,
+    connecteurs: connecteur ? [{ type: connecteur, puissance_kw, quantite: 1 }] : [],
+    source: "perso",
+    officiel: null,
+    date: Date.now(),
+  };
+  const bornes = [borne, ...listerBornesPersonnelles()].slice(0, MAX_BORNES_PERSONNELLES);
+  ecrireJson(STORAGE_KEYS.bornesPersonnelles, bornes);
+  return { deja: false, bornes };
+}
+
+export function retirerDerniereBornePersonnelle() {
+  const bornes = listerBornesPersonnelles();
+  if (!bornes.length) return { retire: null, bornes };
+  const [retire, ...reste] = bornes;
+  ecrireJson(STORAGE_KEYS.bornesPersonnelles, reste);
+  return { retire, bornes: reste };
+}
+
 // ── Où est garée la voiture (enregistré à l'arrivée d'une navigation) ───────
 
 const CLE_VOITURE_GAREE = "trajetve_voiture_garee";

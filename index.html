@@ -645,7 +645,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 72 : balai pour effacer le départ ou la destination</div>
+      <div class="ev-hint ev-lien-centre">Version 73 : signaler une borne manquante (puissance, connecteur)</div>
     </div>
   </div>
 </section>
@@ -722,6 +722,8 @@
       <button type="button" data-nav-action="signaler">🛟<span>Signaler un problème</span></button>
       <button type="button" data-nav-action="radar">📍<span>Signaler un radar ici</span></button>
       <button type="button" data-nav-action="oublier-radar">🗑️<span>Oublier le dernier radar signalé</span></button>
+      <button type="button" data-nav-action="borne-perso">🔌<span>Signaler une borne ici</span></button>
+      <button type="button" data-nav-action="oublier-borne">🗑️<span>Oublier la dernière borne signalée</span></button>
       <button type="button" data-nav-action="hud">🪞<span>Tête haute</span></button>
       <button type="button" data-nav-action="recherche">🔍<span>Le long du trajet</span></button>
       <button type="button" data-nav-action="parkings">🅿️<span>Parkings à l'arrivée</span></button>
@@ -744,6 +746,15 @@
     <div class="ev-nav-carte-sous">🎤 En roulant, dites plutôt « trouve une boulangerie » : je vous lis les résultats.</div>
     <div id="ev-nav-recherche-cats" class="ev-nav-menu-grille"></div>
     <div id="ev-nav-recherche-res" class="ev-nav-resultats"></div>
+  </div>
+
+  <div id="ev-nav-borne-perso" class="ev-nav-carte hidden">
+    <div class="ev-nav-carte-titre ev-titre-fermer">🔌 Signaler une borne ici <button type="button" class="ev-fermer" data-fermer aria-label="Fermer">✕</button></div>
+    <div class="ev-nav-carte-sous">Puissance et type de prise, si tu les connais (optionnel).</div>
+    <div id="ev-borne-perso-kw" class="ev-chips"></div>
+    <div id="ev-borne-perso-connecteur" class="ev-chips"></div>
+    <input type="text" id="ev-borne-perso-note" class="ev-input" placeholder="Nom / remarque (optionnel)">
+    <button type="button" id="ev-borne-perso-enregistrer-btn" class="ev-btn-principal">Enregistrer</button>
   </div>
 
   <div id="ev-nav-ecoute" class="ev-nav-ecoute hidden" aria-live="polite">🎤 J'écoute…</div>

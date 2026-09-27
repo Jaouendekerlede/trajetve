@@ -870,6 +870,9 @@ body.ev-mode-voiture .ev-nav-direction { font-size: 22px; }
 .ev-nav-menu-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
 .ev-nav-menu-grille button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; border-radius: 14px; border: 1px solid var(--bordure-forte); background: var(--bloc); color: var(--texte); font-size: 24px; cursor: pointer; }
 .ev-nav-menu-grille button span { font-size: 13px; font-weight: 700; text-align: center; }
+.ev-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ev-chip { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--bordure-forte); background: var(--bloc); color: var(--texte); font-size: 14px; font-weight: 600; cursor: pointer; }
+.ev-chip.actif { background: var(--vert-clair); color: #06281a; border-color: var(--vert-clair); }
 /* Frise du trajet restant */
 .ev-nav-frise { position: absolute; left: 12px; right: 12px; bottom: calc(92px + var(--securite-bas)); height: 12px; border-radius: 6px; background: rgba(34, 229, 160, 0.55); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
 .ev-nav-frise span { position: absolute; top: 0; bottom: 0; }

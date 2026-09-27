@@ -6,7 +6,7 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel, retirerDernierRadarPersonnel } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel, retirerDernierRadarPersonnel, listerBornesPersonnelles, ajouterBornePersonnelle, retirerDerniereBornePersonnelle } from "./storage.js";
 import { toast } from "./ui-commun.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
@@ -1097,8 +1097,55 @@ async function rafraichirBornesProches() {
     stationsOfficiellesZone(pos.lat, pos.lon, RAYON_BORNES_KM, { maxLignes: 300 }),
   ]);
   if (!etat || jeton !== etat.jetonBornes) return;
-  vue.afficherBornes(fusionnerBornes(res.ok ? res.bornes : [], officielles.bornes), () => {});
+  etat.bornesReseauAffichees = fusionnerBornes(res.ok ? res.bornes : [], officielles.bornes);
+  etat.bornesPersoAffichees = listerBornesPersonnelles().filter((b) => haversineKm(pos.lat, pos.lon, b.lat, b.lon) <= RAYON_BORNES_KM);
+  redessinerBornes();
   vue.montrerBornes(true);
+}
+
+function redessinerBornes() {
+  if (!etat) return;
+  vue.afficherBornes([...(etat.bornesReseauAffichees || []), ...(etat.bornesPersoAffichees || [])], () => {});
+}
+
+// « Signaler une borne ici » : ajoute la position actuelle à la liste
+// personnelle (voir storage.js) avec puissance et connecteur choisis par
+// l'utilisateur, l'affiche tout de suite sans attendre le prochain
+// rafraîchissement réseau. Demande explicite de l'utilisateur le 2026-09-27
+// (bornes vues sur le terrain mais absentes d'Open Charge Map / IRVE).
+export function signalerBorneIci({ puissance_kw = 0, connecteur = "", note = "" } = {}) {
+  if (!etat?.pos) {
+    toast("Position GPS indisponible pour l'instant.");
+    return { ok: false };
+  }
+  const { deja, bornes } = ajouterBornePersonnelle(etat.pos.lat, etat.pos.lon, { puissance_kw, connecteur, note });
+  if (deja) {
+    parler("Une borne est déjà signalée tout près d'ici.", true);
+    toast("🔌 Déjà signalée à proximité.");
+    return { ok: false };
+  }
+  etat.bornesPersoAffichees = [...(etat.bornesPersoAffichees || []), bornes[0]];
+  redessinerBornes();
+  vue.montrerBornes(true);
+  parler("Borne enregistrée. Elle apparaîtra sur vos prochains trajets.", true);
+  toast("🔌 Borne enregistrée.");
+  return { ok: true };
+}
+
+// Annule la dernière borne signalée par erreur (voir signalerBorneIci et
+// retirerDerniereBornePersonnelle dans storage.js).
+export function oublierDerniereBorneSignalee() {
+  const { retire } = retirerDerniereBornePersonnelle();
+  if (!retire) {
+    toast("Aucune borne signalée à oublier.");
+    return;
+  }
+  if (etat) {
+    etat.bornesPersoAffichees = (etat.bornesPersoAffichees || []).filter((b) => b.id !== retire.id);
+    redessinerBornes();
+  }
+  parler("Borne oubliée.", true);
+  toast("🗑️ Dernière borne signalée oubliée.");
 }
 
 // ── Recalculs ───────────────────────────────────────────────────────────────
@@ -1578,6 +1625,32 @@ function cablerBoutons() {
     const i = e.target.closest("[data-etape]")?.dataset.etape;
     if (i !== undefined && etat?.lieuxTrouves?.[i]) ajouterEtape(etat.lieuxTrouves[i]);
   });
+  const PUISSANCES_BORNE_PERSO = [
+    ["7", "7 kW"],
+    ["22", "22 kW"],
+    ["50", "50 kW"],
+    ["100", "100 kW"],
+    ["150", "150+ kW"],
+  ];
+  const CONNECTEURS_BORNE_PERSO = ["Type 2", "Combo CCS", "CHAdeMO"];
+  $("ev-borne-perso-kw").innerHTML = PUISSANCES_BORNE_PERSO.map(([v, l]) => `<button type="button" class="ev-chip" data-kw="${v}">${l}</button>`).join("");
+  $("ev-borne-perso-connecteur").innerHTML = CONNECTEURS_BORNE_PERSO.map((c) => `<button type="button" class="ev-chip" data-connecteur="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("");
+  $("ev-nav-borne-perso").addEventListener("click", (e) => {
+    if (e.target.closest("[data-fermer]")) return $("ev-nav-borne-perso").classList.add("hidden");
+    const chip = e.target.closest(".ev-chip");
+    if (chip) chip.parentElement.querySelectorAll(".ev-chip").forEach((c) => c.classList.toggle("actif", c === chip ? !c.classList.contains("actif") : false));
+  });
+  $("ev-borne-perso-enregistrer-btn").addEventListener("click", () => {
+    const puissance_kw = Number($("ev-borne-perso-kw").querySelector(".ev-chip.actif")?.dataset.kw || 0);
+    const connecteur = $("ev-borne-perso-connecteur").querySelector(".ev-chip.actif")?.dataset.connecteur || "";
+    const note = $("ev-borne-perso-note").value;
+    const { ok } = signalerBorneIci({ puissance_kw, connecteur, note });
+    if (ok) {
+      $("ev-nav-borne-perso").classList.add("hidden");
+      $("ev-borne-perso-note").value = "";
+      $("ev-nav-borne-perso").querySelectorAll(".ev-chip.actif").forEach((c) => c.classList.remove("actif"));
+    }
+  });
   $("ev-nav-parkings").addEventListener("click", (e) => {
     if (e.target.closest("[data-fermer]")) return $("ev-nav-parkings").classList.add("hidden");
     const i = e.target.closest("[data-parking]")?.dataset.parking;
@@ -1804,6 +1877,8 @@ function actionMenu(action) {
   else if (action === "secours") afficherSecours();
   else if (action === "radar") signalerRadarIci();
   else if (action === "oublier-radar") oublierDernierRadarSignale();
+  else if (action === "borne-perso") $("ev-nav-borne-perso").classList.remove("hidden");
+  else if (action === "oublier-borne") oublierDerniereBorneSignalee();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
   else if (action === "aide") {
     afficherAlerte("🎤 En roulant : « prochaine borne ? », « trouve un café », « où me garer », « autre borne », « route barrée ». Répondez « oui » / « non » aux questions.", null, "info");
@@ -2483,6 +2558,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-menu").classList.add("hidden");
   $("ev-nav-frise").classList.add("hidden");
   $("ev-nav-recherche").classList.add("hidden");
+  $("ev-nav-borne-perso").classList.add("hidden");
   $("ev-nav-parkings").classList.add("hidden");
   $("ev-nav-secours").classList.add("hidden");
   $("ev-nav-feuille").classList.add("hidden");
