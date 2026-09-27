@@ -625,7 +625,7 @@ function cablerCarte() {
   $("ev-arret-impose").addEventListener("change", majKmCurseurs);
   $("ev-reglages-conseilles-btn").addEventListener("click", () => {
     if (!confirm("Revenir aux réglages de navigation conseillés ?")) return;
-    const cles = ["taille_texte_nav", "taille_bandeau", "icone_voiture", "ecran_epure", "nuit_douce", "zoom_renforce", "vue_carrefour", "fenetre_voies", "voix_guidage", "reponses_voix", "voix_voies", "vibration", "notif_guidage", "voix_travaux", "zones_danger", "bip_vitesse", "meteo_route", "feux", "voix_bornes", "prechauffage", "aires_autoroute", "parking_arrivee"];
+    const cles = ["taille_texte_nav", "taille_bandeau", "icone_voiture", "ecran_epure", "nuit_douce", "zoom_renforce", "vue_carrefour", "fenetre_voies", "voix_guidage", "reponses_voix", "voix_voies", "vibration", "notif_guidage", "voix_travaux", "zones_danger", "bip_vitesse", "meteo_route", "feux", "voix_bornes", "prechauffage", "aires_autoroute", "parking_arrivee", "pause_mi_parcours"];
     sauverReglages(Object.fromEntries(cles.map((c) => [c, undefined])));
     rendreReglagesProfil();
     toast("↺ Réglages conseillés rétablis");
@@ -2136,6 +2136,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-notif").checked = reglages.notif_guidage !== false;
   $("ev-reglage-feux").checked = reglages.feux !== false;
   $("ev-reglage-zones-danger").checked = reglages.zones_danger !== false;
+  $("ev-reglage-pause-mi-parcours").checked = reglages.pause_mi_parcours !== false;
 
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
@@ -2294,6 +2295,7 @@ function cablerProfil() {
       notif_guidage: $("ev-reglage-notif").checked,
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
+      pause_mi_parcours: $("ev-reglage-pause-mi-parcours").checked,
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });

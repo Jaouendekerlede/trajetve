@@ -1247,6 +1247,7 @@ function surPosition(p) {
   rafraichirBornesProches();
   preparerCarrefours();
   verifierMeteo();
+  verifierMiParcours();
   if (etat.prefs.aires && etat.airesOdometreFin != null && etat.odometre > etat.airesOdometreFin - RELANCE_AIRES_M && etat.offset < etat.route.total - RELANCE_AIRES_M) chercherAires();
   if (etat.prefs.parkingArrivee && !etat.parkingsProposes && !etat.arretsRestants.length && !etat.destinationFinale && etat.odometre > 500 && etat.route.total - etat.offset < DISTANCE_PROPOSITION_PARKING_M) {
     proposerParkings();
@@ -1748,6 +1749,37 @@ async function verifierMeteo() {
       setTimeout(() => etat && $("ev-nav-alerte").textContent === texte && afficherAlerte(null), 20000);
     }
     break;
+  }
+}
+
+// ── Mi-parcours : rappel de pause / changement de conducteur ────────────────
+// Demande explicite de l'utilisateur (2026-09-27) : sur un trajet de plus de
+// 4 h, une petite alerte à mi-chemin (distance totale du plan, pas la route
+// recalculée qui rétrécit à chaque arrêt) pour penser à faire une pause ou
+// changer de conducteur, avec les bornes de recharge à proximité -- toujours
+// annoncée sur autoroute ou voie express (pas juste avant une sortie ou en
+// pleine ville, mains sur le volant).
+const SEUIL_DUREE_MI_PARCOURS_MIN = 4 * 60;
+
+function verifierMiParcours() {
+  if (!etat?.route || !etat.prefs.pauseMiParcours || etat.alerteMiParcoursFaite || etat.aLaBorne) return;
+  if (!(etat.plan.duree_totale_min >= SEUIL_DUREE_MI_PARCOURS_MIN) || !etat.plan.distance_km) return;
+  if (etat.odometre < (etat.plan.distance_km * 1000) / 2) return;
+  // Même détection que la colonne des aires (majAires) : sur autoroute ou
+  // voie express seulement.
+  const surRapide = (etat.route.autoroutes || []).some(([a, b]) => etat.offset >= a - 200 && etat.offset <= b);
+  if (!surRapide) return; // pas encore sur autoroute pile à mi-chemin : on retente au prochain point GPS
+
+  etat.alerteMiParcoursFaite = true;
+  const bornesProches = (etat.route.aires || [])
+    .filter((x) => x.type === "recharge" && x.offset > etat.offset && x.offset - etat.offset < HORIZON_AIRES_M)
+    .slice(0, 2);
+  const listeBornes = bornesProches.map((b) => `${b.nom || "Borne de recharge"} à ${distanceAffichee(b.offset - etat.offset)}`).join(", ");
+  const texte = `🔄 Mi-parcours : pensez à une pause, ou à changer de conducteur.${listeBornes ? ` Bornes à proximité : ${listeBornes}.` : ""}`;
+  parler(`Vous êtes à mi-parcours de votre trajet. Pensez à faire une pause, ou à changer de conducteur.${bornesProches.length ? " Des bornes de recharge sont à proximité." : ""}`, true);
+  if ($("ev-nav-alerte").classList.contains("hidden")) {
+    afficherAlerte(texte);
+    setTimeout(() => etat && $("ev-nav-alerte").textContent === texte && afficherAlerte(null), 20000);
   }
 }
 
@@ -2285,6 +2317,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
     dernierRecalcul: 0,
     dernierTrafic: Date.now(),
     dernierFetchBornes: 0,
+    alerteMiParcoursFaite: false,
     indiceTrace: 0,
     posBornes: null,
     jetonBornes: 0,
@@ -2334,6 +2367,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       notifGuidage: reglages.notif_guidage !== false,
       reponsesVoix: reglages.reponses_voix !== false,
       prechauffage: reglages.prechauffage !== false,
+      pauseMiParcours: reglages.pause_mi_parcours !== false,
     },
     sensDeMarche: true,
     suivi: true,
