@@ -361,6 +361,18 @@ export function retirerRadarPersonnel(id) {
   return radars;
 }
 
+// Annule le dernier "Signaler un radar ici" (liste triée du plus récent au
+// plus ancien -- voir ajouterRadarPersonnel) : sert de correction rapide en
+// cas d'erreur, sans avoir à gérer une liste complète. Demande explicite de
+// l'utilisateur le 2026-09-27.
+export function retirerDernierRadarPersonnel() {
+  const radars = listerRadarsPersonnels();
+  if (!radars.length) return { retire: null, radars };
+  const [retire, ...reste] = radars;
+  ecrireJson(STORAGE_KEYS.radarsPersonnels, reste);
+  return { retire, radars: reste };
+}
+
 // ── Où est garée la voiture (enregistré à l'arrivée d'une navigation) ───────
 
 const CLE_VOITURE_GAREE = "trajetve_voiture_garee";

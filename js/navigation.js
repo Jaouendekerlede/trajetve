@@ -6,7 +6,7 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel, retirerDernierRadarPersonnel } from "./storage.js";
 import { toast } from "./ui-commun.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
@@ -542,6 +542,23 @@ export function signalerRadarIci() {
   recalculerRadars();
   parler("Radar enregistré. Vous serez prévenu la prochaine fois.", true);
   toast("📍 Radar enregistré pour vos prochains trajets.");
+}
+
+// Annule le dernier radar signalé par erreur (voir signalerRadarIci et
+// retirerDernierRadarPersonnel dans storage.js). Demande explicite de
+// l'utilisateur le 2026-09-27.
+export function oublierDernierRadarSignale() {
+  const { retire } = retirerDernierRadarPersonnel();
+  if (!retire) {
+    toast("Aucun radar signalé à oublier.");
+    return;
+  }
+  if (etat) {
+    etat.radars = (etat.radars || []).filter((r) => r.id !== retire.id);
+    recalculerRadars();
+  }
+  parler("Radar oublié.", true);
+  toast("🗑️ Dernier radar signalé oublié.");
 }
 
 // Aires et bornes sur autoroute / voie express : chargées une fois (et
@@ -1786,6 +1803,7 @@ function actionMenu(action) {
   }
   else if (action === "secours") afficherSecours();
   else if (action === "radar") signalerRadarIci();
+  else if (action === "oublier-radar") oublierDernierRadarSignale();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
   else if (action === "aide") {
     afficherAlerte("🎤 En roulant : « prochaine borne ? », « trouve un café », « où me garer », « autre borne », « route barrée ». Répondez « oui » / « non » aux questions.", null, "info");
