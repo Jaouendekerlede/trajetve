@@ -486,6 +486,15 @@ async function creerCarte(fournisseur, fond, relief) {
 // fond rapprochés ne doivent pas se croiser (le dernier demandé l'emporte).
 let fileAttente = Promise.resolve();
 
+// Un fournisseur refusé (403, quota...) l'est en général encore quelques
+// minutes plus tard -- pas la peine de retenter puis d'afficher à nouveau
+// l'avertissement à chaque navigation démarrée ou bascule 2D/3D entre-temps
+// (signalé par l'utilisateur le 2026-09-27 : "toujours des messages 403
+// tomtom"). On se souvient de l'échec et on saute directement à l'autre
+// fournisseur pendant ce délai, sans nouvelle tentative ni nouvel avis.
+const DELAI_AVANT_NOUVEL_ESSAI_MS = 10 * 60 * 1000;
+const dernierEchecFournisseur = {};
+
 export function preparer(options) {
   const suite = fileAttente.then(() => preparerMaintenant(options));
   fileAttente = suite.catch(() => {});
@@ -512,16 +521,26 @@ async function preparerMaintenant({ sombre = true, fond = sombre ? "sombre" : "p
   for (const f of ordre) {
     const cleStyle = `${f}-${fond}-${relief}`;
     if (carte && styleCharge === cleStyle && !horsService) return true;
+    // Ce fournisseur a échoué il y a moins de 10 min : on ne retente pas
+    // (sauf si c'est le seul choix restant), pour ne pas relancer la même
+    // requête refusée -- et le même avertissement -- à chaque navigation.
+    const echecRecent = dernierEchecFournisseur[f];
+    if (echecRecent && Date.now() - echecRecent < DELAI_AVANT_NOUVEL_ESSAI_MS && f !== ordre[ordre.length - 1]) {
+      echecs.push(`carte ${FOURNISSEURS[f]} récemment refusée`);
+      continue;
+    }
     try {
       await creerCarte(f, fond, relief);
       styleCharge = cleStyle;
       raisonEchec = "";
+      delete dernierEchecFournisseur[f];
       if (echecs.length) avertissement = `${echecs.join(" ; ")} : carte ${FOURNISSEURS[f]} utilisée à la place`;
       // Reste affichée si la carte des bornes est déjà en 3D.
       if (!explo.actif && !enNavigation) conteneur.classList.add("hidden");
       conteneur.classList.remove("ev-3d-invisible");
       return true;
     } catch (e) {
+      dernierEchecFournisseur[f] = Date.now();
       echecs.push(e.message || String(e));
       console.warn("[3D]", e.message || e);
     }
