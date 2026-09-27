@@ -94,7 +94,19 @@ function agregerStation(lignes, distanceM) {
 // Fichier de ~9 Mo : téléchargé au plus toutes les 6 h, et on n'en garde
 // que l'utile (points pas en service, occupations récentes).
 
-const URL_ETATS = "https://transport.data.gouv.fr/resources/84098/download";
+// L'URL "stable" de transport.data.gouv.fr redirige (302) sans aucun
+// en-tête CORS -- le navigateur bloque alors tout le fetch avec "Failed to
+// fetch", même si les redirections suivantes (data.gouv.fr, puis le fichier
+// lui-même) ont bien "access-control-allow-origin: *". Résultat vérifié
+// (le 2026-09-27, journal de diagnostic de l'utilisateur) : cette fonction
+// n'avait jamais réussi une seule fois depuis un navigateur. On saute donc
+// ce premier maillon et on pointe directement sur la redirection suivante,
+// qui elle est joignable. Si data.gouv.fr change un jour cet identifiant
+// de ressource, le symptôme redeviendra le même avertissement dans la
+// console -- il suffira de reprendre https://transport.data.gouv.fr/
+// resources/84098/download dans un navigateur classique (pas fetch) pour
+// retrouver la nouvelle redirection à jour.
+const URL_ETATS = "https://www.data.gouv.fr/api/1/datasets/r/89185b1f-f958-4c5b-9282-399a66ecee97";
 const CACHE_ETATS = "trajetve-etats-irve";
 const DUREE_ETATS_MS = 6 * 3600 * 1000;
 const OCCUPATION_RECENTE_MS = 3600 * 1000;
