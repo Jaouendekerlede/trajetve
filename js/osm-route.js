@@ -43,11 +43,88 @@ function rectanglesLeLongDu(coords, marge = MARGE_RECTANGLE_DEG, parRectangle = 
   return rectangles;
 }
 
+// Complément à OpenStreetMap : liste officielle "Radars automatiques"
+// (data.gouv.fr, ministère de l'Intérieur) -- figée depuis octobre 2018
+// (jamais mise à jour depuis, vérifié), mais les radars fixes/feu rouge
+// qu'elle liste sont pour l'essentiel toujours en place (un radar fixe est
+// rarement démonté) ; elle comble donc les trous d'OSM sur les
+// installations plus anciennes. Les radars posés après 2018 ne peuvent
+// venir que d'OSM. CORS ouvert (vérifié), contrairement au site
+// radars.securite-routiere.gouv.fr (l'outil officiel "temps réel", lui
+// bloqué pour une appli sans serveur).
+const URL_RADARS_GOUV = "https://static.data.gouv.fr/resources/radars-automatiques/20181025-141231/radars.csv";
+const CACHE_RADARS_GOUV = "trajetve-radars-gouv";
+const DUREE_RADARS_GOUV_MS = 30 * 24 * 3600 * 1000; // jeu de données figé : pas la peine de revérifier souvent
+let radarsGouv = null;
+let chargementRadarsGouv = null;
+
+function lireRadarsGouvCsv(texte) {
+  const lignes = texte.split("\n");
+  const entete = lignes[0].split(",");
+  const col = (nom) => entete.indexOf(nom);
+  const [cLat, cLon, cType] = [col("latitude"), col("longitude"), col("type")];
+  const radars = [];
+  for (let i = 1; i < lignes.length; i++) {
+    const v = lignes[i].split(",");
+    if (v.length <= Math.max(cLat, cLon)) continue;
+    const lat = Number(v[cLat]);
+    const lon = Number(v[cLon]);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) radars.push({ lat, lon, type: (v[cType] || "").trim() });
+  }
+  return radars;
+}
+
+async function chargerRadarsGouv() {
+  if (radarsGouv) return radarsGouv;
+  chargementRadarsGouv ??= (async () => {
+    try {
+      const cache = typeof caches !== "undefined" ? await caches.open(CACHE_RADARS_GOUV) : null;
+      const garde = await cache?.match("radars.json");
+      if (garde && Date.now() - Number(garde.headers.get("x-date")) < DUREE_RADARS_GOUV_MS) {
+        radarsGouv = await garde.json();
+        return radarsGouv;
+      }
+      const resp = await fetch(URL_RADARS_GOUV);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      radarsGouv = lireRadarsGouvCsv(await resp.text());
+      await cache?.put("radars.json", new Response(JSON.stringify(radarsGouv), { headers: { "content-type": "application/json", "x-date": String(Date.now()) } }));
+      return radarsGouv;
+    } catch (e) {
+      console.warn("[RADARS_GOUV] Liste officielle indisponible", e);
+      chargementRadarsGouv = null;
+      return [];
+    }
+  })();
+  return chargementRadarsGouv;
+}
+
+// Ne garde que les radars officiels dans le rectangle englobant le tracé
+// (+ marge) : évite de comparer les ~3 300 radars de France entière à
+// chaque point du tracé.
+async function radarsGouvPresDuTrace(coords, margeDeg = 0.05) {
+  const tous = await chargerRadarsGouv();
+  if (!tous.length) return [];
+  const lats = coords.map(([, lat]) => lat);
+  const lons = coords.map(([lon]) => lon);
+  const [latMin, latMax] = [Math.min(...lats) - margeDeg, Math.max(...lats) + margeDeg];
+  const [lonMin, lonMax] = [Math.min(...lons) - margeDeg, Math.max(...lons) + margeDeg];
+  return tous.filter((r) => r.lat >= latMin && r.lat <= latMax && r.lon >= lonMin && r.lon <= lonMax);
+}
+
+// Même radar physique repéré par les deux sources : à moins de 100 m, on
+// ne le garde qu'une fois (celui d'OSM, potentiellement mieux placé/à jour).
+function fusionnerRadars(osm, gouv) {
+  const dedoublonnes = gouv.filter((g) => !osm.some((o) => haversineKm(o.lat, o.lon, g.lat, g.lon) < 0.1));
+  return [...osm, ...dedoublonnes];
+}
+
 export async function radarsLeLongDu(coords) {
   const rectangles = rectanglesLeLongDu(coords);
   const requete = `[out:json][timeout:25];(${rectangles.map((b) => `node["highway"="speed_camera"](${b});`).join("")});out;`;
-  const r = await interrogerOverpass(requete);
-  return r.ok ? { ok: true, radars: r.elements.map((e) => ({ lat: e.lat, lon: e.lon })) } : r;
+  const [r, gouv] = await Promise.all([interrogerOverpass(requete), radarsGouvPresDuTrace(coords)]);
+  const osm = r.ok ? r.elements.map((e) => ({ lat: e.lat, lon: e.lon })) : [];
+  if (!r.ok && !gouv.length) return r;
+  return { ok: true, radars: fusionnerRadars(osm, gouv) };
 }
 
 // Feux tricolores à moins de 20 m des morceaux de tracé donnés ([lon, lat][]).
