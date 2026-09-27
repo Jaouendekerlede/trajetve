@@ -6,7 +6,8 @@
 // Fonctionne tant que l'appli est ouverte à l'écran (limite des applis web).
 
 import { getApiKeys } from "./config.js";
-import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType } from "./storage.js";
+import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel } from "./storage.js";
+import { toast } from "./ui-commun.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
 import { meteoDesPoints, alerteMeteo } from "./meteo-route.js";
@@ -501,8 +502,32 @@ async function chercherRadars() {
   if (!etat?.prefs.dangers || !etat.route) return;
   const r = await radarsLeLongDu(etat.route.coords);
   if (!etat?.route || !r.ok) return;
-  etat.radars = r.radars;
+  // Radars officiels (OSM) + ceux signalés soi-même (voir signalerRadarIci) --
+  // ces derniers passent par la même conversion en « zone de danger » que
+  // les officiels juste en dessous, jamais un point précis.
+  etat.radars = [...r.radars, ...listerRadarsPersonnels()];
   etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+}
+
+// « Signaler un radar ici » : ajoute la position actuelle à la liste
+// personnelle (voir storage.js), prévient tout de suite sur ce trajet (si
+// la route est déjà tracée) et sur tous les suivants. Demande explicite de
+// l'utilisateur le 2026-09-27.
+export function signalerRadarIci() {
+  if (!etat?.pos) {
+    toast("Position GPS indisponible pour l'instant.");
+    return;
+  }
+  const { deja, radars } = ajouterRadarPersonnel(etat.pos.lat, etat.pos.lon);
+  if (deja) {
+    parler("Un radar est déjà signalé tout près d'ici.", true);
+    toast("📍 Déjà signalé à proximité.");
+    return;
+  }
+  etat.radars = [...(etat.radars || []), radars[0]];
+  if (etat.route) etat.route.zonesDanger = zonesDeDanger(etat.radars, etat.route.coords, etat.route.cum, etat.route.limites);
+  parler("Radar enregistré. Vous serez prévenu la prochaine fois.", true);
+  toast("📍 Radar enregistré pour vos prochains trajets.");
 }
 
 // Aires et bornes sur autoroute / voie express : chargées une fois (et
@@ -1722,6 +1747,7 @@ function actionMenu(action) {
     setTimeout(() => etat && $("ev-nav-alerte").textContent.startsWith("🛟") && afficherAlerte(null), 8000);
   }
   else if (action === "secours") afficherSecours();
+  else if (action === "radar") signalerRadarIci();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
   else if (action === "aide") {
     afficherAlerte("🎤 En roulant : « prochaine borne ? », « trouve un café », « où me garer », « autre borne », « route barrée ». Répondez « oui » / « non » aux questions.", null, "info");
@@ -2013,6 +2039,9 @@ async function commandeVocale() {
       signalerProbleme("à la voix");
       parler("C'est noté. Envoyez le rapport à l'arrêt : Profil, aide, signaler un problème.", true);
       break;
+    case "radar":
+      signalerRadarIci();
+      break;
     case "batterie":
       parler(`Batterie estimée : ${Math.round(batterieEstimee())} pour cent.`, true);
       break;
@@ -2263,8 +2292,12 @@ function changerVue(nouvelle) {
 
 async function basculerVue() {
   if (!etat || etat.basculeEnCours) return;
-  etat.basculeEnCours = true;
   const vers3D = vue !== carte3D;
+  if (vers3D && etat.prefs.modeEco) {
+    afficherAlerte("🔋 Mode éco actif : la 3D reste désactivée pour économiser la batterie. Désactive le mode éco dans Profil pour la retrouver.", null, "info");
+    return;
+  }
+  etat.basculeEnCours = true;
   sauverReglages({ vue_3d: vers3D });
   let nouvelle = carte2D;
   if (vers3D) {
@@ -2376,6 +2409,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       reponsesVoix: reglages.reponses_voix !== false,
       prechauffage: reglages.prechauffage !== false,
       pauseMiParcours: reglages.pause_mi_parcours !== false,
+      modeEco: reglages.mode_eco === true,
     },
     sensDeMarche: true,
     suivi: true,
@@ -2413,7 +2447,11 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-instruction").textContent = "Calcul du guidage…";
   afficherAlerte(null);
   history.pushState({ navigation: true }, "");
-  const veut3D = lireReglages().vue_3d !== false;
+  // Mode éco : la 2D (Leaflet, tuiles raster simples) consomme bien moins
+  // de batterie que la 3D (WebGL, bâtiments en relief, caméra animée en
+  // continu) -- le tracé, la flèche et le guidage restent tout aussi
+  // visibles, seul le rendu change. Demande explicite de l'utilisateur.
+  const veut3D = lireReglages().vue_3d !== false && !etat.prefs.modeEco;
   if (veut3D) $("ev-nav-instruction").textContent = "Préparation de la vue 3D…";
   vue = veut3D && (await carte3D.preparer(optionsCarte3D())) ? carte3D : carte2D;
   if (!etat) return;

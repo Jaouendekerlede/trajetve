@@ -4,6 +4,7 @@
 // serveur qui centraliserait quoi que ce soit.
 
 import { STORAGE_KEYS, PROFIL_PAR_DEFAUT, MULTIPLICATEURS_SAISON } from "./config.js";
+import { haversineKm } from "./geo.js";
 
 const MAX_HISTORIQUE_TRAJETS = 50;
 const MAX_TRAJETS_FAVORIS = 30;
@@ -331,6 +332,33 @@ export function rectanglesZonesEvitees() {
     const dLon = DEMI_COTE_ZONE_EVITEE_M / (111320 * Math.cos((lat * Math.PI) / 180));
     return { southWestCorner: { latitude: lat - dLat, longitude: lon - dLon }, northEastCorner: { latitude: lat + dLat, longitude: lon + dLon } };
   });
+}
+
+// ── Radars personnels (signalés par l'utilisateur) ──────────────────────────
+// Demande explicite : pouvoir marquer un radar connu pour être prévenu aux
+// prochains trajets. Traité par la suite EXACTEMENT comme les radars fixes
+// officiels (voir chercherRadars dans navigation.js, alertes-route.js) :
+// converti en « zone de danger » (jamais un point précis), comme la loi
+// l'autorise -- même garde-fou que pour les radars OSM, pas de raccourci.
+const MAX_RADARS_PERSONNELS = 200;
+
+export function listerRadarsPersonnels() {
+  return lireJson(STORAGE_KEYS.radarsPersonnels, []);
+}
+
+export function ajouterRadarPersonnel(lat, lon, note = "") {
+  // Pas de doublon à moins de 150 m d'un radar déjà signalé.
+  const proche = listerRadarsPersonnels().find((r) => haversineKm(r.lat, r.lon, lat, lon) < 0.15);
+  if (proche) return { deja: true, radars: listerRadarsPersonnels() };
+  const radars = [{ id: `radar_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, lat, lon, note: note.trim(), date: Date.now() }, ...listerRadarsPersonnels()].slice(0, MAX_RADARS_PERSONNELS);
+  ecrireJson(STORAGE_KEYS.radarsPersonnels, radars);
+  return { deja: false, radars };
+}
+
+export function retirerRadarPersonnel(id) {
+  const radars = listerRadarsPersonnels().filter((r) => r.id !== id);
+  ecrireJson(STORAGE_KEYS.radarsPersonnels, radars);
+  return radars;
 }
 
 // ── Où est garée la voiture (enregistré à l'arrivée d'une navigation) ───────

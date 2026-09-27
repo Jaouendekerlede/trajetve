@@ -143,6 +143,22 @@ test("carte de la région : nombre de tuiles et poids raisonnables", async () =>
   assert.equal(new Set(t).size, t.length, "pas de doublon");
 });
 
+test("radars personnels : signalés, sans doublon à moins de 150 m", () => {
+  const a1 = s.ajouterRadarPersonnel(47.27340, -2.21380);
+  assert.equal(a1.deja, false);
+  assert.equal(s.listerRadarsPersonnels().length, 1);
+  // Même endroit à ~50 m près : refusé comme doublon.
+  const a2 = s.ajouterRadarPersonnel(47.27380, -2.21380);
+  assert.equal(a2.deja, true);
+  assert.equal(s.listerRadarsPersonnels().length, 1);
+  // Un autre endroit, à plusieurs km : accepté.
+  const a3 = s.ajouterRadarPersonnel(47.30000, -2.21380);
+  assert.equal(a3.deja, false);
+  assert.equal(s.listerRadarsPersonnels().length, 2);
+  s.retirerRadarPersonnel(a3.radars[0].id);
+  assert.equal(s.listerRadarsPersonnels().length, 1);
+});
+
 test("remise à zéro : garde voiture, clés, région et journal de diagnostic, efface le reste", () => {
   localStorage.clear();
   for (const k of ["trajetve_profil", "trajetve_api_keys", "trajetve_reglages", "trajetve_favoris", "trajetve_journal", "tve_region_hors_ligne", "tve_journal_diag", "tve_conso_x", "tve_navigation_en_cours", "autre_appli"]) localStorage.setItem(k, "1");

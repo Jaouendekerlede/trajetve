@@ -2112,6 +2112,7 @@ function rendreReglagesProfil() {
   $("ev-reglage-domicile").value = reglages.adresse_domicile || "";
   $("ev-reglage-travail").value = reglages.adresse_travail || "";
   $("ev-reglage-annonce").checked = !!reglages.annonce_vocale;
+  $("ev-reglage-mode-eco").checked = reglages.mode_eco === true;
   $("ev-reglage-carte3d").value = reglages.carte_3d || "libre";
   $("ev-reglage-relief").checked = reglages.relief_3d === true;
   // Trop gourmand en 3D sur téléphone (tracé qui clignote, écran noir par
@@ -2318,6 +2319,7 @@ function cablerProfil() {
       feux: $("ev-reglage-feux").checked,
       zones_danger: $("ev-reglage-zones-danger").checked,
       pause_mi_parcours: $("ev-reglage-pause-mi-parcours").checked,
+      mode_eco: $("ev-reglage-mode-eco").checked,
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });

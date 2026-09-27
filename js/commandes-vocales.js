@@ -55,6 +55,7 @@ export function interpreterCommande(texte) {
   if (/(autre borne|changer de borne|borne (est )?(en panne|occup|hors))/.test(t)) return { action: "secours" };
   if (/(\bsos\b|urgence|accident|\bpanne\b|au secours|aidez-moi)/.test(t)) return { action: "sos" };
   if (/(signal(e|er) (un |le )?(probl[èe]me|bug)|note (ça|cela)|il y a un bug|\bbug\b)/.test(t)) return { action: "signaler" };
+  if (/(il y a un radar|signal(e|er).*radar|radar (ici|l[àa])|attention radar)/.test(t)) return { action: "radar" };
   if (/(parking|garer|stationner)/.test(t)) return { action: "parkings" };
   for (const [motif, requete] of RECHERCHES) if (motif.test(t)) return { action: "recherche", requete };
   if (/(batterie|autonomie|pourcentage)/.test(t)) return { action: "batterie" };
