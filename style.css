@@ -675,6 +675,10 @@ body.ev-bandeau-compact .ev-nav-aires { gap: 4px; }
 .ev-nav-borne strong { color: var(--cyan); }
 .ev-nav-alerte { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; background: rgba(120, 20, 38, 0.95); border: 1px solid rgba(255, 90, 110, 0.6); font-size: 14px; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 .ev-nav-alerte .ev-btn { flex-shrink: 0; padding: 8px 12px; background: rgba(255, 255, 255, 0.12); }
+/* Info discrète (bleu) : rien à faire, pas de conséquence sur la conduite
+   (ex : bascule automatique sur l'autre fournisseur de carte, rappel des
+   commandes vocales) -- ne doit pas alarmer comme une vraie alerte. */
+.ev-nav-alerte.ev-nav-alerte-info { background: rgba(20, 60, 110, 0.95); border-color: rgba(100, 170, 255, 0.6); }
 
 .ev-nav-vitesse-bloc { position: absolute; left: 12px; bottom: calc(108px + var(--securite-bas)); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .ev-nav-limite { width: 54px; height: 54px; border-radius: 50%; background: #fff; border: 6px solid #e0162b; color: #111; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); }

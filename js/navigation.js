@@ -338,7 +338,14 @@ function afficherVoies(instr) {
   zone.classList.remove("hidden");
 }
 
-function afficherAlerte(texte, bouton) {
+// niveau "alerte" (par défaut, rouge) : demande une attention/décision.
+// niveau "info" (bleu, discret) : à signaler sans inquiéter -- rien à
+// faire, pas de conséquence sur la conduite (ex : bascule automatique et
+// sans incident vers l'autre fournisseur de carte). Distinction ajoutée
+// suite au constat que la bascule OpenFreeMap s'affichait aussi
+// alarmante qu'une vraie alerte météo/batterie, alors qu'elle ne demande
+// aucune action et n'affecte pas la navigation (2026-09-27).
+function afficherAlerte(texte, bouton, niveau = "alerte") {
   const el = $("ev-nav-alerte");
   if (!texte) {
     el.classList.add("hidden");
@@ -347,6 +354,7 @@ function afficherAlerte(texte, bouton) {
   noter("alerte", texte);
   el.innerHTML = `<span>${escapeHtml(texte)}</span>${bouton ? `<button type="button" class="ev-btn" id="ev-nav-alerte-btn">${escapeHtml(bouton.libelle)}</button>` : ""}`;
   el.classList.remove("hidden");
+  el.classList.toggle("ev-nav-alerte-info", niveau === "info");
   if (bouton) $("ev-nav-alerte-btn").addEventListener("click", bouton.action);
 }
 
@@ -1716,7 +1724,7 @@ function actionMenu(action) {
   else if (action === "secours") afficherSecours();
   else if (action === "batterie") $("ev-nav-batt-btn").click();
   else if (action === "aide") {
-    afficherAlerte("🎤 En roulant : « prochaine borne ? », « trouve un café », « où me garer », « autre borne », « route barrée ». Répondez « oui » / « non » aux questions.");
+    afficherAlerte("🎤 En roulant : « prochaine borne ? », « trouve un café », « où me garer », « autre borne », « route barrée ». Répondez « oui » / « non » aux questions.", null, "info");
     setTimeout(() => etat && $("ev-nav-alerte").textContent.startsWith("🎤 En roulant") && afficherAlerte(null), 15000);
   }
 }
@@ -2212,7 +2220,7 @@ function signalerRemplacementCarte() {
   const texte = carte3D.dernierAvertissement();
   if (!texte) return;
   const message = `ℹ️ ${texte}.`;
-  afficherAlerte(message);
+  afficherAlerte(message, null, "info");
   setTimeout(() => {
     if (etat && $("ev-nav-alerte").textContent === message) afficherAlerte(null);
   }, 12000);
