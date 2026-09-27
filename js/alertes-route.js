@@ -45,7 +45,7 @@ export function radarsSurTrace(radars, coords, cum) {
   const surTrace = [];
   for (const r of radars) {
     const p = projeterSurTrace(r.lat, r.lon, coords, cum);
-    if (p.d <= 40) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset });
+    if (p.d <= 40) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset, type: r.type || "" });
   }
   return surTrace;
 }

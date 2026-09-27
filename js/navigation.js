@@ -26,7 +26,7 @@ import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitial
 // Réexportés pour les autres modules (ui.js, essais).
 export { traceRestante, dessinVoies } from "./nav-outils.js";
 
-import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe } from "./osm-route.js";
+import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe, LABELS_TYPE_RADAR } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
 import { zonesDeDanger, radarsSurTrace, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre } from "./geo.js";
@@ -632,7 +632,8 @@ function verifierApprocheRadar() {
       const cle = `${Math.round(r.offset)}|${seuil}`;
       if (etat.radarsAnnonces.has(cle)) continue;
       etat.radarsAnnonces.add(cle);
-      parler(`Radar dans ${seuil} mètres.`, true);
+      const nom = LABELS_TYPE_RADAR[r.type] || "radar";
+      parler(`${nom.charAt(0).toUpperCase()}${nom.slice(1)} dans ${seuil} mètres.`, true);
       if (etat.prefs.bip) bip();
     }
   }

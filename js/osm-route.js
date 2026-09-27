@@ -43,29 +43,41 @@ function rectanglesLeLongDu(coords, marge = MARGE_RECTANGLE_DEG, parRectangle = 
   return rectangles;
 }
 
-// Complément à OpenStreetMap : liste officielle "Radars automatiques"
-// (data.gouv.fr, ministère de l'Intérieur) -- figée depuis octobre 2018
-// (jamais mise à jour depuis, vérifié), mais les radars fixes/feu rouge
-// qu'elle liste sont pour l'essentiel toujours en place (un radar fixe est
-// rarement démonté) ; elle comble donc les trous d'OSM sur les
-// installations plus anciennes. Les radars posés après 2018 ne peuvent
-// venir que d'OSM. CORS ouvert (vérifié), contrairement au site
-// radars.securite-routiere.gouv.fr (l'outil officiel "temps réel", lui
-// bloqué pour une appli sans serveur).
-const URL_RADARS_GOUV = "https://static.data.gouv.fr/resources/radars-automatiques/20181025-141231/radars.csv";
+// Complément à OpenStreetMap : liste officielle "Radars fixes en France"
+// (data.gouv.fr, ministère de l'Intérieur), mise à jour en décembre 2025
+// (bien plus récente que l'ancien jeu figé depuis 2018 utilisé avant --
+// l'utilisateur a trouvé ce lien le 2026-09-27). CORS ouvert (vérifié),
+// contrairement au site radars.securite-routiere.gouv.fr (l'outil officiel
+// "temps réel", lui bloqué pour une appli sans serveur). Fichier
+// point-virgule, encodage Latin-1 -- sans conséquence ici : aucune des
+// colonnes utilisées (Type de radar, VMA, Latitude, Longitude) ne contient
+// de caractère accentué, seul "Numéro de radar" (non utilisé) en a.
+const URL_RADARS_GOUV = "https://static.data.gouv.fr/resources/liste-des-radars-fixes-en-france/20251230-134204/jeu-de-donnees-liste-des-radars-fixes-en-france-12-2025.csv";
 const CACHE_RADARS_GOUV = "trajetve-radars-gouv";
-const DUREE_RADARS_GOUV_MS = 30 * 24 * 3600 * 1000; // jeu de données figé : pas la peine de revérifier souvent
+const DUREE_RADARS_GOUV_MS = 30 * 24 * 3600 * 1000; // fichier figé à cette date : pas la peine de revérifier souvent
 let radarsGouv = null;
 let chargementRadarsGouv = null;
 
+// Codes officiels -> libellé français, pour l'annonce vocale ("Radar de feu
+// rouge dans 100 mètres" plutôt qu'un "Radar" générique). Seuls les codes
+// dont le sens est sûr sont traduits ; les autres restent "radar" pour ne
+// jamais annoncer un type incertain.
+export const LABELS_TYPE_RADAR = {
+  ETF: "radar fixe",
+  ETD: "radar discriminant",
+  ETVM: "radar de vitesse moyenne",
+  ETFR: "radar de feu rouge",
+  ETPN: "radar de passage à niveau",
+};
+
 function lireRadarsGouvCsv(texte) {
   const lignes = texte.split("\n");
-  const entete = lignes[0].split(",");
+  const entete = lignes[0].split(";").map((c) => c.trim());
   const col = (nom) => entete.indexOf(nom);
-  const [cLat, cLon, cType] = [col("latitude"), col("longitude"), col("type")];
+  const [cLat, cLon, cType] = [col("Latitude"), col("Longitude"), col("Type de radar")];
   const radars = [];
   for (let i = 1; i < lignes.length; i++) {
-    const v = lignes[i].split(",");
+    const v = lignes[i].split(";");
     if (v.length <= Math.max(cLat, cLon)) continue;
     const lat = Number(v[cLat]);
     const lon = Number(v[cLon]);
@@ -111,11 +123,14 @@ async function radarsGouvPresDuTrace(coords, margeDeg = 0.05) {
   return tous.filter((r) => r.lat >= latMin && r.lat <= latMax && r.lon >= lonMin && r.lon <= lonMax);
 }
 
-// Même radar physique repéré par les deux sources : à moins de 100 m, on
-// ne le garde qu'une fois (celui d'OSM, potentiellement mieux placé/à jour).
+// Même radar physique repéré par les deux sources : à moins de 100 m, on ne
+// le garde qu'une fois -- en préférant la version officielle (avec son
+// type précis, ETF/ETD/ETFR...) à celle d'OSM (position seule, sans type).
+// Les radars uniquement dans OSM (installations trop récentes pour figurer
+// dans le fichier officiel) restent inclus.
 function fusionnerRadars(osm, gouv) {
-  const dedoublonnes = gouv.filter((g) => !osm.some((o) => haversineKm(o.lat, o.lon, g.lat, g.lon) < 0.1));
-  return [...osm, ...dedoublonnes];
+  const osmSeuls = osm.filter((o) => !gouv.some((g) => haversineKm(o.lat, o.lon, g.lat, g.lon) < 0.1));
+  return [...gouv, ...osmSeuls];
 }
 
 export async function radarsLeLongDu(coords) {
