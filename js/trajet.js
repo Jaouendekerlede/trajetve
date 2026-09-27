@@ -7,7 +7,7 @@ import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appli
 import { resoudreLieu, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { echangeursDuTrajet } from "./panneau-nav.js";
-import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km } from "./planner.js";
+import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km, kmSurTrace } from "./planner.js";
 import { construireProfilEnergie, fonctionsEnergie, fonctionsEnergieConstante } from "./energie.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { rechercherBornesProches, rechercherBornesZone, borneCompatible } from "./ocm.js";
@@ -57,41 +57,51 @@ async function calculerItineraire(depart, destination, opts) {
   if (b.erreur) return { ok: false, erreur: b.erreur };
 
   const departMs = departPrevuMs(opts);
-  const it = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, {
+  const optsRoute = {
     eviterPeages: opts.eviter_peages,
     eviterFerries: opts.eviter_ferries,
     eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
     eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
     // TomTom prévoit alors le trafic à cette heure-là
     departAt: departMs > Date.now() + 5 * 60000 ? new Date(departMs).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
-    // Aire préférée imposée : l'itinéraire y passe (pas d'alternatives alors).
-    etapes: opts.arret_impose ? [{ lat: opts.arret_impose.lat, lon: opts.arret_impose.lon }] : [],
-    maxAlternatives: opts.avec_alternatives && !opts.trace_imposee && !opts.arret_impose ? MAX_ALTERNATIVES : 0,
     traceImposee: opts.trace_imposee,
     zonesEvitees: rectanglesZonesEvitees(),
     // Pour la feuille de route (sorties et échangeurs du trajet).
     instructions: true,
-  });
-  if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
+  };
+
+  let it;
+  let aireImposee = null;
+  if (opts.arret_impose) {
+    // L'aire préférée est-elle déjà sur le trajet le plus rapide (juste en
+    // léger retrait, comme tout parking), ou faut-il vraiment en sortir
+    // (autre côté de l'autoroute) ? Mesuré sur un cas réel (Aire de la
+    // Parthenaise, A83, Saint-Nazaire → Bordeaux) : le trajet libre passe à
+    // 180 m de la borne, mais forcer TomTom à s'y arrêter (étape) lui
+    // faisait quand même faire 46 km de plus -- un artefact du point
+    // raccroché au mauvais côté de la chaussée, pas un vrai détour. On ne
+    // force donc l'étape (et son vrai risque de détour) que si l'aire n'est
+    // pas déjà sur le trajet libre (même seuil que le planificateur, 2 km).
+    const libre = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, { ...optsRoute, maxAlternatives: 0 });
+    if (libre.erreur) return { ok: false, erreur: messageTomTom(libre.erreur, a.nom, b.nom) };
+    if (kmSurTrace(libre.coords, opts.arret_impose.lat, opts.arret_impose.lon).ecartKm <= 2) {
+      it = libre;
+    } else {
+      it = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, {
+        ...optsRoute,
+        etapes: [{ lat: opts.arret_impose.lat, lon: opts.arret_impose.lon }],
+        maxAlternatives: 0,
+      });
+      if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
+      aireImposee = { nom: opts.arret_impose.nom, detour_km: arrondi1(it.summary.lengthInMeters / 1000 - libre.summary.lengthInMeters / 1000), detour_min: Math.round(it.summary.travelTimeInSeconds / 60 - libre.summary.travelTimeInSeconds / 60) };
+    }
+  } else {
+    it = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, { ...optsRoute, maxAlternatives: opts.avec_alternatives && !opts.trace_imposee ? MAX_ALTERNATIVES : 0 });
+    if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
+  }
 
   const itin = itineraireDepuisRoute(it, a, b, departMs, !!opts.trace_imposee && it.traceSuivie);
-  // Aire préférée imposée : combien de km et de minutes elle ajoute au
-  // trajet direct (aire de l'autre côté de l'autoroute → demi-tour lointain).
-  if (opts.arret_impose) {
-    try {
-      const direct = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, {
-        eviterPeages: opts.eviter_peages,
-        eviterFerries: opts.eviter_ferries,
-        eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
-        eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
-        departAt: departMs > Date.now() + 5 * 60000 ? new Date(departMs).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
-        zonesEvitees: rectanglesZonesEvitees(),
-      });
-      if (!direct.erreur) itin.aire_imposee = { nom: opts.arret_impose.nom, detour_km: arrondi1(itin.distance_km - direct.summary.lengthInMeters / 1000), detour_min: Math.round(itin.duree_min - direct.summary.travelTimeInSeconds / 60) };
-    } catch {
-      // Mesure du détour impossible : le trajet reste calculé, sans avertissement.
-    }
-  }
+  if (aireImposee) itin.aire_imposee = aireImposee;
   itin._alternatives = it.alternatives.map((r) => itineraireDepuisRoute(r, a, b, departMs, true));
   return itin;
 }
