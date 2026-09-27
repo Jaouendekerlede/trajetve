@@ -248,22 +248,32 @@ async function planifierSurItineraire(itin, chargePct, opts) {
   if (meteoInfo) resultat.meteo_info = meteoInfo;
   // Route réelle passant par les bornes prévues (celle que suivra la
   // navigation) : plus longue que le trajet direct si une borne est de
-  // l'autre côté de l'autoroute. On le mesure pour le dire.
+  // l'autre côté de l'autoroute. On le mesure pour le dire -- mais
+  // seulement pour les bornes qui ne sont pas déjà sur le trajet direct
+  // (même seuil que l'aire imposée, v53) : forcer TomTom à s'arrêter pile
+  // sur un point déjà à quelques dizaines de mètres de la route peut quand
+  // même lui faire router des dizaines de km de plus (même artefact du
+  // point raccroché au mauvais côté de la chaussée, pas un vrai détour).
+  // Mesuré sur un cas réel : "Aire de Saint Caprais (direction Bordeaux)",
+  // à 80 m du trajet direct, donnait quand même +46 km en étape forcée.
   if (resultat.ok && resultat.arrets?.length && !opts.trace_imposee) {
-    try {
-      const avecArrets = await calculerItineraireTomTom(getApiKeys().tomtom, itin.from_lat, itin.from_lon, itin.to_lat, itin.to_lon, {
-        etapes: resultat.arrets.map((a) => ({ lat: a.lat, lon: a.lon })),
-        eviterPeages: opts.eviter_peages,
-        eviterFerries: opts.eviter_ferries,
-        eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
-        eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
-        zonesEvitees: rectanglesZonesEvitees(),
-      });
-      if (!avecArrets.erreur) {
-        resultat.detour_arrets = { km: arrondi1(avecArrets.summary.lengthInMeters / 1000 - itin.distance_km), min: Math.round(avecArrets.summary.travelTimeInSeconds / 60 - itin.duree_min) };
+    const arretsHorsTrajet = resultat.arrets.filter((a) => kmSurTrace(itin.coords, a.lat, a.lon).ecartKm > 2);
+    if (arretsHorsTrajet.length) {
+      try {
+        const avecArrets = await calculerItineraireTomTom(getApiKeys().tomtom, itin.from_lat, itin.from_lon, itin.to_lat, itin.to_lon, {
+          etapes: arretsHorsTrajet.map((a) => ({ lat: a.lat, lon: a.lon })),
+          eviterPeages: opts.eviter_peages,
+          eviterFerries: opts.eviter_ferries,
+          eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
+          eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
+          zonesEvitees: rectanglesZonesEvitees(),
+        });
+        if (!avecArrets.erreur) {
+          resultat.detour_arrets = { km: arrondi1(avecArrets.summary.lengthInMeters / 1000 - itin.distance_km), min: Math.round(avecArrets.summary.travelTimeInSeconds / 60 - itin.duree_min) };
+        }
+      } catch {
+        // Mesure impossible : pas d'avertissement, le plan reste valable.
       }
-    } catch {
-      // Mesure impossible : pas d'avertissement, le plan reste valable.
     }
   }
 

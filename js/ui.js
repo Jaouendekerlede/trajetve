@@ -1217,6 +1217,7 @@ function etapesHtml(p) {
             <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
             <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique)}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            ${a.pct_evite_arret ? `<div class="ev-hint">💡 Charger jusqu'à ${nombre(a.pct_evite_arret.pct)} % ici aurait évité l'arrêt suivant, mais aurait pris ${formaterMinutes(a.pct_evite_arret.cout_min)} de plus au total.</div>` : ""}
           </div>
           ${route(a.km_depuis_depart, suivant)}
         </div>

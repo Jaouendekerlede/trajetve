@@ -152,6 +152,21 @@ test("un seul arrêt plus long plutôt qu'un mini-arrêt de plus : la charge dé
   assert.ok(r.pct_batterie_arrivee >= 15, `arrivée à ${r.pct_batterie_arrivee} %`);
 });
 
+test("2 arrêts malgré une charge plus haute possible : explique pourquoi (pct_evite_arret)", async () => {
+  // Charger plus haut au 1er arrêt éviterait le second, mais coûterait plus
+  // de temps au total (fin de courbe de charge lente) -- l'appli doit le
+  // dire plutôt que de laisser deviner ("pourquoi il ne me dit pas de
+  // charger à x % ?", question répétée de l'utilisateur le 2026-09-27).
+  bornesAutour((lat, lon) => [poiOcm({ nom: "Aire rapide", lat: lat + 0.002, lon, kw: 150 })]);
+  const trace = Array.from({ length: 66 }, (_, i) => [0, i / 10]); // ~720 km
+  const r = await calculerTrajetElectrique("cle", 720, trace, 100, PROFIL, { margeSecuritePct: 15, cibleRechargePct: 80 });
+  assert.equal(r.ok, true, r.erreur);
+  assert.equal(r.nb_arrets, 2, `${r.nb_arrets} arrêts`);
+  assert.ok(r.arrets[0].pct_evite_arret, "pct_evite_arret absent sur le 1er arrêt");
+  assert.ok(r.arrets[0].pct_evite_arret.pct > r.arrets[0].pct_depart_borne, "le pourcentage évité doit être plus haut que la charge réellement faite");
+  assert.ok(r.arrets[0].pct_evite_arret.cout_min > 0, "le coût supplémentaire doit être positif");
+});
+
 test("aire de l'autre sens de l'autoroute : écartée au profit de celle du bon côté", async () => {
   // Tracé vers le nord : la droite du sens de marche est l'est (longitude +).
   bornesAutour((lat, lon) => [

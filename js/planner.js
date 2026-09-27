@@ -444,7 +444,14 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     const finiraitApres = kmImpose === null || kmImpose <= km;
     if (finiraitApres && atteignable(km, cibleRechargePct) < distanceKm && besoinFinPct > pctDepart && besoinFinPct <= PLAFOND_CHARGE_UN_ARRET_PCT) {
       const haut = construire(besoinFinPct);
-      if (haut.tempsMin + futurMinDe(haut) < plan.tempsMin + futurMinDe(plan) - 1) return haut;
+      const coutSupplementaireMin = Math.round(haut.tempsMin + futurMinDe(haut) - (plan.tempsMin + futurMinDe(plan)));
+      if (coutSupplementaireMin < -1) return haut;
+      // Chargé plus haut ici, l'arrêt suivant aurait été inutile -- mais ça
+      // aurait pris plus longtemps au total (fin de charge lente) : on le
+      // garde pour l'expliquer à l'écran plutôt que de laisser deviner
+      // pourquoi ce n'est pas fait (question répétée de l'utilisateur,
+      // 2026-09-27 : "pourquoi il ne me dit pas de charger à x % ?").
+      if (coutSupplementaireMin > 0) plan.pct_evite_arret = { pct: besoinFinPct, cout_min: coutSupplementaireMin };
     }
     return plan;
   }
@@ -579,6 +586,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
       temps_charge_min: Math.round(tempsChargeMin),
       pct_arrivee_borne: chargeALaBornePct,
       pct_depart_borne: departBornePct,
+      pct_evite_arret: plan.pct_evite_arret || null,
       operateur: borne.operateur,
       statut: borne.statut,
       nombre_points: borne.nombre_points,
