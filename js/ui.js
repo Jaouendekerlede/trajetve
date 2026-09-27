@@ -2108,6 +2108,16 @@ function rendreReglagesProfil() {
   $("ev-reglage-annonce").checked = !!reglages.annonce_vocale;
   $("ev-reglage-carte3d").value = reglages.carte_3d || "libre";
   $("ev-reglage-relief").checked = reglages.relief_3d === true;
+  // Trop gourmand en 3D sur téléphone (tracé qui clignote, écran noir par
+  // intermittence, confirmé par l'utilisateur le 2026-09-27) : la préférence
+  // reste enregistrable, mais n'est jamais appliquée sur écran tactile
+  // (voir carte3d.js) -- désactivé ici pour ne pas laisser croire qu'il
+  // sert à quelque chose sur ce type d'appareil.
+  if (matchMedia("(pointer: coarse)").matches) {
+    $("ev-reglage-relief").checked = false;
+    $("ev-reglage-relief").disabled = true;
+    $("ev-reglage-relief").closest("label").title = "Indisponible sur téléphone : trop gourmand pour la 3D en conduite.";
+  }
   $("ev-reglage-jour-nuit").checked = reglages.jour_nuit_auto !== false;
   $("ev-reglage-mode-voiture").checked = reglages.mode_voiture === true;
   $("ev-reglage-taille-bandeau").value = reglages.taille_bandeau === "grand" ? "grand" : "compact";

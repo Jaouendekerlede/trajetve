@@ -383,6 +383,21 @@ function panne(raison) {
   for (const cb of surPannes) cb(raison);
 }
 
+// Ciel dégradé au-dessus de l'horizon (au lieu du noir par défaut de
+// MapLibre) : bien visible en vue inclinée à l'approche d'un rond-point ou
+// d'une bretelle, où le sommet de l'écran montre le vide au-dessus de la
+// carte. Demande explicite de l'utilisateur le 2026-09-27.
+function ajouterCiel(sombre) {
+  if (carte.getLayer("ciel")) carte.removeLayer("ciel");
+  carte.addLayer({
+    id: "ciel",
+    type: "sky",
+    paint: sombre
+      ? { "sky-type": "gradient", "sky-gradient": ["interpolate", ["linear"], ["sky-radial-progress"], 0.5, "#0b1530", 1, "#000814"], "sky-gradient-center": [0, 0], "sky-gradient-radius": 90, "sky-opacity": 1 }
+      : { "sky-type": "gradient", "sky-gradient": ["interpolate", ["linear"], ["sky-radial-progress"], 0.5, "#cfe8ff", 1, "#4d90d9"], "sky-gradient-center": [0, 0], "sky-gradient-radius": 90, "sky-opacity": 1 },
+  });
+}
+
 // Relief du terrain : altitudes « Terrain Tiles » (données ouvertes
 // hébergées par AWS, sans clé). Un peu exagéré pour être perceptible.
 const TUILES_RELIEF = "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png";
@@ -478,7 +493,14 @@ async function creerCarte(fournisseur, fond, relief) {
   });
   ajouterCouchesTrajet();
   ajouterCouchesExplo();
-  if (relief && fond !== "satellite") ajouterRelief();
+  ajouterCiel(fond === "sombre");
+  // Relief du terrain : confirmé trop gourmand sur téléphone (webGL saturé,
+  // tracé qui clignote, écran qui devient noir par intermittence -- signalé
+  // par l'utilisateur le 2026-09-27, résolu en désactivant ce réglage).
+  // Bloqué ici plutôt que seulement dans le réglage : même si la préférence
+  // reste enregistrée à true (réglage déjà fait avant ce correctif, ou
+  // repris d'un autre appareil), un écran tactile ne l'active jamais.
+  if (relief && fond !== "satellite" && !matchMedia("(pointer: coarse)").matches) ajouterRelief();
   appliquerTrafic();
   carte.on("dragstart", (e) => e.originalEvent && surDeplacementManuel?.());
   carte.on("zoomstart", (e) => e.originalEvent && surDeplacementManuel?.());
