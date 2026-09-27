@@ -1931,8 +1931,14 @@ function cablerFavoris() {
     },
   );
   $("ev-historique-clear-btn").addEventListener("click", () => {
-    if (confirm("Effacer tout l'historique des trajets ?")) {
+    // Efface aussi une éventuelle reprise en attente (trajet de test coupé
+    // sans passer par "Arrêter") : sans ça, la bannière "Reprendre ?"
+    // continuerait à proposer un trajet dont l'historique vient d'être
+    // effacé -- demande explicite de l'utilisateur le 2026-09-27, après une
+    // session d'essais où elle réapparaissait à chaque ouverture.
+    if (confirm("Effacer tout l'historique des trajets, et oublier un trajet en attente de reprise ?")) {
       effacerHistoriqueTrajets();
+      oublierNavigationInterrompue();
       renderFavoris();
     }
   });
@@ -2170,6 +2176,29 @@ function expliquerRefusTomTom(r) {
   return `erreur HTTP ${r.statut}${r.message ? ` (« ${r.message} »)` : ""}`;
 }
 
+// Bouton manuel "🔍 Tester ma clé TomTom" ET vérification automatique après
+// enregistrement d'une clé modifiée (voir ev-profil-save-btn) : la clé
+// « VE » de l'utilisateur (routage seulement, sans carte) est passée
+// inaperçue toute une journée le 2026-09-27 faute d'avoir pensé à tester
+// après l'avoir changée -- ce test tourne désormais tout seul à ce moment-là.
+async function testerCleTomTom(cle) {
+  const zone = $("ev-tester-tomtom-resultat");
+  zone.classList.remove("hidden");
+  if (!cle) {
+    zone.textContent = "Saisis d'abord ta clé TomTom.";
+    return;
+  }
+  const bouton = $("ev-tester-tomtom-btn");
+  bouton.disabled = true;
+  zone.textContent = "⏳ Test en cours…";
+  try {
+    const resultats = await diagnostiquerCleTomTom(cle);
+    zone.innerHTML = resultats.map((r) => `<div>${r.ok ? "✅" : "❌"} <strong>${escapeHtml(r.service)}</strong> : ${escapeHtml(expliquerRefusTomTom(r))}</div>`).join("");
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
 // ── Carte de la région hors ligne (Profil) ──────────────────────────────────
 
 let regionEnCours = false;
@@ -2239,24 +2268,7 @@ function cablerProfil() {
     e.target.value = "";
     if (fichier && confirm("Remplacer toutes les données de ce téléphone par celles de la sauvegarde ?")) importerSauvegarde(fichier);
   });
-  $("ev-tester-tomtom-btn").addEventListener("click", async () => {
-    const cle = $("ev-cle-tomtom").value.trim() || getApiKeys().tomtom;
-    const zone = $("ev-tester-tomtom-resultat");
-    zone.classList.remove("hidden");
-    if (!cle) {
-      zone.textContent = "Saisis d'abord ta clé TomTom.";
-      return;
-    }
-    const bouton = $("ev-tester-tomtom-btn");
-    bouton.disabled = true;
-    zone.textContent = "⏳ Test en cours…";
-    try {
-      const resultats = await diagnostiquerCleTomTom(cle);
-      zone.innerHTML = resultats.map((r) => `<div>${r.ok ? "✅" : "❌"} <strong>${escapeHtml(r.service)}</strong> : ${escapeHtml(expliquerRefusTomTom(r))}</div>`).join("");
-    } finally {
-      bouton.disabled = false;
-    }
-  });
+  $("ev-tester-tomtom-btn").addEventListener("click", () => testerCleTomTom($("ev-cle-tomtom").value.trim() || getApiKeys().tomtom));
   $("ev-profil-save-btn").addEventListener("click", () => {
     const avaitCleOcm = !!getApiKeys().openChargeMap;
     const connecteurs = $("ev-profil-connecteurs").value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -2309,7 +2321,10 @@ function cablerProfil() {
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
-    if (getApiKeys().tomtom !== ancienneCleTomTom) rechargerFond();
+    if (getApiKeys().tomtom !== ancienneCleTomTom) {
+      rechargerFond();
+      if (getApiKeys().tomtom) testerCleTomTom(getApiKeys().tomtom);
+    }
     rendreProfil();
     majBandeauCles();
     toast("✅ Profil et réglages enregistrés");
