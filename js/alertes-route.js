@@ -35,24 +35,30 @@ export function longueurZoneDanger(limiteKmh) {
   return 300;
 }
 
-// radars : [{ lat, lon }] ; garde ceux à moins de 40 m du tracé (les autres
-// sont sur une autre route), avec leur position exacte le long du tracé --
-// utile à la fois pour les marqueurs sur la carte et les avertissements
-// gradués façon Radarbot (200/100/50 m), séparément de zonesDeDanger()
-// ci-dessous qui, elle, fusionne tout en zones larges pour l'affichage
-// "zone de danger" légal.
+// radars : [{ lat, lon }] ; garde ceux à moins de RAYON_RADAR_TRACE_M du
+// tracé (les autres sont sur une autre route), avec leur position exacte le
+// long du tracé -- utile à la fois pour les marqueurs sur la carte et les
+// avertissements gradués façon Radarbot (200/100/50 m), séparément de
+// zonesDeDanger() ci-dessous qui, elle, fusionne tout en zones larges pour
+// l'affichage "zone de danger" légal.
+// 40 m d'origine trop strict : un radar de feu rouge signalé à Auray
+// (coordonnées officielles gouvernement) manquait à l'affichage -- carrefour
+// large, plusieurs voies, coordonnée officielle pas forcément exactement sur
+// la trace calculée. Demande explicite de l'utilisateur le 2026-09-28.
+export const RAYON_RADAR_TRACE_M = 60;
+
 export function radarsSurTrace(radars, coords, cum) {
   const surTrace = [];
   for (const r of radars) {
     const p = projeterSurTrace(r.lat, r.lon, coords, cum);
-    if (p.d <= 40) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset, type: r.type || "" });
+    if (p.d <= RAYON_RADAR_TRACE_M) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset, type: r.type || "" });
   }
   return surTrace;
 }
 
 // radars : [{ lat, lon }] ; limites : limitation de chaque point du tracé.
 // Renvoie les zones [{ debut, fin, limite }] (m), fusionnées si elles se
-// chevauchent. Un radar à plus de 40 m du tracé est sur une autre route.
+// chevauchent. Un radar plus loin que RAYON_RADAR_TRACE_M est sur une autre route.
 export function zonesDeDanger(radars, coords, cum, limites) {
   const zones = [];
   for (const r of radarsSurTrace(radars, coords, cum)) {

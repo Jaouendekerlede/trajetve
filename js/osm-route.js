@@ -115,17 +115,27 @@ async function chargerRadarsGouv() {
   if (radarsGouv) return radarsGouv;
   chargementRadarsGouv ??= (async () => {
     try {
+      // L'appel à l'API du jeu de données est léger (JSON, pas le CSV entier)
+      // : on le refait à chaque session pour savoir si le fichier officiel a
+      // changé, même si le cache local n'a pas encore atteint 6 mois -- sans
+      // ça, une nouvelle publication du fichier (ou un changement de format
+      // dans une mise à jour de l'appli) resterait invisible jusqu'à
+      // expiration du cache. Repéré le 2026-09-28 : un radar de feu rouge
+      // bien présent dans le fichier officiel n'apparaissait pas, probable
+      // cache figé sur une version antérieure au passage au fichier de
+      // décembre 2025 (v68).
+      const url = await urlRadarsGouvActuelle();
       const cache = typeof caches !== "undefined" ? await caches.open(CACHE_RADARS_GOUV) : null;
       const garde = await cache?.match("radars.json");
-      if (garde && Date.now() - Number(garde.headers.get("x-date")) < DUREE_RADARS_GOUV_MS) {
+      const gardeDate = garde && Number(garde.headers.get("x-date"));
+      if (garde && garde.headers.get("x-url") === url && gardeDate && Date.now() - gardeDate < DUREE_RADARS_GOUV_MS) {
         radarsGouv = await garde.json();
         return radarsGouv;
       }
-      const url = await urlRadarsGouvActuelle();
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       radarsGouv = lireRadarsGouvCsv(await resp.text());
-      await cache?.put("radars.json", new Response(JSON.stringify(radarsGouv), { headers: { "content-type": "application/json", "x-date": String(Date.now()) } }));
+      await cache?.put("radars.json", new Response(JSON.stringify(radarsGouv), { headers: { "content-type": "application/json", "x-date": String(Date.now()), "x-url": url } }));
       return radarsGouv;
     } catch (e) {
       console.warn("[RADARS_GOUV] Liste officielle indisponible", e);
