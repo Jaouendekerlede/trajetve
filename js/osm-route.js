@@ -90,12 +90,14 @@ let chargementRadarsGouv = null;
 export const LABELS_TYPE_RADAR = {
   ETF: "radar fixe",
   ETD: "radar discriminant",
+  ETT: "radar fixe nouvelle génération",
+  ETU: "radar urbain nouvelle génération",
   ETVM: "radar de vitesse moyenne",
   ETFR: "radar de feu rouge",
   ETPN: "radar de passage à niveau",
 };
 
-function lireRadarsGouvCsv(texte) {
+export function lireRadarsGouvCsv(texte) {
   const lignes = texte.split("\n");
   const entete = lignes[0].split(";").map((c) => c.trim());
   const col = (nom) => entete.indexOf(nom);
