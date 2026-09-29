@@ -1,7 +1,7 @@
 // Profil › ☁️ Google Drive : connecter, sauvegarder, restaurer. Ensuite,
 // sauvegarde automatique à la fin de chaque trajet guidé (« Terminer »).
 
-import { $, toast, bandeau } from "./ui-commun.js";
+import { $, toast } from "./ui-commun.js";
 import { exporterDonnees, importerDonnees, lireReglages, sauverReglages } from "./storage.js";
 import { obtenirJeton, envoyerSauvegarde, lireSauvegarde, sauvegardeEstPlusPauvre } from "./drive.js";
 import { empreinteDonnees } from "./restauration.js";
@@ -82,15 +82,6 @@ export function sauvegardeApresTrajet() {
   const s = suivi();
   if (s.le && Date.now() - s.le < JOUR_MS && s.empreinte === empreinteDonnees(exporterDonnees().donnees)) return;
   sauvegarderSurDrive({ silencieux: true });
-}
-
-// À l'ouverture : plus de 7 jours sans sauvegarde Drive → un appui suffit.
-export function proposerSauvegardeDrive() {
-  if (!lireReglages().drive_actif) return;
-  const s = suivi();
-  if (s.le && Date.now() - s.le < 7 * JOUR_MS) return;
-  if (s.empreinte && s.empreinte === empreinteDonnees(exporterDonnees().donnees)) return;
-  bandeau({ id: "ev-bandeau-drive", texte: "☁️ Sauvegarder vos données sur Google Drive ?", boutons: [{ libelle: "Plus tard", secondaire: true }, { libelle: "Sauvegarder", action: () => sauvegarderSurDrive() }] });
 }
 
 export function cablerDrive() {

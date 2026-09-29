@@ -7,7 +7,7 @@
 // qu'au premier démarrage d'une navigation en 3D.
 
 import { getApiKeys } from "./config.js";
-import { haversineKm, densifier, recalerSurRoutes, pointSurLigne } from "./geo.js";
+import { haversineKm, densifier, recalerSurRoutes, pointSurLigne, lisser } from "./geo.js";
 import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 import { svgVoiture } from "./icones-voiture.js";
@@ -401,6 +401,12 @@ function ajouterCiel(sombre) {
       ? { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 100], "sky-atmosphere-sun-intensity": 2, "sky-atmosphere-color": "#0b1530", "sky-atmosphere-halo-color": "#0b1530" }
       : { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 90], "sky-atmosphere-sun-intensity": 15, "sky-atmosphere-color": "#cfe8ff", "sky-atmosphere-halo-color": "#ffffff" },
   });
+  // Filet de sécurité : toujours noir malgré la couche "sky" -- signalé de
+  // nouveau le 2026-09-28. Le conteneur est peint de la même couleur que le
+  // ciel demandé ; avec le canevas rendu transparent (canvasContextAttributes
+  // dans creerCarte), ce fond apparaît là où MapLibre ne peint rien, quelle
+  // que soit la cause exacte du problème côté bibliothèque.
+  conteneur.style.background = sombre ? "#0b1530" : "linear-gradient(#5b9bd9, #cfe8ff 55%, #eaf6ff)";
 }
 
 // Relief du terrain : altitudes « Terrain Tiles » (données ouvertes
@@ -486,6 +492,12 @@ async function creerCarte(fournisseur, fond, relief) {
     // horizon hachée -- signalé par l'utilisateur le 2026-09-27).
     antialias: true,
     pixelRatio: matchMedia("(pointer: coarse)").matches ? Math.min(2, window.devicePixelRatio || 1) : Math.min(3, Math.max(window.devicePixelRatio || 1, 2)),
+    // Fond du canevas transparent : si la couche "sky" ne peint pas certains
+    // pixels au-dessus de l'horizon (constaté noir même avec le bon réglage
+    // -- signalé par l'utilisateur le 2026-09-28), le dégradé posé en CSS
+    // sur le conteneur (voir ajouterCiel) apparaît à la place, quelle que
+    // soit la cause exacte côté MapLibre.
+    canvasContextAttributes: { alpha: true },
   });
   // Seules les ressources du style (icônes, polices) sont attendues : les
   // tuiles arrivent ensuite.
@@ -1088,7 +1100,13 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
   recalage = null;
   cumRoute = [0];
   for (let i = 1; i < coords.length; i++) cumRoute.push(cumRoute[i - 1] + haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]));
-  carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} });
+  // Lissage à l'affichage seulement (les distances/positions ci-dessus
+  // restent calculées sur le tracé brut de TomTom) : les virages serrés
+  // (ronds-points) paraissaient anguleux, coordonnées trop espacées pour la
+  // ligne bleue -- signalé par l'utilisateur le 2026-09-28. La couleur
+  // parcouru/restant (majProgressionNavigation) se fait par dégradé GPU sur
+  // la longueur de la ligne, indépendant du nombre de points : sans risque.
+  carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: lisser(coords) }, properties: {} });
   carte.setPaintProperty("trajet-ligne", "line-gradient", DEGRADE_RESTANT);
   for (const m of marqueursRoute) m.remove();
   marqueursRoute = (arrets || []).map((a) => new maplibregl.Marker({ element: pastille(32, "rgba(79,224,255,.95)", "🔋") }).setLngLat([a.lon, a.lat]).addTo(carte));
@@ -1202,7 +1220,9 @@ export function majVoiture(lat, lon, cap) {
 // haut », la carte reste inclinée mais ne tourne plus.
 // Inclinaison de la vue en navigation : réduite près des ronds-points et
 // carrefours serrés (on distingue mieux les routes), en douceur.
-const INCLINAISON_PLATE = 22;
+// 22° d'origine jugé trop vertical par l'utilisateur (comparé à Sygic, qui
+// garde toujours un peu d'horizon) -- relevé le 2026-09-28.
+const INCLINAISON_PLATE = 40;
 let inclinaisonCible = INCLINAISON;
 let inclinaisonActuelle = INCLINAISON;
 

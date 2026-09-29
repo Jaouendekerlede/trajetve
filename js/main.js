@@ -5,7 +5,6 @@ import { afficherPresentation, retirerPresentation, presentationAutorisee, MENTI
 import { restaurerDepuisAdresse, proposerRappelSauvegarde } from "./ui-sauvegarde.js";
 import { proposerInstallation } from "./ui-installation.js";
 import { toast } from "./ui-commun.js";
-import { proposerSauvegardeDrive } from "./ui-drive.js";
 
 const DELAI_RAPPEL_SAUVEGARDE_MS = 8000;
 
@@ -28,7 +27,11 @@ if (restaures) {
   proposerInstallation({ insister: true });
 } else setTimeout(proposerRappelSauvegarde, DELAI_RAPPEL_SAUVEGARDE_MS);
 setTimeout(proposerRechargeMaison, 3000);
-setTimeout(proposerSauvegardeDrive, 12000);
+// Bandeau « Sauvegarder sur Google Drive ? » retiré : son bouton « Plus
+// tard » ne mémorisait pas le report, donc il revenait à chaque ouverture
+// tant qu'aucune sauvegarde n'avait abouti -- demande explicite de
+// l'utilisateur le 2026-09-28. La sauvegarde Drive reste disponible à la
+// main dans Profil.
 
 // Ouverte par un raccourci de l'icône (appui long sur l'icône du téléphone).
 const actionRaccourci = new URLSearchParams(location.search).get("action");
