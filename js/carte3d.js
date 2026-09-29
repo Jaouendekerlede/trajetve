@@ -385,28 +385,34 @@ function panne(raison) {
   for (const cb of surPannes) cb(raison);
 }
 
-// Ciel dégradé au-dessus de l'horizon (au lieu du noir par défaut de
-// MapLibre) : bien visible en vue inclinée à l'approche d'un rond-point ou
-// d'une bretelle, où le sommet de l'écran montre le vide au-dessus de la
-// carte. Demande explicite de l'utilisateur le 2026-09-27.
+// Ciel MapLibre visible au-dessus de l'horizon quand la carte est inclinée.
+// Il se configure au niveau du style, pas comme une couche cartographique.
 function ajouterCiel(sombre) {
-  if (carte.getLayer("ciel")) carte.removeLayer("ciel");
-  // "sky-type": "gradient" ne s'affichait pas (resté noir, confirmé par
-  // capture d'écran) -- le type "atmosphere" est celui documenté et
-  // démontré par MapLibre, plus fiable.
-  carte.addLayer({
-    id: "ciel",
-    type: "sky",
-    paint: sombre
-      ? { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 100], "sky-atmosphere-sun-intensity": 2, "sky-atmosphere-color": "#0b1530", "sky-atmosphere-halo-color": "#0b1530" }
-      : { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 90], "sky-atmosphere-sun-intensity": 15, "sky-atmosphere-color": "#cfe8ff", "sky-atmosphere-halo-color": "#ffffff" },
-  });
-  // Filet de sécurité : toujours noir malgré la couche "sky" -- signalé de
-  // nouveau le 2026-09-28. Le conteneur est peint de la même couleur que le
-  // ciel demandé ; avec le canevas rendu transparent (canvasContextAttributes
-  // dans creerCarte), ce fond apparaît là où MapLibre ne peint rien, quelle
-  // que soit la cause exacte du problème côté bibliothèque.
-  conteneur.style.background = sombre ? "#0b1530" : "linear-gradient(#5b9bd9, #cfe8ff 55%, #eaf6ff)";
+  carte.setSky(
+    sombre
+      ? {
+          "sky-color": "#1b3152",
+          "horizon-color": "#6884a3",
+          "fog-color": "#1b3152",
+          "sky-horizon-blend": 0.35,
+          "horizon-fog-blend": 0.5,
+          "fog-ground-blend": 0.2,
+        }
+      : {
+          "sky-color": "#8ac8f5",
+          "horizon-color": "#e8f5ff",
+          "fog-color": "#cfe8ff",
+          "sky-horizon-blend": 0.35,
+          "horizon-fog-blend": 0.5,
+          "fog-ground-blend": 0.2,
+        },
+  );
+  // Filet de sécurité : rendu noir malgré la couche "sky" sur deux essais
+  // précédents -- signalé de nouveau le 2026-09-28. Le conteneur est peint de
+  // la même couleur que le ciel demandé ; avec le canevas rendu transparent
+  // (canvasContextAttributes dans creerCarte), ce fond apparaît là où
+  // MapLibre ne peint rien, quelle que soit la cause exacte du problème.
+  conteneur.style.background = sombre ? "#1b3152" : "linear-gradient(#5b9bd9, #cfe8ff 55%, #eaf6ff)";
 }
 
 // Relief du terrain : altitudes « Terrain Tiles » (données ouvertes

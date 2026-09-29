@@ -46,12 +46,14 @@ export function longueurZoneDanger(limiteKmh) {
 // large, plusieurs voies, coordonnée officielle pas forcément exactement sur
 // la trace calculée. Demande explicite de l'utilisateur le 2026-09-28.
 export const RAYON_RADAR_TRACE_M = 60;
+const RAYON_RADAR_FEU_ROUGE_TRACE_M = 100;
 
 export function radarsSurTrace(radars, coords, cum) {
   const surTrace = [];
   for (const r of radars) {
     const p = projeterSurTrace(r.lat, r.lon, coords, cum);
-    if (p.d <= RAYON_RADAR_TRACE_M) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset, type: r.type || "" });
+    const rayon = r.type === "ETFR" ? RAYON_RADAR_FEU_ROUGE_TRACE_M : RAYON_RADAR_TRACE_M;
+    if (p.d <= rayon) surTrace.push({ lat: r.lat, lon: r.lon, offset: p.offset, type: r.type || "" });
   }
   return surTrace;
 }
