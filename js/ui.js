@@ -651,6 +651,8 @@ function cablerCarte() {
   cablerArretsImposes();
   $("ev-reglage-taille-texte").addEventListener("input", (e) => ($("ev-reglage-taille-texte-val").textContent = e.target.value));
   $("ev-reglage-inclinaison").addEventListener("input", (e) => ($("ev-reglage-inclinaison-val").textContent = e.target.value));
+  $("ev-reglage-inclinaison-plate").addEventListener("input", (e) => ($("ev-reglage-inclinaison-plate-val").textContent = e.target.value));
+  $("ev-reglage-decalage-zoom").addEventListener("input", (e) => ($("ev-reglage-decalage-zoom-val").textContent = e.target.value));
   for (const id of ["ev-charge-pct-input", "ev-marge-pct-input", "ev-cible-pct-input"]) $(id).addEventListener("input", majKmCurseurs);
   majKmCurseurs();
   // Autorisation des notifications demandée au moment où l'on coche.
@@ -2154,6 +2156,10 @@ function rendreReglagesProfil() {
   $("ev-reglage-prechauffage").checked = reglages.prechauffage !== false;
   $("ev-reglage-inclinaison").value = String(reglages.inclinaison_3d ?? 70);
   $("ev-reglage-inclinaison-val").textContent = String(reglages.inclinaison_3d ?? 70);
+  $("ev-reglage-inclinaison-plate").value = String(reglages.inclinaison_ronds_points ?? 40);
+  $("ev-reglage-inclinaison-plate-val").textContent = String(reglages.inclinaison_ronds_points ?? 40);
+  $("ev-reglage-decalage-zoom").value = String(reglages.decalage_zoom_nav ?? 0);
+  $("ev-reglage-decalage-zoom-val").textContent = String(reglages.decalage_zoom_nav ?? 0);
   $("ev-reglage-taille-texte").value = String(reglages.taille_texte_nav || 100);
   $("ev-reglage-taille-texte-val").textContent = String(reglages.taille_texte_nav || 100);
   $("ev-reglage-vibration").checked = reglages.vibration === true;
@@ -2321,6 +2327,8 @@ function cablerProfil() {
       prechauffage: $("ev-reglage-prechauffage").checked,
       taille_texte_nav: Number($("ev-reglage-taille-texte").value),
       inclinaison_3d: Number($("ev-reglage-inclinaison").value),
+      inclinaison_ronds_points: Number($("ev-reglage-inclinaison-plate").value),
+      decalage_zoom_nav: Number($("ev-reglage-decalage-zoom").value),
       vibration: $("ev-reglage-vibration").checked,
       nuit_douce: $("ev-reglage-nuit-douce").checked,
       notif_guidage: $("ev-reglage-notif").checked,

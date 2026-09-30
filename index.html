@@ -453,6 +453,14 @@
           <input type="range" min="40" max="78" step="2" value="70" id="ev-reglage-inclinaison" class="ev-curseur">
           <span class="ev-km-estime">Plus incliné : on voit plus loin devant, jusqu'à l'horizon.</span>
         </label>
+        <label class="ev-champ">📐 Inclinaison aux ronds-points/carrefours : <span id="ev-reglage-inclinaison-plate-val" class="ev-valeur">40</span>°
+          <input type="range" min="15" max="60" step="5" value="40" id="ev-reglage-inclinaison-plate" class="ev-curseur">
+          <span class="ev-km-estime">Vue réduite pour mieux distinguer les routes qui se croisent (redémarrer la navigation pour appliquer).</span>
+        </label>
+        <label class="ev-champ">🔍 Zoom en navigation : <span id="ev-reglage-decalage-zoom-val" class="ev-valeur">0</span>
+          <input type="range" min="-2" max="2" step="0.5" value="0" id="ev-reglage-decalage-zoom" class="ev-curseur">
+          <span class="ev-km-estime">Ajout par-dessus le zoom automatique (vitesse, manœuvres) : négatif pour voir plus loin, positif pour voir plus près.</span>
+        </label>
         <label class="ev-champ">🪧 Affichage en navigation
             <select id="ev-reglage-taille-bandeau" class="ev-input">
               <option value="compact">Compact : la carte reste bien visible (conseillé)</option>
@@ -645,7 +653,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 77 : ciel horizon (setSky), radars feu rouge, virages 3D lissés, bandeau Drive retiré</div>
+      <div class="ev-hint ev-lien-centre">Version 78 : réglages Profil pour l'inclinaison aux ronds-points et le zoom en navigation</div>
     </div>
   </div>
 </section>

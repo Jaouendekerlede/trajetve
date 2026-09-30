@@ -1227,8 +1227,11 @@ export function majVoiture(lat, lon, cap) {
 // Inclinaison de la vue en navigation : réduite près des ronds-points et
 // carrefours serrés (on distingue mieux les routes), en douceur.
 // 22° d'origine jugé trop vertical par l'utilisateur (comparé à Sygic, qui
-// garde toujours un peu d'horizon) -- relevé le 2026-09-28.
-const INCLINAISON_PLATE = 40;
+// garde toujours un peu d'horizon) -- relevé à 40° le 2026-09-28, puis rendu
+// réglable (Profil › Navigation) le 2026-09-30.
+const INCLINAISON_PLATE_MIN = 15;
+const INCLINAISON_PLATE_MAX = 60;
+let INCLINAISON_PLATE = 40;
 let inclinaisonCible = INCLINAISON;
 let inclinaisonActuelle = INCLINAISON;
 
@@ -1239,6 +1242,13 @@ export function definirInclinaison3D(degres) {
   INCLINAISON = Math.max(INCLINAISON_MIN, Math.min(INCLINAISON_MAX, d));
   inclinaisonCible = INCLINAISON;
   inclinaisonActuelle = INCLINAISON;
+}
+// Réglage Profil › Navigation (15 à 60°) : inclinaison réduite près des
+// ronds-points et carrefours serrés.
+export function definirInclinaisonPlate(degres) {
+  const d = Number(degres);
+  if (!Number.isFinite(d)) return;
+  INCLINAISON_PLATE = Math.max(INCLINAISON_PLATE_MIN, Math.min(INCLINAISON_PLATE_MAX, d));
 }
 export function inclinaisonNavigation(mode) {
   inclinaisonCible = mode === "plat" ? INCLINAISON_PLATE : INCLINAISON;

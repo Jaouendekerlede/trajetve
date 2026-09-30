@@ -1372,6 +1372,9 @@ function surPosition(p) {
   if (!arret && (etat.offset >= etat.route.total - 30 || haversineKm(p.lat, p.lon, etat.destination.lat, etat.destination.lon) < 0.04)) arriveeDestination();
 
   const zoom = zoomNavigation({ kmh: (p.vitesse || 0) * 3.6, offset: etat.offset, instructions: etat.route.instructions, voies: etat.route.voies, zoomActuel: etat.zoom, enManoeuvre: !!etat.zoomManoeuvre, renforce: etat.prefs.zoomRenforce });
+  // etat.zoom garde la valeur brute (sert de référence à l'hystérésis de
+  // zoomNavigation, palier par palier) : le décalage manuel du réglage
+  // Profil ne s'applique qu'à l'affichage, plus bas (programmerAnimation).
   etat.zoom = zoom.zoom;
   etat.zoomManoeuvre = zoom.manoeuvre;
   // Rond-point, carrefour serré : vue 3D presque de dessus, plus lisible.
@@ -1399,6 +1402,14 @@ function surPosition(p) {
 const CONSTANTE_CAP_MS = 350;
 const CONSTANTE_ZOOM_MS = 700;
 const INTERVALLE_TRACE_MS = 120;
+
+// Décalage manuel du réglage Profil (-2 à +2), appliqué seulement à
+// l'affichage caméra -- etat.zoom/aff.zoom restent la valeur brute pour que
+// l'hystérésis de zoomNavigation (paliers de vitesse) continue de
+// fonctionner normalement. Demande explicite de l'utilisateur le 2026-09-30.
+function zoomAffiche(zoom) {
+  return Math.max(13, Math.min(19.5, zoom + (etat.prefs.decalageZoom || 0)));
+}
 
 function programmerAnimation(p, m) {
   const maintenant = performance.now();
@@ -1461,7 +1472,7 @@ function boucleAnimation(t) {
   aff.zoom = Math.abs(ecartZoom) < 0.01 ? etat.zoom : aff.zoom + ecartZoom * Math.min(1, dtImage / CONSTANTE_ZOOM_MS);
 
   vue.majVoiture(aff.lat, aff.lon, aff.cap);
-  if (etat.suivi) vue.cameraNavigation(aff.lat, aff.lon, aff.cap, aff.zoom, etat.sensDeMarche, false);
+  if (etat.suivi) vue.cameraNavigation(aff.lat, aff.lon, aff.cap, zoomAffiche(aff.zoom), etat.sensDeMarche, false);
   if (t - (etat.derniereTrace || 0) > INTERVALLE_TRACE_MS || k >= 1) {
     etat.derniereTrace = t;
     vue.majProgressionNavigation(etat.route.coords, indice, aff.lat, aff.lon);
@@ -2415,7 +2426,7 @@ function changerVue(nouvelle) {
   const a = etat.aff;
   if (a && etat.route) {
     vue.majVoiture(a.lat, a.lon, a.cap);
-    vue.cameraNavigation(a.lat, a.lon, a.cap, a.zoom, etat.sensDeMarche, false);
+    vue.cameraNavigation(a.lat, a.lon, a.cap, zoomAffiche(a.zoom), etat.sensDeMarche, false);
     vue.majProgressionNavigation(etat.route.coords, etat.idx, a.lat, a.lon);
   }
   majBouton3D();
@@ -2542,6 +2553,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
       prechauffage: reglages.prechauffage !== false,
       pauseMiParcours: reglages.pause_mi_parcours !== false,
       modeEco: reglages.mode_eco === true,
+      decalageZoom: Number(reglages.decalage_zoom_nav) || 0,
     },
     sensDeMarche: true,
     suivi: true,
@@ -2554,6 +2566,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   reveillerBoutons();
   carte2D.definirIconeVoiture(reglages.icone_voiture);
   carte3D.definirInclinaison3D(reglages.inclinaison_3d ?? 70);
+  carte3D.definirInclinaisonPlate(reglages.inclinaison_ronds_points ?? 40);
   carte3D.definirIconeVoiture(reglages.icone_voiture);
   $("ev-nav-menu").classList.add("hidden");
   $("ev-nav-frise").classList.add("hidden");
