@@ -2411,15 +2411,20 @@ export function executerAction(action) {
   }
 }
 
-export function initialiserUI() {
-  // Champs départ/destination toujours vides à l'ouverture -- demande
-  // explicite de l'utilisateur le 2026-09-27. Sur téléphone, l'appli
-  // "rouverte" ne recharge souvent pas vraiment la page (le système
-  // Android/Chrome reprend l'onglet tel qu'il était laissé) : sans ce
-  // vidage explicite, le champ garde le texte tapé lors du dernier essai,
-  // ce qui ressemble à une adresse "encore là" au prochain démarrage.
+// Départ et destination toujours vides à l'ouverture -- demande explicite de
+// l'utilisateur les 2026-09-27 et 2026-10-01 (champ vide = ma position pour
+// le départ, cf. placeholder). Exportée pour être rappelée aussi quand
+// l'appli revient au premier plan sans recharger la page (voir main.js) :
+// sur téléphone, Android/Chrome "rouvre" souvent l'onglet tel qu'il était
+// laissé plutôt que de relancer initialiserUI, et le champ garderait sinon
+// le texte tapé lors du dernier essai.
+export function viderChampsTrajet() {
   $("ev-depart-input").value = "";
   $("ev-destination-input").value = "";
+}
+
+export function initialiserUI() {
+  viderChampsTrajet();
   initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || fondParDefaut(), onDeplacement: surDeplacementCarte });
   cablerTheme();
   cablerFeuille();

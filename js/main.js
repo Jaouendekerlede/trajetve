@@ -1,5 +1,5 @@
 import { brancherCapture, noter } from "./journal-erreurs.js";
-import { initialiserUI, executerAction, proposerRechargeMaison } from "./ui.js";
+import { initialiserUI, executerAction, proposerRechargeMaison, viderChampsTrajet } from "./ui.js";
 import { navigationActive, navigationInterrompue } from "./navigation.js";
 import { afficherPresentation, retirerPresentation, presentationAutorisee, MENTION_COURTE, MENTION_LEGALE } from "./presentation.js";
 import { restaurerDepuisAdresse, proposerRappelSauvegarde } from "./ui-sauvegarde.js";
@@ -43,6 +43,35 @@ if (actionRaccourci) {
 // démarrage, on le provoque.
 window.addEventListener("hashchange", () => {
   if (location.hash.startsWith("#restaurer=")) location.reload();
+});
+
+// Champs départ/destination vidés à chaque réouverture de l'appli -- pas
+// seulement au tout premier chargement : sur téléphone, le système ne
+// recharge souvent pas vraiment la page en revenant dessus (ni rechargement,
+// ni même "pageshow" depuis le cache de navigation), donc on s'appuie sur le
+// retour au premier plan. On ne touche à rien pendant une navigation active
+// (coupée ou non) ni si un résultat de trajet est actuellement affiché : ce
+// n'est alors pas une réouverture, mais une utilisation en cours.
+const DELAI_REOUVERTURE_MS = 2 * 60 * 1000;
+let masqueeDepuis = null;
+
+function reouvertureEnCours() {
+  const resultatAffiche = !document.getElementById("vue-resultat")?.classList.contains("hidden");
+  return !navigationActive() && !navigationInterrompue() && !resultatAffiche;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    masqueeDepuis = Date.now();
+  } else if (masqueeDepuis && Date.now() - masqueeDepuis >= DELAI_REOUVERTURE_MS && reouvertureEnCours()) {
+    viderChampsTrajet();
+  }
+});
+// Restauration depuis le cache de navigation du système (bfcache) : une vraie
+// réouverture, même sans passer par "hidden" juste avant (ex. appli jamais
+// vraiment masquée mais reprise par le système après un moment).
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted && reouvertureEnCours()) viderChampsTrajet();
 });
 
 const VERIFICATION_MAJ_MS = 30 * 60 * 1000;
