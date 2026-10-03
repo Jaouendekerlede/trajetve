@@ -103,6 +103,12 @@ let rotationDispo = false;
 let coucheNav = null;
 let ligneParcourue = null;
 let ligneRestante = null;
+// Positions du tracé converties une seule fois, et dernier point de route
+// dépassé : le tracé n'est redécoupé que lorsque ce point change.
+let pointsRoute = [];
+let indiceDecoupe = -1;
+let raccordParcouru = null;
+let raccordRestant = null;
 let marqueursRadars = [];
 let marqueursFeux = [];
 let marqueurVoiture = null;
@@ -192,10 +198,16 @@ export function quitterNavigation() {
 export function dessinerRouteNavigation(coords, arrets, destination) {
   coucheNav.clearLayers();
   coucheFleche = null;
-  const ll = coords.map(([lon, lat]) => [lat, lon]);
+  const ll = coords.map(([lon, lat]) => L.latLng(lat, lon));
+  pointsRoute = ll;
+  indiceDecoupe = -1;
+  const restant = { color: fondCourant() === "plan" ? "#1a6fe8" : "#22e5a0", weight: 9, opacity: 0.95, interactive: false };
+  const parcouru = { color: "#6b7385", weight: 9, opacity: 0.9, interactive: false };
   L.polyline(ll, { color: "#062a1e", weight: 14, opacity: 0.55, interactive: false }).addTo(coucheNav);
-  ligneRestante = L.polyline(ll, { color: fondCourant() === "plan" ? "#1a6fe8" : "#22e5a0", weight: 9, opacity: 0.95, interactive: false }).addTo(coucheNav);
-  ligneParcourue = L.polyline([], { color: "#6b7385", weight: 9, opacity: 0.9, interactive: false }).addTo(coucheNav);
+  ligneRestante = L.polyline(ll, restant).addTo(coucheNav);
+  raccordRestant = L.polyline([], restant).addTo(coucheNav);
+  ligneParcourue = L.polyline([], parcouru).addTo(coucheNav);
+  raccordParcouru = L.polyline([], parcouru).addTo(coucheNav);
   for (const a of arrets || []) {
     L.marker([a.lat, a.lon], { icon: pastille(32, "rgba(79,224,255,.95)", "🔋"), zIndexOffset: 5000, interactive: false }).addTo(coucheNav);
   }
@@ -239,9 +251,22 @@ export function dessinerFlecheManoeuvre(fleche) {
 
 export function majProgressionNavigation(coords, indice, lat, lon) {
   if (!ligneRestante) return;
+  if (pointsRoute.length !== coords.length) {
+    pointsRoute = coords.map(([x, y]) => L.latLng(y, x));
+    indiceDecoupe = -1;
+  }
+  // Appelée plusieurs fois par seconde : redessiner tout le tracé (des
+  // milliers de points sur un long trajet) à chaque fois saccadait la carte.
+  // Les deux grandes lignes ne changent qu'au passage d'un point de la route ;
+  // entre deux, seuls les deux courts raccords jusqu'à la voiture bougent.
+  if (indice !== indiceDecoupe) {
+    indiceDecoupe = indice;
+    ligneParcourue.setLatLngs(pointsRoute.slice(0, indice + 1));
+    ligneRestante.setLatLngs(pointsRoute.slice(indice + 1));
+  }
   const actuel = [lat, lon];
-  ligneParcourue.setLatLngs([...coords.slice(0, indice + 1).map(([x, y]) => [y, x]), actuel]);
-  ligneRestante.setLatLngs([actuel, ...coords.slice(indice + 1).map(([x, y]) => [y, x])]);
+  raccordParcouru.setLatLngs(pointsRoute[indice] ? [pointsRoute[indice], actuel] : []);
+  raccordRestant.setLatLngs(pointsRoute[indice + 1] ? [actuel, pointsRoute[indice + 1]] : []);
 }
 
 let styleVoiture = "fleche_bleue";
@@ -303,6 +328,13 @@ export function apercuNavigation(coords) {
 
 export function choisirFond(nom) {
   if (!FONDS[nom]) nom = "sombre";
+  // Déjà en place (le démarrage le demande plusieurs fois) : ne pas
+  // recharger les mêmes tuiles.
+  if (fond && nom === nomFond) return nom;
+  return poserFond(nom);
+}
+
+function poserFond(nom) {
   if (fond) carte.removeLayer(fond);
   fond = FONDS[nom]();
   nomFond = nom;
@@ -357,7 +389,7 @@ export const derniereErreur3D = () => c3d.derniereErreur();
 
 // Après un changement de clé TomTom : passer aux tuiles nettes (ou en revenir).
 export function rechargerFond() {
-  return choisirFond(nomFond);
+  return poserFond(nomFond);
 }
 
 export function fondSuivant() {

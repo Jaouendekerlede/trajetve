@@ -1,12 +1,16 @@
-// Garde une copie de l'appli (HTML/CSS/JS/icÃ´nes) pour qu'elle dÃ©marre mÃªme
-// sans rÃ©seau. RÃ©seau d'abord : une mise Ã  jour publiÃ©e est prise tout de
-// suite, la copie ne sert que hors connexion.
-// Garde aussi, pour rouler sans rÃ©seau, la carte OpenFreeMap (tuiles
-// vectorielles, polices, icÃ´nes) et les bibliothÃ¨ques de carte dÃ©jÃ  vues ou
-// prÃ©parÃ©es. Les autres services (TomTom, bornes, mÃ©tÃ©o) ne passent pas ici :
-// TomTom interdit de stocker ses cartes, et les autres doivent Ãªtre frais.
+// Garde une copie de l'appli (HTML/CSS/JS/icônes) et la sert en premier :
+// l'appli démarre tout de suite, avec ou sans réseau. Une mise à jour
+// publiée arrive par un nouveau numéro de CACHE_NOM (voir tests/version.test.mjs).
+// Garde aussi, pour rouler sans réseau, la carte OpenFreeMap (tuiles
+// vectorielles, polices, icônes) et les bibliothèques de carte déjà vues ou
+// préparées. Les autres services (TomTom, bornes, météo) ne passent pas ici :
+// TomTom interdit de stocker ses cartes, et les autres doivent être frais.
 
-const CACHE_NOM = "trajetve-v83";
+const CACHE_NOM = "trajetve-v84";
+// Empreinte des fichiers ci-dessous, vérifiée par les tests : les téléphones
+// ne reçoivent une modification que si ce fichier change. À chaque
+// publication : augmenter CACHE_NOM et recopier l'empreinte donnée par le test.
+const EMPREINTE_COQUILLE = "7ce9da851c10759d";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
@@ -82,14 +86,14 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      // Seulement les anciennes copies de l'appli (pas les donnÃ©es gardÃ©es
-      // par l'appli elle-mÃªme, comme l'Ã©tat des bornes).
+      // Seulement les anciennes copies de l'appli (pas les données gardées
+      // par l'appli elle-même, comme l'état des bornes).
       .then((noms) => Promise.all(noms.filter((n) => n.startsWith("trajetve-v") && n !== CACHE_NOM).map((n) => caches.delete(n))))
       .then(() => self.clients.claim()),
   );
 });
 
-// â”€â”€ Carte et bibliothÃ¨ques pour le hors ligne â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Carte et bibliothèques pour le hors ligne ───────────────────────────────
 
 const CACHE_CARTES = "trajetve-cartes";
 const HOTES_CARTES = ["tiles.openfreemap.org", "cdn.jsdelivr.net", "unpkg.com"];
@@ -97,9 +101,9 @@ const HOTES_CARTES = ["tiles.openfreemap.org", "cdn.jsdelivr.net", "unpkg.com"];
 const MAX_ELEMENTS_CARTES = 12000;
 let ajoutsDepuisMenage = 0;
 
-// Adresses versionnÃ©es (tuiles, polices, icÃ´nes, bibliothÃ¨ques) : elles ne
-// changent jamais, la copie gardÃ©e suffit. Le style (non versionnÃ©) passe
-// d'abord par le rÃ©seau pour rester Ã  jour.
+// Adresses versionnées (tuiles, polices, icônes, bibliothèques) : elles ne
+// changent jamais, la copie gardée suffit. Le style (non versionné) passe
+// d'abord par le réseau pour rester à jour.
 function immuable(url) {
   return url.pathname.endsWith(".pbf") || url.pathname.includes("/sprites/") || url.pathname.includes("/natural_earth/") || url.hostname !== "tiles.openfreemap.org";
 }
@@ -120,8 +124,8 @@ async function carteOuReseau(requete) {
   }
   try {
     const reponse = await fetch(requete);
-    // Â« opaque Â» : bibliothÃ¨ques chargÃ©es par <script> (Leafletâ€¦), sans quoi
-    // l'appli ne dÃ©marrerait pas hors connexion.
+    // « opaque » : bibliothèques chargées par <script> (Leaflet…), sans quoi
+    // l'appli ne démarrerait pas hors connexion.
     if (reponse.ok || reponse.type === "opaque") {
       await cache.put(requete, reponse.clone());
       if (++ajoutsDepuisMenage >= 200) {
@@ -157,18 +161,24 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin !== self.location.origin) return;
 
-  // "no-cache" : GitHub Pages autorise 10 min de cache navigateur, pendant
-  // lesquelles une version publiÃ©e n'arrivait pas. On revalide Ã  chaque fois
-  // (rÃ©ponse 304 lÃ©gÃ¨re si rien n'a changÃ©).
-  event.respondWith(
-    fetch(event.request.url, { cache: "no-cache" })
-      .then((reponse) => {
-        if (reponse.ok) {
-          const copie = reponse.clone();
-          caches.open(CACHE_NOM).then((cache) => cache.put(event.request, copie));
-        }
-        return reponse;
-      })
-      .catch(() => caches.match(event.request).then((r) => r || caches.match("./index.html"))),
-  );
+  event.respondWith(coquilleOuReseau(event.request));
 });
+
+// Fichiers de l'appli : la copie gardée d'abord, sans attendre le réseau
+// (démarrage immédiat, même avec un signal faible). Une version publiée
+// arrive par le changement de CACHE_NOM : le nouveau service worker
+// télécharge toute la coquille d'un coup, puis l'appli se recharge.
+async function coquilleOuReseau(requete) {
+  const cache = await caches.open(CACHE_NOM);
+  // ignoreSearch : raccourcis de l'icône (index.html?action=…).
+  const garde = await cache.match(requete, { ignoreSearch: true });
+  if (garde) return garde;
+  try {
+    // "no-cache" : GitHub Pages autorise 10 min de cache navigateur.
+    return await fetch(requete.url, { cache: "no-cache" });
+  } catch (e) {
+    const accueil = requete.mode === "navigate" ? await cache.match("./index.html") : null;
+    if (accueil) return accueil;
+    throw e;
+  }
+}
