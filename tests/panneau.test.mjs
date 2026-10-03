@@ -11,17 +11,25 @@ test("numéros de route aux couleurs des panneaux français", () => {
   assert.ok(estAutoroute("A81") && !estAutoroute("N136"));
 });
 
-test("panneau : rue en gros, numéros, sortie, direction, action courte", () => {
+test("panneau : direction (ville) en gros comme un vrai panneau, nom de route en petit, numéros, sortie, action courte", () => {
   const t = textesPanneau({ message: "Prenez la sortie 4 sur D31, direction Laval", rue: "", numeros: ["D31"], sortie: "4", direction: "Laval" });
   assert.equal(t.rue, "Laval", "sans nom de rue : la direction en gros");
   assert.equal(t.direction, "", "pas deux fois");
   assert.equal(t.action, "Prenez la sortie 4");
   assert.deepEqual(t.numeros, ["D31"]);
   assert.equal(t.sortie, "4");
+  // Demande du 2026-10-03 : une direction annoncée ("Centre") est plus utile
+  // pour se repérer qu'un nom de route locale ("Rue Ambroise Paré") -- elle
+  // passe donc en gros, le nom de la route reste visible mais en petit.
   const u = textesPanneau({ message: "Tournez à droite sur Rue Ambroise Paré/D125, direction Centre", rue: "Rue Ambroise Paré", numeros: ["D125"], direction: "Centre" });
-  assert.equal(u.rue, "Rue Ambroise Paré");
+  assert.equal(u.rue, "Centre", "la direction annoncée passe en gros");
   assert.equal(u.action, "Tournez à droite");
-  assert.equal(u.direction, "Centre");
+  assert.equal(u.direction, "Rue Ambroise Paré", "le nom de la route reste visible, en petit");
+  // Pas de direction annoncée (carrefour sans panneau) : le nom de la route
+  // reste la seule information, affichée en gros comme avant.
+  const v = textesPanneau({ message: "Tournez à gauche sur Avenue Victor Hugo", rue: "Avenue Victor Hugo", numeros: [] });
+  assert.equal(v.rue, "Avenue Victor Hugo");
+  assert.equal(v.direction, "", "rien à afficher en petit si pas de direction annoncée");
 });
 
 test("dessin du carrefour : arrivée en bas, chemin blanc avec pointe", () => {

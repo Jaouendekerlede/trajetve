@@ -27,12 +27,17 @@ export function textesPanneau(instr) {
     if (i > 0) action = action.slice(0, i);
   }
   action = action.replace(/[\s,]*(sur|à|au|dans|vers|par|direction)?\s*$/i, "").trim() || message;
-  const rue = instr.rue || instr.direction || "";
+  // Comme un vrai panneau routier : la direction (villes annoncées) prime sur
+  // le nom de la route et s'affiche en gros -- un nom de route locale ("route
+  // de Herbignac") aide moins à se repérer qu'une ville. Le nom de la route
+  // reste visible, mais en petit, à côté des numéros (demande du 2026-10-03).
+  const rue = instr.direction || instr.rue || "";
   return {
     rue,
     action,
-    // La direction est déjà en gros si la rue manque.
-    direction: instr.rue ? instr.direction || "" : "",
+    // Le nom de la route en petit, seulement s'il existe ET qu'il n'est pas
+    // déjà affiché en gros (pas de direction annoncée).
+    direction: instr.direction ? instr.rue || "" : "",
     numeros,
     sortie: instr.sortie || "",
   };

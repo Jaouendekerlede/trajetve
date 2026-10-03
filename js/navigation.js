@@ -407,7 +407,9 @@ function majEcran() {
     const html = [
       t.sortie ? `<span class="ev-num ev-num-sortie">Sortie ${escapeHtml(t.sortie)}</span>` : "",
       ...t.numeros.map((n) => `<span class="ev-num ev-num-${classeNumero(n)}">${escapeHtml(n)}</span>`),
-      t.direction ? `<span class="ev-nav-direction">➜ ${escapeHtml(t.direction)}</span>` : "",
+      // t.direction est maintenant le nom de la route (la direction/ville est
+      // déjà affichée en gros) : "via" plutôt qu'une flèche qui suggérerait une destination.
+      t.direction ? `<span class="ev-nav-direction">via ${escapeHtml(t.direction)}</span>` : "",
     ].join("");
     if (etat.panneauAffiche !== html) {
       etat.panneauAffiche = html;
@@ -1360,7 +1362,9 @@ function surPosition(p) {
     afficherAlerte(null);
   }
   if (etat.reessaiBarree && etat.odometre >= etat.reessaiBarree.odometre && !etat.recalculEnCours) reessayerRouteBarree();
-  else if (etat.horsRoute >= 3 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
+  // 2 mesures de suite (pas 3) : recalcule plus vite après un changement de
+  // route voulu, demande du 2026-10-03 ("ça met du temps à se remettre").
+  else if (etat.horsRoute >= 2 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
   else if (!etat.demo && Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
 
   // Arrivée à une borne ou à destination
