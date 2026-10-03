@@ -109,7 +109,7 @@ function majKmCurseurs() {
   $("ev-marge-km").textContent = `Réserve gardée ≈ ${nombre(km(marge))} km · ${nombre(km(marge, consoAutoroute))} km sur autoroute`;
   $("ev-cible-km").textContent = `Entre deux recharges (${cible} − ${marge} = ${cible - marge} %) : ${deux(cible - marge)}`;
   const aire = $("ev-arret-impose")?.selectedOptions?.[0];
-  $("ev-recharge-resume").textContent = `🔋 Recharges : marge ${marge} % · jusqu'à ${cible} %${aire?.value ? ` · ${aire.text}` : ""}`;
+  $("ev-recharge-resume").textContent = `🔋 Recharges : marge ${marge}\u00a0% · jusqu'à\u00a0${cible}\u00a0%${aire?.value ? ` · ${aire.text}` : ""}`;
   $("ev-charge-km").title = `Base : ${String(conso.toFixed(1)).replace(".", ",")} kWh/100 km ${mesuree ? "(appris en roulant)" : "(fiche constructeur, saison)"}`;
 }
 
@@ -2384,6 +2384,20 @@ function cablerProfil() {
       $(`${id}-voir`).textContent = champ.type === "password" ? "👁️" : "🙈";
     });
   }
+  // Sommaire du Profil : aller droit à une section de cette longue page.
+  $("ev-profil-sommaire").addEventListener("click", (e) => {
+    const section = e.target.closest("[data-section]")?.dataset.section;
+    if (section) $(section).scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  // « Enregistrer » est loin en bas : dès qu'un réglage placé avant lui est
+  // modifié, il reste affiché en bas de l'écran jusqu'à l'enregistrement.
+  const enregistrer = $("ev-profil-save-btn");
+  const marquerModifie = (e) => {
+    if (enregistrer.compareDocumentPosition(e.target) & Node.DOCUMENT_POSITION_PRECEDING) enregistrer.classList.add("ev-a-enregistrer");
+  };
+  $("vue-profil").addEventListener("input", marquerModifie);
+  $("vue-profil").addEventListener("change", marquerModifie);
+  enregistrer.addEventListener("click", () => enregistrer.classList.remove("ev-a-enregistrer"));
   $("ev-profil-save-btn").addEventListener("click", () => {
     const avaitCleOcm = !!getApiKeys().openChargeMap;
     const connecteurs = $("ev-profil-connecteurs").value.split(",").map((s) => s.trim()).filter(Boolean);

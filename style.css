@@ -1068,3 +1068,18 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 /* Carte de la région hors ligne, reprise après coupure */
 .ev-region-bloc { border: 1px solid var(--bordure); border-radius: 12px; padding: 10px 12px; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px; }
 .ev-reprise small { opacity: 0.85; }
+
+/* Trajet : le bouton « effacer » n'apparaît que si le champ contient du
+   texte, ce qui laisse la place de lire le champ vide en entier. */
+.ev-itineraire-saisies .ev-input:placeholder-shown + .ev-mini-btn { display: none; }
+
+/* Message « rien sur cette période » : toute la largeur, pas une colonne. */
+.ev-tuiles > .ev-hint { grid-column: 1 / -1; }
+
+/* Profil : sommaire sur une ligne, et « Enregistrer » gardé sous les yeux
+   tant qu'une modification n'est pas enregistrée. */
+.ev-profil-sommaire { flex-wrap: nowrap; overflow-x: auto; margin-top: 0; padding-bottom: 6px; scrollbar-width: none; }
+.ev-profil-sommaire::-webkit-scrollbar { display: none; }
+.ev-profil-sommaire .ev-chip { flex-shrink: 0; }
+#vue-profil h3[id] { scroll-margin-top: 14px; }
+#ev-profil-save-btn.ev-a-enregistrer { position: sticky; bottom: 10px; z-index: 5; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.6); }

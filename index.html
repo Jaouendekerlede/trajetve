@@ -399,6 +399,14 @@
     <!-- ══ Profil ══ -->
     <div id="vue-profil" class="ev-vue hidden">
       <div class="ev-vue-entete"><h2>🚗 Profil et réglages</h2></div>
+      <div class="ev-chips ev-profil-sommaire" id="ev-profil-sommaire">
+        <button type="button" class="ev-chip" data-section="ev-profil-vehicule">🚗 Véhicule</button>
+        <button type="button" class="ev-chip" data-section="ev-profil-navigation">🧭 Navigation</button>
+        <button type="button" class="ev-chip" data-section="ev-profil-cartes">🗺️ Cartes</button>
+        <button type="button" class="ev-chip" data-section="ev-profil-cles">🔑 Clés</button>
+        <button type="button" class="ev-chip" data-section="ev-profil-sauvegarde">💾 Sauvegarde</button>
+        <button type="button" class="ev-chip" data-section="ev-profil-aide">❓ Aide</button>
+      </div>
 
       <div class="ev-carte-bloc">
         <h3>🎨 Apparence</h3>
@@ -411,7 +419,7 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <h3>Véhicule</h3>
+        <h3 id="ev-profil-vehicule">Véhicule</h3>
         <div class="ev-grille-champs">
           <label class="ev-champ ev-large">Nom<input type="text" id="ev-profil-nom" class="ev-input"></label>
           <label class="ev-champ">Batterie (kWh)<input type="number" step="0.1" id="ev-profil-capacite" class="ev-input" inputmode="decimal"></label>
@@ -453,7 +461,7 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <h3>🧭 Navigation</h3>
+        <h3 id="ev-profil-navigation">🧭 Navigation</h3>
         <div class="ev-hint">Tout est déjà réglé comme conseillé ; ouvrez une rubrique pour changer.</div>
         <details class="ev-sous-menu">
           <summary>🖥️ Affichage</summary>
@@ -522,7 +530,7 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <h3>Cartes</h3>
+        <h3 id="ev-profil-cartes">Cartes</h3>
         <div class="ev-region-bloc">
           <div class="ev-champ-titre"><strong>📥 Carte hors ligne de ma région</strong></div>
           <div class="ev-hint">Télécharge la carte 3D autour de chez vous : elle s'affichera partout dans la région sans réseau. À faire en Wi-Fi. (Le guidage sans réseau reste celui des trajets préparés avec « Hors ligne ».)</div>
@@ -558,7 +566,7 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <h3>Clés API</h3>
+        <h3 id="ev-profil-cles">Clés API</h3>
         <div class="ev-hint">Gratuites. Elles restent uniquement dans ce téléphone.</div>
         <label class="ev-champ">Clé TomTom (itinéraires) — <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">créer</a>
           <span class="ev-input-row">
@@ -580,7 +588,7 @@
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
 
       <div class="ev-carte-bloc">
-        <h3>💾 Sauvegarde de mes données</h3>
+        <h3 id="ev-profil-sauvegarde">💾 Sauvegarde de mes données</h3>
         <div class="ev-hint">Envoie-toi ce lien par e-mail (Gmail…). Sur un nouveau téléphone, il suffit de le toucher : l'appli s'ouvre avec tes clés, ta voiture, tes favoris, ton journal et tes réglages. Le lien contient tes clés : ne le transfère à personne.</div>
         <button id="ev-lien-sauvegarde-btn" class="ev-btn-principal" type="button">📧 M'envoyer le lien de restauration</button>
         <div id="ev-lien-sauvegarde-info" class="ev-hint ev-lien-centre"></div>
@@ -611,7 +619,7 @@
       </div>
 
       <div class="ev-carte-bloc">
-        <h3>❓ Aide et astuces</h3>
+        <h3 id="ev-profil-aide">❓ Aide et astuces</h3>
         <details class="ev-sous-menu" id="ev-aide">
           <summary>En navigation, mains sur le volant</summary>
           <ul class="ev-aide-liste">
@@ -670,7 +678,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 85 : guidage 3D plus fluide (feux proches seulement, recalage du tracé allégé)</div>
+      <div class="ev-hint ev-lien-centre">Version 86 : champs du trajet plus larges, sommaire du Profil, bouton Enregistrer toujours visible après une modification</div>
     </div>
   </div>
 </section>
