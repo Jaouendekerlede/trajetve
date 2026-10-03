@@ -2340,6 +2340,13 @@ function cablerProfil() {
     if (fichier && confirm("Remplacer toutes les données de ce téléphone par celles de la sauvegarde ?")) importerSauvegarde(fichier);
   });
   $("ev-tester-tomtom-btn").addEventListener("click", () => testerCleTomTom($("ev-cle-tomtom").value.trim() || getApiKeys().tomtom));
+  for (const id of ["ev-cle-tomtom", "ev-cle-ocm"]) {
+    $(`${id}-voir`).addEventListener("click", () => {
+      const champ = $(id);
+      champ.type = champ.type === "password" ? "text" : "password";
+      $(`${id}-voir`).textContent = champ.type === "password" ? "👁️" : "🙈";
+    });
+  }
   $("ev-profil-save-btn").addEventListener("click", () => {
     const avaitCleOcm = !!getApiKeys().openChargeMap;
     const connecteurs = $("ev-profil-connecteurs").value.split(",").map((s) => s.trim()).filter(Boolean);

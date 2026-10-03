@@ -559,13 +559,19 @@
         <h3>Clés API</h3>
         <div class="ev-hint">Gratuites. Elles restent uniquement dans ce téléphone.</div>
         <label class="ev-champ">Clé TomTom (itinéraires) — <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">créer</a>
-          <input type="text" id="ev-cle-tomtom" class="ev-input" autocomplete="off" spellcheck="false">
+          <span class="ev-input-row">
+            <input type="password" id="ev-cle-tomtom" class="ev-input" autocomplete="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true">
+            <button type="button" id="ev-cle-tomtom-voir" class="ev-mini-btn" aria-label="Afficher la clé">👁️</button>
+          </span>
         </label>
         <button id="ev-tester-tomtom-btn" class="ev-btn" type="button">🔍 Tester ma clé TomTom</button>
         <div id="ev-tester-tomtom-resultat" class="ev-diagnostic hidden"></div>
         <div id="ev-quota-tomtom" class="ev-hint"></div>
         <label class="ev-champ">Clé Open Charge Map (bornes) — <a href="https://openchargemap.org/site/signup" target="_blank" rel="noopener">créer</a>
-          <input type="text" id="ev-cle-ocm" class="ev-input" autocomplete="off" spellcheck="false">
+          <span class="ev-input-row">
+            <input type="password" id="ev-cle-ocm" class="ev-input" autocomplete="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true">
+            <button type="button" id="ev-cle-ocm-voir" class="ev-mini-btn" aria-label="Afficher la clé">👁️</button>
+          </span>
         </label>
       </div>
 
