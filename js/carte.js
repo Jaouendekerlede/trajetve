@@ -96,6 +96,7 @@ let coucheNav = null;
 let ligneParcourue = null;
 let ligneRestante = null;
 let marqueursRadars = [];
+let marqueursFeux = [];
 let marqueurVoiture = null;
 let surDeplacementManuel = null;
 
@@ -202,6 +203,16 @@ export function dessinerRadars(radars) {
   for (const m of marqueursRadars) m.remove();
   const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
   marqueursRadars = (radars || []).map((r) => L.marker([r.lat, r.lon], { icon: pastille(28, "rgba(255,70,60,.95)", symbole), zIndexOffset: 4500, interactive: false }).addTo(coucheNav));
+}
+
+// Feux tricolores sur le tracé (OpenStreetMap) : demande du 2026-10-03, déjà
+// utilisés pour les annonces vocales (« au deuxième feu… »), maintenant
+// visibles aussi sur la carte. Ajoutés à coucheNav (effacés et redessinés
+// avec le reste au prochain dessinerRouteNavigation).
+export function dessinerFeux(feux) {
+  for (const m of marqueursFeux) m.remove();
+  const symbole = `<span style="font-size:14px;line-height:1;display:flex">🚦</span>`;
+  marqueursFeux = (feux || []).map((f) => L.marker([f.lat, f.lon], { icon: pastille(24, "rgba(40,40,45,.92)", symbole), zIndexOffset: 4400, interactive: false }).addTo(coucheNav));
 }
 
 // Flèche blanche du prochain virage sur le tracé (null : l'effacer).

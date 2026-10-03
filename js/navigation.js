@@ -212,10 +212,12 @@ function installerRoute(route) {
   etat.flecheCarte = undefined;
   route.zonesDanger = etat.radars ? zonesDeDanger(etat.radars, route.coords, route.cum, route.limites) : [];
   route.radarsSurTrace = etat.radars ? radarsSurTrace(etat.radars, route.coords, route.cum) : [];
+  route.feuxSurTrace = etat.feuxConnus.size ? radarsSurTrace([...etat.feuxConnus.values()], route.coords, route.cum) : [];
   route.aires = etat.airesOsm ? airesSurRoute(etat.airesOsm, route.coords, route.cum, route.autoroutes || []) : [];
   appliquerFeux(route);
   vue.dessinerRouteNavigation(route.coords, etat.arretsRestants, etat.destination);
   vue.dessinerRadars(route.radarsSurTrace);
+  vue.dessinerFeux(route.feuxSurTrace);
   if (etat.pos) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
     etat.idx = m.i;
@@ -512,6 +514,14 @@ function recalculerRadars() {
   vue.dessinerRadars(etat.route.radarsSurTrace);
 }
 
+// Feux tricolores connus (etat.feuxConnus) replacés sur le tracé courant,
+// pour les marqueurs sur la carte -- même logique que recalculerRadars().
+function recalculerFeux() {
+  if (!etat?.route) return;
+  etat.route.feuxSurTrace = radarsSurTrace([...etat.feuxConnus.values()], etat.route.coords, etat.route.cum);
+  vue.dessinerFeux(etat.route.feuxSurTrace);
+}
+
 // Radars fixes du trajet, une fois (et après un nouveau plan) : on n'en
 // montre que les « zones de danger » permises par la loi.
 async function chercherRadars() {
@@ -710,6 +720,7 @@ async function chercherFeux(route) {
   for (const f of r.feux) etat.feuxConnus.set(`${f.lat},${f.lon}`, f);
   if (etat.route === route) {
     appliquerFeux(route);
+    recalculerFeux();
     majEcran();
   }
 }

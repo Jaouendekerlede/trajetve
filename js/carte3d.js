@@ -52,6 +52,7 @@ let voiture = null;
 let marqueursRoute = [];
 let marqueursBornes = [];
 let marqueursRadars = [];
+let marqueursFeux = [];
 let bornesVisibles = false;
 let cumRoute = null;
 // Dernier tracé de navigation : à redessiner si la carte est recréée en
@@ -1126,6 +1127,14 @@ export function dessinerRadars(radars) {
   for (const m of marqueursRadars) m.remove();
   const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
   marqueursRadars = (radars || []).map((r) => new maplibregl.Marker({ element: pastille(28, "rgba(255,70,60,.95)", symbole) }).setLngLat([r.lon, r.lat]).addTo(carte));
+}
+
+// Feux tricolores sur le tracé (OpenStreetMap), pendant du 2D : demande du
+// 2026-10-03.
+export function dessinerFeux(feux) {
+  for (const m of marqueursFeux) m.remove();
+  const symbole = `<span style="font-size:14px;line-height:1;display:flex">🚦</span>`;
+  marqueursFeux = (feux || []).map((f) => new maplibregl.Marker({ element: pastille(24, "rgba(40,40,45,.92)", symbole) }).setLngLat([f.lon, f.lat]).addTo(carte));
 }
 
 // Parcouru en gris, restant en vert : un dégradé à seuil le long du tracé,
