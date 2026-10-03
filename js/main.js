@@ -76,35 +76,31 @@ window.addEventListener("pageshow", (e) => {
 
 const VERIFICATION_MAJ_MS = 30 * 60 * 1000;
 
-// Nouvelle version installée en arrière-plan : on propose de recharger,
-// jamais pendant une navigation (le rechargement la couperait).
-function proposerMiseAJour() {
+// Recharge avec la nouvelle version dès que le guidage est arrêté.
+function appliquerMiseAJour() {
   if (navigationActive()) {
-    setTimeout(proposerMiseAJour, 60000);
+    setTimeout(appliquerMiseAJour, 15000);
     return;
   }
-  if (document.getElementById("ev-maj")) return;
-  const bandeau = document.createElement("div");
-  bandeau.id = "ev-maj";
-  bandeau.className = "ev-maj";
-  bandeau.innerHTML = `<span>✨ Nouvelle version de l'appli disponible</span><button type="button" class="ev-btn">Mettre à jour</button>`;
-  bandeau.querySelector("button").addEventListener("click", () => location.reload());
-  document.body.appendChild(bandeau);
+  location.reload();
 }
 
 if ("serviceWorker" in navigator) {
   // Au tout premier lancement, l'installation n'est pas une « mise à jour ».
   let avaitUneVersion = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (avaitUneVersion) proposerMiseAJour();
+    if (avaitUneVersion) appliquerMiseAJour();
     else avaitUneVersion = true;
   });
   window.addEventListener("load", async () => {
     try {
       const inscription = await navigator.serviceWorker.register("./service-worker.js");
-      const verifier = () => inscription.update().catch(() => {});
+      const verifier = () => inscription.update().catch((e) => console.warn("[SW] Vérification de mise à jour échouée", e));
+      verifier();
       setInterval(verifier, VERIFICATION_MAJ_MS);
-      document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && verifier());
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") verifier();
+      });
     } catch (e) {
       console.warn("[SW] Enregistrement échoué", e);
     }
