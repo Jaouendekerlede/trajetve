@@ -45,8 +45,13 @@ const ATTRIBUTION_OSM = '© <a href="https://www.openstreetmap.org/copyright">Op
 // retombe sur OSM (le fond sombre est alors OSM inversé par un filtre CSS).
 // detectRetina : sur un écran dense, on charge le niveau de zoom au-dessus
 // (2× plus de pixels) au lieu d'agrandir une tuile 256 px.
-const osmSombre = () => L.tileLayer(OSM, { maxZoom: 19, detectRetina: true, attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" });
-const osmPlan = () => L.tileLayer(OSM, { maxZoom: 19, detectRetina: true, attribution: ATTRIBUTION_OSM });
+// Au-delà du dernier niveau fourni (zoom 18,5 à 19,5 aux carrefours en
+// guidage), la tuile est agrandie : sans cela la couche disparaît et la carte
+// devient noire. Sur écran dense, detectRetina demande déjà un niveau de plus.
+const ZOOM_MAX_AFFICHE = 22;
+const tuilesJusqua = (niveau) => ({ maxZoom: ZOOM_MAX_AFFICHE, maxNativeZoom: L.Browser.retina ? niveau - 1 : niveau, detectRetina: true });
+const osmSombre = () => L.tileLayer(OSM, { ...tuilesJusqua(19), attribution: ATTRIBUTION_OSM, className: "ev-tuiles-sombres" });
+const osmPlan = () => L.tileLayer(OSM, { ...tuilesJusqua(19), attribution: ATTRIBUTION_OSM });
 
 // Après un refus (quota, clé), on ne réessaie TomTom qu'au bout d'un moment,
 // sinon chaque changement de fond repasse par un écran noir.
@@ -59,7 +64,8 @@ function fondTomTom(style, repli) {
   // Une tuile TomTom 512 px couvre la même zone qu'une tuile 256 px : on
   // l'affiche en 256 px CSS, soit deux pixels d'image par pixel d'écran.
   const couche = L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/${style}/{z}/{x}/{y}.png?key=${encodeURIComponent(cle)}&tileSize=512&language=fr-FR`, {
-    maxZoom: 20,
+    maxZoom: ZOOM_MAX_AFFICHE,
+    maxNativeZoom: 20,
     attribution: '© <a href="https://www.tomtom.com/">TomTom</a>',
   });
   let erreursDeSuite = 0;
@@ -85,9 +91,9 @@ const FONDS = {
   osm: osmPlan,
   satellite: () =>
     L.layerGroup([
-      L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true, attribution: "Imagerie © Esri" }),
-      L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true }),
-      L.tileLayer(`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true }),
+      L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { ...tuilesJusqua(19), attribution: "Imagerie © Esri" }),
+      L.tileLayer(`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, tuilesJusqua(19)),
+      L.tileLayer(`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, tuilesJusqua(19)),
     ]),
 };
 export const ORDRE_FONDS = ["sombre", "plan", "osm", "satellite"];

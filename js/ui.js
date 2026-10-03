@@ -547,7 +547,8 @@ function cablerTheme() {
 
 // Carte nuit au coucher du soleil, jour au lever (à l'endroit regardé).
 // Seulement au moment du basculement : un choix manuel du fond reste
-// respecté jusqu'au prochain lever ou coucher. Le satellite n'est pas touché.
+// respecté jusqu'au prochain lever ou coucher. Le satellite n'est pas touché,
+// ni OpenStreetMap de jour (c'est un fond clair, comme le plan).
 let etaitNuit = null;
 function appliquerJourNuit(auDemarrage = false) {
   if (lireReglages().jour_nuit_auto === false) return;
@@ -557,7 +558,7 @@ function appliquerJourNuit(auDemarrage = false) {
   etaitNuit = nuit;
   const actuel = fondCourant();
   const voulu = nuit ? "sombre" : "plan";
-  if (actuel === "satellite" || actuel === voulu) return;
+  if (actuel === "satellite" || actuel === voulu || (actuel === "osm" && !nuit)) return;
   $("ev-fond-btn").innerHTML = iconeFond(choisirFond(voulu));
   if (!auDemarrage) toast(nuit ? "🌙 Coucher du soleil : carte de nuit" : "☀️ Lever du soleil : carte de jour");
 }
@@ -2473,7 +2474,9 @@ export function proposerRechargeMaison() {
 
 // « 💡 Travail ? » : destination souvent prise à cette heure-ci.
 function majSuggestionTrajet() {
-  const d = destinationHabituelle();
+  let d = destinationHabituelle();
+  // « Chez moi » et « Travail » ont déjà leur bouton : pas de doublon avec l'adresse.
+  if (/^(Chez moi|Travail) \(/.test(d || "")) d = null;
   const b = $("ev-suggestion-trajet");
   b.classList.toggle("hidden", !d);
   if (d) {
