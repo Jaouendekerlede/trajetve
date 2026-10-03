@@ -9,7 +9,7 @@ import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerSc
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import { initCarte, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur } from "./carte.js";
+import { initCarte, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage } from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
@@ -65,6 +65,10 @@ let dernierScenarios = null;
 // permet de les montrer avant la fin de ce calcul.
 let itineraires = { jeton: 0, plans: [], routes: [] };
 let dernieresOptions = null;
+// Points de passage imposés choisis à la planification (appui long sur la
+// carte) : { lat, lon }. Effacés uniquement à la main (croix sur le chip).
+let pointsPassage = [];
+let pointChoisiPlanif = null;
 let borneOuverte = null;
 let calculEnCours = false;
 let bornesZone = [];
@@ -230,6 +234,11 @@ function afficherVue(vue, { etat, historique = true } = {}) {
     remplirArretsImposes();
     majSuggestionTrajet();
   }
+  // Appui long sur la carte pour imposer un point de passage : seulement
+  // pendant la planification/le résultat (pas pendant la navigation, qui
+  // installe son propre callback en entrant/sortant du guidage).
+  if ((vue === "trajet" || vue === "resultat") && !navigationActive()) definirAppuiLong(surAppuiLongPlanif);
+  else if (!navigationActive()) definirAppuiLong(null);
   if (vue === "outils") {
     rendreJournal();
     rendreStats();
@@ -1040,6 +1049,52 @@ function chargerPrefs() {
   majJaugeBatterie();
 }
 
+// ── Points de passage imposés (appui long sur la carte en planification) ────
+
+function surAppuiLongPlanif(lat, lon) {
+  pointChoisiPlanif = { lat, lon };
+  $("ev-plan-point").classList.remove("hidden");
+}
+
+function ajouterPointPassage() {
+  const p = pointChoisiPlanif;
+  $("ev-plan-point").classList.add("hidden");
+  if (!p) return;
+  pointsPassage.push(p);
+  rendrePointsPassage();
+  if (trajetAffiche) {
+    toast("➕ Point ajouté : nouveau calcul…");
+    lancerTrajet();
+  }
+}
+
+function retirerPointPassage(i) {
+  pointsPassage.splice(i, 1);
+  rendrePointsPassage();
+  if (trajetAffiche) lancerTrajet();
+}
+
+function rendrePointsPassage() {
+  afficherPointsPassage(pointsPassage);
+  const conteneur = $("ev-points-passage-liste");
+  conteneur.classList.toggle("hidden", pointsPassage.length === 0);
+  conteneur.innerHTML = pointsPassage
+    .map((_, i) => `<button type="button" class="ev-chip" data-retirer-etape="${i}">📍 Étape ${i + 1} ✕</button>`)
+    .join("");
+}
+
+function cablerPointsPassage() {
+  $("ev-plan-point").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-point]")?.dataset.point;
+    if (a === "etape") ajouterPointPassage();
+    else if (a === "fermer") $("ev-plan-point").classList.add("hidden");
+  });
+  $("ev-points-passage-liste").addEventListener("click", (e) => {
+    const i = e.target.closest("[data-retirer-etape]")?.dataset.retirerEtape;
+    if (i !== undefined) retirerPointPassage(Number(i));
+  });
+}
+
 function construireOptions() {
   dernierChargeDepartPct = parseFloat($("ev-charge-pct-input").value);
   const seuil = parseFloat($("ev-seuil-cout-input").value);
@@ -1054,6 +1109,7 @@ function construireOptions() {
     seuil_cout_eur: Number.isFinite(seuil) ? seuil : null,
     depart_prevu: $("ev-depart-prevu-input").value || null,
     arret_impose: arretImposeChoisi(),
+    points_passage: pointsPassage.slice(),
   };
   for (const [cle, id] of Object.entries(CASES)) options[cle] = $(id).checked;
   dernieresOptions = options;
@@ -2429,6 +2485,7 @@ export function initialiserUI() {
   cablerTheme();
   cablerFeuille();
   cablerNavigation();
+  cablerPointsPassage();
   cablerCarte();
   cablerFiche();
   cablerFormulaire();

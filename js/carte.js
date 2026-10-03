@@ -27,6 +27,8 @@ let coucheTrajet = null;
 // Itinéraires proposés mais non choisis : dans coucheTrajet pour être
 // masqués avec lui pendant la navigation.
 let coucheAlternatives = null;
+// Points de passage imposés choisis à la planification (appui long).
+let couchePointsPassage = null;
 let curseur = null;
 let marqueurPosition = null;
 let selection = null;
@@ -118,6 +120,7 @@ export function initCarte(idElement, { fondInitial = "sombre", onDeplacement } =
   coucheSelection = L.layerGroup().addTo(carte);
   coucheTrajet = L.layerGroup().addTo(carte);
   coucheAlternatives = L.layerGroup();
+  couchePointsPassage = L.layerGroup().addTo(carte);
   surDeplacement = onDeplacement;
   carte.on("moveend", () => !explo3D && onDeplacement?.());
   // Panne de la 3D (tuiles refusées, moteur graphique coupé) : retour en 2D.
@@ -688,6 +691,15 @@ export function effacerTrajet() {
 export function placerCurseur(lat, lon, label) {
   placerCurseur2D(lat, lon, label);
   c3d.exploCurseur(lat, lon, label);
+}
+
+// Points de passage imposés choisis à la planification (liste de {lat, lon}),
+// numérotés dans l'ordre. Uniquement en 2D : c'est l'écran de planification.
+export function afficherPointsPassage(liste) {
+  couchePointsPassage?.clearLayers();
+  (liste || []).forEach((p, i) => {
+    L.marker([p.lat, p.lon], { icon: pastille(26, "#7c4dff", String(i + 1)), zIndexOffset: 6800 }).addTo(couchePointsPassage);
+  });
 }
 
 // Parkings : liste [{ parking, html }].

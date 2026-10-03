@@ -65,6 +65,12 @@
   <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser" data-icone="localiser"></button>
 </div>
 
+<!-- Point choisi sur la carte en planification (appui long) -->
+<div id="ev-plan-point" class="ev-nav-carte hidden">
+  <div class="ev-nav-carte-titre ev-titre-fermer">📍 Point choisi <button type="button" class="ev-fermer" data-point="fermer" aria-label="Fermer">✕</button></div>
+  <button type="button" class="ev-btn" data-point="etape">➕ Passer par ici</button>
+</div>
+
 <!-- Panneau coulissant -->
 <section id="ev-feuille" class="ev-feuille" data-etat="bas">
   <div id="ev-poignee" class="ev-poignee-zone"><div class="ev-poignee"></div></div>
@@ -122,6 +128,8 @@
             <button type="button" class="ev-chip" data-dest="Travail">💼 Travail</button>
             <button type="button" class="ev-chip hidden" id="ev-suggestion-trajet"></button>
           </div>
+          <div class="ev-chips hidden" id="ev-points-passage-liste"></div>
+          <p class="ev-hint">💡 Appui long sur la carte pour imposer un point de passage sur l'itinéraire.</p>
         </div>
         <button id="ev-inverser-btn" class="ev-mini-btn ev-inverser" type="button" title="Inverser départ et destination">⇅</button>
       </div>

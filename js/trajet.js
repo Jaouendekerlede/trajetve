@@ -84,9 +84,20 @@ async function calculerItineraire(depart, destination, opts) {
     instructions: true,
   };
 
+  // Points de passage choisis à la main sur la carte (appui long, "Passer par
+  // ici") : TomTom route au travers, dans l'ordre choisi. Combinés avec une
+  // aire favorite imposée s'il y en a une -- dans ce cas précis, on saute le
+  // calcul fin du détour (ci-dessous) : avec des points imposés par ailleurs,
+  // le trajet est de toute façon déjà sous contrôle manuel.
+  const etapesManuelles = (opts.points_passage || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)).map((p) => ({ lat: p.lat, lon: p.lon }));
+
   let it;
   let aireImposee = null;
-  if (opts.arret_impose) {
+  if (etapesManuelles.length) {
+    const etapes = [...etapesManuelles, ...(opts.arret_impose ? [{ lat: opts.arret_impose.lat, lon: opts.arret_impose.lon }] : [])];
+    it = await calculerItineraireTomTom(tomtom, a.lat, a.lon, b.lat, b.lon, { ...optsRoute, etapes, maxAlternatives: 0 });
+    if (it.erreur) return { ok: false, erreur: messageTomTom(it.erreur, a.nom, b.nom) };
+  } else if (opts.arret_impose) {
     // L'aire préférée est-elle déjà sur le trajet le plus rapide (juste en
     // léger retrait, comme tout parking), ou faut-il vraiment en sortir
     // (autre côté de l'autoroute) ? Mesuré sur un cas réel (Aire de la

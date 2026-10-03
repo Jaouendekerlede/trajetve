@@ -90,6 +90,14 @@ test("TomTom : les zones évitées partent dans la requête (POST avoidAreas)", 
   assert.equal(appels[1].options.method, undefined);
 });
 
+test("points de passage imposés (étapes) : insérés dans l'ordre entre départ et arrivée", async () => {
+  const route = { summary: { lengthInMeters: 1000, travelTimeInSeconds: 60 }, legs: [{ summary: {}, points: [{ latitude: 48.1, longitude: -1.68 }, { latitude: 48.11, longitude: -1.68 }] }], sections: [] };
+  const appels = installerFetch(() => ({ json: { routes: [route] } }));
+  await calculerItineraireTomTom("CLE", 48.1, -1.68, 48.2, -1.68, { etapes: [{ lat: 48.13, lon: -1.681 }, { lat: 48.16, lon: -1.682 }] });
+  const chemin = new URL(appels[0].url).pathname;
+  assert.ok(chemin.includes("48.1,-1.68:48.13,-1.681:48.16,-1.682:48.2,-1.68"), `chemin inattendu : ${chemin}`);
+});
+
 test("route barrée : détecte si le nouveau tracé passe encore par l'endroit", () => {
   const carre = [{ southWestCorner: { latitude: 48.1004, longitude: -1.6805 }, northEastCorner: { latitude: 48.1006, longitude: -1.6795 } }];
   // Deux points éloignés de part et d'autre du carré : le segment le traverse.
