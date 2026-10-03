@@ -1575,7 +1575,14 @@ async function garderEcranAllume() {
 }
 
 function surVisibilite() {
-  if (etat && document.visibilityState === "visible") garderEcranAllume();
+  if (!etat) return;
+  if (document.visibilityState === "visible") garderEcranAllume();
+  // Sauvegarde immédiate en passant en arrière-plan : sur Android, l'appli
+  // peut être tuée par le système sans qu'aucun autre évènement ("pagehide")
+  // ne se déclenche avant -- la reprise ("🧭 Navigation coupée") ne doit pas
+  // dépendre de la dernière sauvegarde périodique (jusqu'à 15 s plus vieille,
+  // voire jamais arrivée si la coupure est très rapide après le départ).
+  else sauverNavigation();
 }
 
 // ── Démarrage / arrêt ───────────────────────────────────────────────────────
