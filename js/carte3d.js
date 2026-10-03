@@ -53,6 +53,14 @@ let marqueursRoute = [];
 let marqueursBornes = [];
 let marqueursRadars = [];
 let marqueursFeux = [];
+// Feux tricolores : seuls ceux proches de la voiture sont posés. Chaque
+// marqueur est replacé à chaque image ; des centaines de feux sur un long
+// trajet ralentissaient le guidage.
+const RAYON_FEUX_KM = 3;
+const RELANCE_FEUX_KM = 1;
+let feuxNav = [];
+let centreFeux = null;
+let positionVoiture = null;
 let bornesVisibles = false;
 let cumRoute = null;
 // Dernier tracé de navigation : à redessiner si la carte est recréée en
@@ -538,6 +546,9 @@ async function creerCarte(fournisseur, fond, relief) {
     if (flecheNav) dessinerFlecheManoeuvre(flecheNav);
     voiture?.addTo(carte);
     if (bornesVisibles) for (const m of marqueursBornes) m.addTo(carte);
+    for (const m of marqueursRadars) m.addTo(carte);
+    centreFeux = null;
+    if (positionVoiture) poserFeuxProches(positionVoiture.lat, positionVoiture.lon);
   }
   if (explo.actif) {
     gestesExploration(!enNavigation);
@@ -1081,9 +1092,14 @@ export function entrerNavigation({ onDeplacementManuel } = {}) {
 export function quitterNavigation() {
   surDeplacementManuel = null;
   enNavigation = false;
-  for (const m of [...marqueursRoute, ...marqueursBornes]) m.remove();
+  for (const m of [...marqueursRoute, ...marqueursBornes, ...marqueursRadars, ...marqueursFeux]) m.remove();
   marqueursRoute = [];
   marqueursBornes = [];
+  marqueursRadars = [];
+  marqueursFeux = [];
+  feuxNav = [];
+  centreFeux = null;
+  positionVoiture = null;
   voiture?.remove();
   voiture = null;
   traceNav = null;
@@ -1132,9 +1148,21 @@ export function dessinerRadars(radars) {
 // Feux tricolores sur le tracé (OpenStreetMap), pendant du 2D : demande du
 // 2026-10-03.
 export function dessinerFeux(feux) {
+  feuxNav = feux || [];
+  centreFeux = null;
+  for (const m of marqueursFeux) m.remove();
+  marqueursFeux = [];
+  if (positionVoiture) poserFeuxProches(positionVoiture.lat, positionVoiture.lon);
+}
+
+function poserFeuxProches(lat, lon) {
+  if (centreFeux && haversineKm(centreFeux.lat, centreFeux.lon, lat, lon) < RELANCE_FEUX_KM) return;
+  centreFeux = { lat, lon };
   for (const m of marqueursFeux) m.remove();
   const symbole = `<span style="font-size:14px;line-height:1;display:flex">🚦</span>`;
-  marqueursFeux = (feux || []).map((f) => new maplibregl.Marker({ element: pastille(24, "rgba(40,40,45,.92)", symbole) }).setLngLat([f.lon, f.lat]).addTo(carte));
+  marqueursFeux = feuxNav
+    .filter((f) => haversineKm(lat, lon, f.lat, f.lon) < RAYON_FEUX_KM)
+    .map((f) => new maplibregl.Marker({ element: pastille(24, "rgba(40,40,45,.92)", symbole) }).setLngLat([f.lon, f.lat]).addTo(carte));
 }
 
 // Parcouru en gris, restant en vert : un dégradé à seuil le long du tracé,
@@ -1172,9 +1200,27 @@ function segmentsRoutesCarte(bbox) {
   }
   const [o, s, e, n] = bbox;
   const dedans = ([x, y]) => x >= o && x <= e && y >= s && y <= n;
+  // Lire la géométrie d'une route la décode (coûteux), et la carte inclinée
+  // charge des tuiles jusqu'à l'horizon : on écarte d'abord celles qui sont
+  // hors de la zone, d'après la tuile de chaque route (« tile », fournie par
+  // MapLibre ; absente, toutes les routes sont lues comme avant).
+  const tuilesUtiles = new Map();
+  const latTuile = (y, n2) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n2))) * 180) / Math.PI;
+  const tuileDansZone = (f) => {
+    const t = f.tile;
+    if (!t || !Number.isFinite(t.z) || !Number.isFinite(t.x) || !Number.isFinite(t.y)) return true;
+    const cle = `${t.z}/${t.x}/${t.y}`;
+    let utile = tuilesUtiles.get(cle);
+    if (utile === undefined) {
+      const n2 = 2 ** t.z;
+      utile = (t.x / n2) * 360 - 180 <= e && ((t.x + 1) / n2) * 360 - 180 >= o && latTuile(t.y + 1, n2) <= n && latTuile(t.y, n2) >= s;
+      tuilesUtiles.set(cle, utile);
+    }
+    return utile;
+  };
   const segs = [];
   for (const f of features) {
-    if (!CLASSES_ROUTES.has(f.properties?.class)) continue;
+    if (!CLASSES_ROUTES.has(f.properties?.class) || !tuileDansZone(f)) continue;
     const g = f.geometry;
     const lignes = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
     for (const l of lignes) for (let i = 1; i < l.length; i++) if (dedans(l[i - 1]) || dedans(l[i])) segs.push([l[i - 1], l[i]]);
@@ -1222,6 +1268,8 @@ function voitureRecalee(lat, lon) {
 }
 
 export function majVoiture(lat, lon, cap) {
+  positionVoiture = { lat, lon };
+  if (feuxNav.length) poserFeuxProches(lat, lon);
   ({ lat, lon } = voitureRecalee(lat, lon));
   if (!voiture) {
     voiture = new maplibregl.Marker({ element: iconeVoiture(), rotationAlignment: "map", pitchAlignment: "map" }).setLngLat([lon, lat]).addTo(carte);
@@ -1263,8 +1311,14 @@ export function inclinaisonNavigation(mode) {
   inclinaisonCible = mode === "plat" ? INCLINAISON_PLATE : INCLINAISON;
 }
 
+// Hauteur de la carte relue au plus une fois par seconde : la lire à chaque
+// image obligeait le navigateur à recalculer la mise en page.
+let hauteurCarte = { t: -Infinity, px: 0 };
+
 export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true) {
-  const hauteur = carte.getContainer().clientHeight;
+  const maintenant = performance.now();
+  if (maintenant - hauteurCarte.t > 1000) hauteurCarte = { t: maintenant, px: carte.getContainer().clientHeight };
+  const hauteur = hauteurCarte.px;
   inclinaisonActuelle += (inclinaisonCible - inclinaisonActuelle) * 0.04;
   const vue = {
     center: [lon, lat],

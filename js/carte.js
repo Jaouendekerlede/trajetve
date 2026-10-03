@@ -184,6 +184,8 @@ export function quitterNavigation() {
     carte.removeLayer(marqueurVoiture);
     marqueurVoiture = null;
   }
+  feuxNav = [];
+  centreFeux = null;
   if (rotationDispo) carte.setBearing(0);
   carte.options.zoomSnap = ZOOM_SNAP;
   carte.setZoom(Math.round(carte.getZoom() / ZOOM_SNAP) * ZOOM_SNAP, { animate: false });
@@ -230,9 +232,29 @@ export function dessinerRadars(radars) {
 // visibles aussi sur la carte. Ajoutés à coucheNav (effacés et redessinés
 // avec le reste au prochain dessinerRouteNavigation).
 export function dessinerFeux(feux) {
+  feuxNav = feux || [];
+  centreFeux = null;
+  for (const m of marqueursFeux) m.remove();
+  marqueursFeux = [];
+  if (marqueurVoiture) poserFeuxProches(marqueurVoiture.getLatLng());
+}
+
+// Seuls les feux proches de la voiture sont posés : en « sens de marche »,
+// chaque marqueur est replacé à chaque rotation de la carte, et un long
+// trajet en compte des centaines.
+const RAYON_FEUX_M = 3000;
+const RELANCE_FEUX_M = 1000;
+let feuxNav = [];
+let centreFeux = null;
+
+function poserFeuxProches(position) {
+  if (centreFeux && carte.distance(centreFeux, position) < RELANCE_FEUX_M) return;
+  centreFeux = L.latLng(position.lat, position.lng);
   for (const m of marqueursFeux) m.remove();
   const symbole = `<span style="font-size:14px;line-height:1;display:flex">🚦</span>`;
-  marqueursFeux = (feux || []).map((f) => L.marker([f.lat, f.lon], { icon: pastille(24, "rgba(40,40,45,.92)", symbole), zIndexOffset: 4400, interactive: false }).addTo(coucheNav));
+  marqueursFeux = feuxNav
+    .filter((f) => carte.distance(centreFeux, [f.lat, f.lon]) < RAYON_FEUX_M)
+    .map((f) => L.marker([f.lat, f.lon], { icon: pastille(24, "rgba(40,40,45,.92)", symbole), zIndexOffset: 4400, interactive: false }).addTo(coucheNav));
 }
 
 // Flèche blanche du prochain virage sur le tracé (null : l'effacer).
@@ -284,6 +306,7 @@ export function definirIconeVoiture(style) {
 export function majVoiture(lat, lon, cap) {
   if (!marqueurVoiture) marqueurVoiture = L.marker([lat, lon], { icon: iconeVoiture(), interactive: false, zIndexOffset: 30000 }).addTo(carte);
   else marqueurVoiture.setLatLng([lat, lon]);
+  if (feuxNav.length) poserFeuxProches(marqueurVoiture.getLatLng());
   // leaflet-rotate tourne la carte dans le sens horaire : un cap apparaît
   // à l'écran décalé de +bearing.
   const relatif = (cap || 0) + (rotationDispo ? carte.getBearing() : 0);
@@ -296,10 +319,19 @@ export function majVoiture(lat, lon, cap) {
 // pour voir plus loin devant.
 // Largeur de la colonne de consignes quand le téléphone est à l'horizontale
 // (0 en portrait) : lue sur l'écran, partagée avec la carte 3D.
+// Appelée à chaque image par les deux cartes : la mesure est gardée une
+// seconde, la relire à chaque fois obligeait à recalculer la mise en page.
+let colonneGauche = { t: -Infinity, px: 0 };
 export function decalageNavGauche() {
-  if (!matchMedia("(orientation: landscape) and (max-height: 560px)").matches) return 0;
-  const colonne = document.querySelector(".ev-nav-haut");
-  return colonne ? colonne.getBoundingClientRect().right : 0;
+  const maintenant = performance.now();
+  if (maintenant - colonneGauche.t < 1000) return colonneGauche.px;
+  let px = 0;
+  if (matchMedia("(orientation: landscape) and (max-height: 560px)").matches) {
+    const colonne = document.querySelector(".ev-nav-haut");
+    px = colonne ? colonne.getBoundingClientRect().right : 0;
+  }
+  colonneGauche = { t: maintenant, px };
+  return px;
 }
 
 export function cameraNavigation(lat, lon, cap, zoom, sensDeMarche, anime = true) {
