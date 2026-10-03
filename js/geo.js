@@ -34,14 +34,14 @@ export function memoriserLieu(libelle, lat, lon) {
   lieuxChoisis.set(libelle.trim().toLowerCase(), { lat, lon, nom: libelle });
 }
 
-export async function suggestionsLieux(texte, pres) {
+export async function suggestionsLieux(texte, pres, signal) {
   const p = new URLSearchParams({ q: texte, lang: "fr", limit: "6" });
   if (pres && Number.isFinite(pres.lat)) {
     p.set("lat", pres.lat.toFixed(3));
     p.set("lon", pres.lon.toFixed(3));
   }
   try {
-    const r = await fetch(`https://photon.komoot.io/api/?${p}`);
+    const r = await fetch(`https://photon.komoot.io/api/?${p}`, { signal });
     if (!r.ok) return [];
     const j = await r.json();
     return (j.features || [])
@@ -68,7 +68,7 @@ function positionGps() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, nom: "Ma position" }),
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, precision: pos.coords.accuracy, nom: "Ma position" }),
       (err) =>
         resolve({
           erreur:
@@ -76,7 +76,7 @@ function positionGps() {
               ? "Accès à la position refusé. Autorise la localisation pour cette appli dans Chrome."
               : "Position GPS introuvable pour le moment. Réessaie ou saisis une adresse.",
         }),
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
     );
   });
 }

@@ -94,9 +94,10 @@ function proposerMiseAJour() {
 
 if ("serviceWorker" in navigator) {
   // Au tout premier lancement, l'installation n'est pas une « mise à jour ».
-  const avaitUneVersion = !!navigator.serviceWorker.controller;
+  let avaitUneVersion = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (avaitUneVersion) proposerMiseAJour();
+    else avaitUneVersion = true;
   });
   window.addEventListener("load", async () => {
     try {

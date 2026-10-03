@@ -15,6 +15,7 @@ export function cablerSuggestions(ids) {
   let champ = null;
   let minuteur = null;
   let jeton = 0;
+  let controleur = null;
   let resultats = [];
   const cacher = () => liste.classList.add("hidden");
   const placer = () => {
@@ -40,18 +41,24 @@ export function cablerSuggestions(ids) {
     el.setAttribute("autocomplete", "off");
     el.addEventListener("input", () => {
       champ = el;
+      controleur?.abort();
+      controleur = null;
       clearTimeout(minuteur);
       const texte = el.value.trim();
-      if (texte.length < LETTRES_MIN) return cacher();
+      if (texte.length < LETTRES_MIN) {
+        jeton++;
+        return cacher();
+      }
       minuteur = setTimeout(async () => {
         const j = ++jeton;
+        controleur = new AbortController();
         let pres = null;
         try {
           pres = centreVisible();
         } catch {
           // Carte pas prête : suggestions sans préférence de lieu.
         }
-        resultats = await suggestionsLieux(texte, pres);
+        resultats = await suggestionsLieux(texte, pres, controleur.signal);
         if (j !== jeton || champ !== el || document.activeElement !== el) return;
         if (!resultats.length) return cacher();
         liste.innerHTML = resultats.map((s, i) => `<button type="button" data-i="${i}"><strong>${escapeHtml(s.nom)}</strong>${s.detail ? `<span>${escapeHtml(s.detail)}</span>` : ""}</button>`).join("");

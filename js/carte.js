@@ -31,6 +31,7 @@ let coucheAlternatives = null;
 let couchePointsPassage = null;
 let curseur = null;
 let marqueurPosition = null;
+let cerclePrecisionPosition = null;
 let selection = null;
 let decalageBas = 0;
 const marqueurs = new Map();
@@ -81,6 +82,7 @@ function fondTomTom(style, repli) {
 const FONDS = {
   sombre: () => fondTomTom("night", osmSombre),
   plan: () => fondTomTom("main", osmPlan),
+  osm: osmPlan,
   satellite: () =>
     L.layerGroup([
       L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true, attribution: "Imagerie © Esri" }),
@@ -88,8 +90,8 @@ const FONDS = {
       L.tileLayer(`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, detectRetina: true }),
     ]),
 };
-export const ORDRE_FONDS = ["sombre", "plan", "satellite"];
-export const ICONES_FONDS = { sombre: "🌙", plan: "🗺️", satellite: "🛰️" };
+export const ORDRE_FONDS = ["sombre", "plan", "osm", "satellite"];
+export const ICONES_FONDS = { sombre: "🌙", plan: "🗺️", osm: "🌍", satellite: "🛰️" };
 
 let rotationDispo = false;
 let coucheNav = null;
@@ -314,7 +316,7 @@ export function fondCourant() {
 
 export function optionsCarte3D() {
   const r = lireReglages();
-  return { fond: nomFond, fournisseur: r.carte_3d || "libre", relief: r.relief_3d === true };
+  return { fond: nomFond === "osm" ? "plan" : nomFond, fournisseur: r.carte_3d || "libre", relief: r.relief_3d === true };
 }
 
 export function carte3DActive() {
@@ -409,6 +411,10 @@ function creerCoucheBornes() {
   return L.markerClusterGroup({
     maxClusterRadius: 42,
     disableClusteringAtZoom: ZOOM_SANS_REGROUPEMENT,
+    removeOutsideVisibleBounds: true,
+    chunkedLoading: true,
+    chunkInterval: 100,
+    chunkDelay: 25,
     showCoverageOnHover: false,
     spiderfyOnMaxZoom: false,
     iconCreateFunction: (groupe) => {
@@ -439,12 +445,16 @@ function afficherBornes2D(bornes, onClic) {
   coucheBornes.clearLayers();
   coucheSelection.clearLayers();
   marqueurs.clear();
+  const aRegrouper = [];
   for (const b of bornes) {
     const m = L.marker([b.lat, b.lon], { icon: iconeBorne(b), kw: puissanceBorne(b), zIndexOffset: puissanceBorne(b) * 2 + (b === selection ? 10000 : 0) });
     m.on("click", () => onClic(b));
-    m.addTo(coucheDe(b));
+    if (b === selection) coucheSelection.addLayer(m);
+    else aRegrouper.push(m);
     marqueurs.set(b, m);
   }
+  if (typeof coucheBornes.addLayers === "function") coucheBornes.addLayers(aRegrouper);
+  else for (const marqueur of aRegrouper) coucheBornes.addLayer(marqueur);
 }
 
 function rafraichirBorne2D(b) {
@@ -513,10 +523,18 @@ function limitesVisibles2D() {
   return { sud: Math.min(a.lat, b.lat), nord: Math.max(a.lat, b.lat), ouest: Math.min(a.lng, b.lng), est: Math.max(a.lng, b.lng) };
 }
 
-function afficherPosition2D(lat, lon) {
+function afficherPosition2D(lat, lon, precision) {
   const icone = L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9], html: '<div class="ev-position"></div>' });
   if (marqueurPosition) marqueurPosition.setLatLng([lat, lon]);
   else marqueurPosition = L.marker([lat, lon], { icon: icone, interactive: false, zIndexOffset: 20000 }).addTo(carte);
+  if (Number.isFinite(precision) && precision > 0) {
+    if (cerclePrecisionPosition) cerclePrecisionPosition.setLatLng([lat, lon]).setRadius(precision);
+    else cerclePrecisionPosition = L.circle([lat, lon], { radius: precision, color: "#4fe0ff", weight: 1.5, opacity: 0.8, fillColor: "#4fe0ff", fillOpacity: 0.12, interactive: false }).addTo(carte);
+    cerclePrecisionPosition.bringToBack();
+  } else if (cerclePrecisionPosition) {
+    carte.removeLayer(cerclePrecisionPosition);
+    cerclePrecisionPosition = null;
+  }
 }
 
 // ── Itinéraire ──────────────────────────────────────────────────────────────
@@ -679,9 +697,14 @@ export function montrerBornes(visible) {
   c3d.exploMontrerBornes(visible);
 }
 
-export function afficherPosition(lat, lon) {
-  afficherPosition2D(lat, lon);
+export function afficherPosition(lat, lon, precision) {
+  afficherPosition2D(lat, lon, precision);
   c3d.exploPosition(lat, lon);
+}
+
+export function afficherPrecisionGPS(lat, lon, precision) {
+  if (!Number.isFinite(precision) || precision <= 0) return;
+  afficherPosition2D(lat, lon, precision);
 }
 
 export function afficherAlternatives(liste) {

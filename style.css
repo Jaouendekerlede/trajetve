@@ -52,8 +52,8 @@
   --bloc: #f3f6fa;
   --bloc-2: #e7ecf3;
   --texte: #101826;
-  --texte-att: rgba(16, 24, 38, 0.68);
-  --texte-faible: rgba(16, 24, 38, 0.52);
+  --texte-att: rgba(16, 24, 38, 0.74);
+  --texte-faible: rgba(16, 24, 38, 0.62);
   --bordure: rgba(16, 24, 38, 0.12);
   --vert: #12c78b;
   --vert-clair: #067a55;
@@ -106,6 +106,10 @@ a { color: var(--vert-clair); }
 h2 { margin: 0; font-size: 18px; font-weight: 800; }
 h3 { margin: 0 0 10px; font-size: 14px; font-weight: 800; color: var(--vert-clair); }
 button { font-family: inherit; color: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 3px;
+}
 
 /* ── Carte ─────────────────────────────────────────────────────────────── */
 .ev-carte { position: fixed; inset: 0; z-index: 0; background: #0b1017; }
@@ -221,6 +225,7 @@ button { font-family: inherit; color: inherit; }
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
+.ev-haut .ev-chip { height: 44px; }
 .ev-chip.actif { background: var(--vert); border-color: var(--vert); color: #04221a; }
 .ev-bandeau {
   margin-top: 6px;
@@ -657,7 +662,8 @@ body.ev-bandeau-compact .ev-nav-ensuite { order: 1; margin: -10px 0 0 14px; padd
 body.ev-bandeau-compact .ev-nav-alerte { order: 2; padding: 7px 12px; font-size: 13.5px; }
 body.ev-bandeau-compact .ev-nav-danger { order: 3; padding: 4px 10px; font-size: 13.5px; }
 body.ev-bandeau-compact .ev-nav-voies { order: 4; }
-body.ev-bandeau-compact .ev-nav-vue-voies { order: 5; align-self: flex-start; width: 100px; padding: 4px; border-radius: 12px; }
+body.ev-bandeau-compact .ev-nav-vue-voies { order: 5; align-self: flex-start; width: 160px; padding: 6px; border-radius: 12px; }
+body.ev-bandeau-compact .ev-nav-vue-voies-instruction { font-size: 10px; }
 body.ev-bandeau-compact .ev-nav-vue-voies-distance { font-size: 14px; margin-bottom: 0; }
 body.ev-bandeau-compact .ev-nav-borne { order: 6; align-self: flex-start; max-width: 100%; padding: 5px 10px; border-radius: 12px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 28, 40, 0.82); color: #e8eef7; }
 body.ev-bandeau-compact .ev-aire { width: 50px; padding: 4px 2px 3px; border-width: 1.5px; border-radius: 10px; }
@@ -827,10 +833,12 @@ body.ev-mode-navigation .ev-maj { display: none; }
 /* Zone de danger (radars) : bandeau orange sous la manœuvre. */
 .ev-nav-danger { align-self: flex-start; padding: 8px 14px; border-radius: 12px; background: #e8590c; color: #fff; font-size: 17px; font-weight: 800; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 /* Fenêtre des voies (comme Sygic), à droite sous le bandeau. */
-.ev-nav-vue-voies { align-self: flex-end; width: 150px; padding: 6px; border-radius: 16px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
+.ev-nav-vue-voies { align-self: flex-end; width: 170px; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 16px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
 .ev-nav-vue-voies svg { display: block; width: 100%; height: auto; }
-.ev-nav-vue-voies-distance { color: #fff; font-size: 20px; font-weight: 900; text-align: center; margin-bottom: 2px; }
-body.ev-mode-voiture .ev-nav-vue-voies { width: 180px; }
+.ev-nav-vue-voies-instruction { color: #fff; font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-align: center; text-transform: uppercase; }
+.ev-nav-vue-voies-distance { color: #fff; font-size: 20px; font-weight: 900; text-align: center; margin: 2px 0; }
+body.ev-mode-voiture .ev-nav-vue-voies { width: 190px; }
+body.ev-mode-voiture .ev-nav-vue-voies-instruction { font-size: 13px; }
 /* Routes coupées à éviter (Trajet > options) et visée sur la carte */
 .ev-zones-evitees { display: flex; flex-direction: column; gap: 6px; }
 .ev-zone-evitee { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--chip); font-size: 14px; }
@@ -1048,7 +1056,14 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 .ev-presentation-legal { margin: 10px 0 0; max-width: 460px; font-size: 11.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.62); }
 .ev-presentation-suite { margin: 26px 0 0; font-size: 12.5px; color: rgba(255, 255, 255, 0.5); }
 .ev-presentation.ev-presentation-fermee { opacity: 0; pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .ev-presentation { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* Carte de la région hors ligne, reprise après coupure */
 .ev-region-bloc { border: 1px solid var(--bordure); border-radius: 12px; padding: 10px 12px; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px; }

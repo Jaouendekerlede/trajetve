@@ -11,14 +11,42 @@ test("suggestions d'adresses (Photon) puis position reprise sans nouvelle recher
   const appels = installerFetch(() => ({
     json: { features: [{ geometry: { coordinates: [-1.6778, 48.1113] }, properties: { name: "Gare de Rennes", street: "Place de la Gare", housenumber: "19", postcode: "35000", city: "Rennes", country: "France" } }] },
   }));
-  const r = await geo.suggestionsLieux("gare renn", { lat: 48.1, lon: -1.68 });
+  const controleur = new AbortController();
+  const r = await geo.suggestionsLieux("gare renn", { lat: 48.1, lon: -1.68 }, controleur.signal);
   assert.ok(appels[0].url.includes("photon.komoot.io") && appels[0].url.includes("lat=48.100"));
+  assert.equal(appels[0].options.signal, controleur.signal, "la requête peut être annulée");
   assert.equal(r[0].nom, "Gare de Rennes");
   assert.equal(r[0].libelle, "Gare de Rennes, 19 Place de la Gare, 35000, Rennes");
   geo.memoriserLieu(r[0].libelle, r[0].lat, r[0].lon);
   const lieu = await geo.resoudreLieu(r[0].libelle);
   assert.deepEqual([lieu.lat, lieu.lon], [48.1113, -1.6778]);
   assert.equal(appels.length, 1, "pas de géocodage : position déjà connue");
+});
+
+test("position GPS : demande une mesure précise et conserve son incertitude", async () => {
+  const ancienne = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let optionsRecues;
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      geolocation: {
+        getCurrentPosition(succes, _echec, options) {
+          optionsRecues = options;
+          succes({ coords: { latitude: 48.1, longitude: -1.68, accuracy: 12 }, timestamp: Date.now() });
+        },
+      },
+    },
+  });
+  try {
+    const lieu = await geo.resoudreLieu("ma position");
+    assert.deepEqual([lieu.lat, lieu.lon, lieu.precision], [48.1, -1.68, 12]);
+    assert.equal(optionsRecues.enableHighAccuracy, true);
+    assert.equal(optionsRecues.maximumAge, 10000);
+    assert.equal(optionsRecues.timeout, 20000);
+  } finally {
+    if (ancienne) Object.defineProperty(globalThis, "navigator", ancienne);
+    else delete globalThis.navigator;
+  }
 });
 
 test("le long du trajet : détour en minutes, trié", async () => {

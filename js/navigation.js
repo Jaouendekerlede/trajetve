@@ -320,6 +320,9 @@ function afficherVoies(instr) {
   const enFenetre = !!section && etat.prefs.fenetreVoies && section.lanes.some((l) => !l.follow);
   fenetre.classList.toggle("hidden", !enFenetre);
   if (enFenetre) {
+    const voiesSuivies = section.lanes.filter((voie) => voie.follow).length;
+    $("ev-nav-vue-voies-instruction").textContent = voiesSuivies === 1 ? "Suivez la voie bleue" : "Suivez les voies bleues";
+    fenetre.setAttribute("aria-label", voiesSuivies === 1 ? "Suivez la voie bleue" : "Suivez les voies bleues");
     $("ev-nav-vue-voies-distance").textContent = distanceAffichee(reste);
     if (fenetre.dataset.cle !== String(section.offset)) {
       fenetre.dataset.cle = String(section.offset);
@@ -1362,6 +1365,7 @@ function surPosition(p) {
   etat.idx = m.i;
   etat.offset = m.offset;
   etat.pos = p;
+  carte2D.afficherPrecisionGPS(p.lat, p.lon, p.precision);
 
   // Hors itinéraire : plusieurs positions de suite trop loin du tracé
   const seuil = Math.max(40, (p.precision || 20) * 1.5);
@@ -1691,12 +1695,14 @@ function cablerBoutons() {
   });
   $("ev-nav-apercu-btn").addEventListener("click", () => {
     etat.suivi = false;
+    $("ev-nav-recentrer-btn").textContent = vue === carte2D ? "🎯 Revenir au guidage" : "🎯 Recentrer";
     $("ev-nav-recentrer-btn").classList.remove("hidden");
     vue.apercuNavigation(etat.route.coords.slice(etat.idx));
   });
   $("ev-nav-recentrer-btn").addEventListener("click", () => {
     etat.suivi = true;
     $("ev-nav-recentrer-btn").classList.add("hidden");
+    $("ev-nav-recentrer-btn").textContent = "🎯 Recentrer";
     if (etat.pos) vue.cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
   });
   $("ev-nav-batt-btn").addEventListener("click", () => {
@@ -2422,6 +2428,8 @@ function signalerRemplacementCarte() {
 function surDeplacementManuel() {
   if (!etat) return;
   etat.suivi = false;
+  if (vue === carte2D) $("ev-nav-recentrer-btn").textContent = "🎯 Revenir au guidage";
+  else $("ev-nav-recentrer-btn").textContent = "🎯 Recentrer";
   $("ev-nav-recentrer-btn").classList.remove("hidden");
 }
 

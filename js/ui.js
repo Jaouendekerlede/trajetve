@@ -595,7 +595,7 @@ function cablerCarte() {
     const nom = fondSuivant();
     $("ev-fond-btn").innerHTML = iconeFond(nom);
     sauverReglages({ fond_carte: nom });
-    toast({ sombre: "🌙 Carte sombre", plan: "🗺️ Plan clair", satellite: "🛰️ Vue satellite" }[nom]);
+    toast({ sombre: "🌙 Carte sombre", plan: "🗺️ Plan clair", osm: "🌍 OpenStreetMap (gratuit)", satellite: "🛰️ Vue satellite" }[nom]);
   });
 
   appliquerJourNuit(true);
@@ -709,15 +709,16 @@ async function localiser() {
     toast(pos.erreur);
     return false;
   }
-  afficherPosition(pos.lat, pos.lon);
+  afficherPosition(pos.lat, pos.lon, pos.precision);
   centrer(pos.lat, pos.lon, Math.max(zoomActuel(), 13.5));
+  toast(Number.isFinite(pos.precision) ? `📍 Position trouvée (précision ±${Math.round(pos.precision)} m).` : "📍 Position trouvée.");
   return true;
 }
 
 async function positionDeDepart() {
   const pos = await resoudreLieu("ma position");
   if (!pos.erreur) {
-    afficherPosition(pos.lat, pos.lon);
+    afficherPosition(pos.lat, pos.lon, pos.precision);
     centrer(pos.lat, pos.lon, 13.5);
     return;
   }
@@ -1711,15 +1712,50 @@ function renderProfilTrajet(p) {
   afficherVueCourbe();
 }
 
-function afficherVueCourbe() {
+let chargementChart = null;
+
+function chargerChart() {
+  if (window.Chart) return Promise.resolve();
+  if (!chargementChart) {
+    chargementChart = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js";
+      script.onload = () => (window.Chart ? resolve() : reject(new Error("Chart.js ne s'est pas chargé correctement.")));
+      script.onerror = () => reject(new Error("Chart.js est indisponible."));
+      document.head.appendChild(script);
+    }).catch((erreur) => {
+      chargementChart = null;
+      throw erreur;
+    });
+  }
+  return chargementChart;
+}
+
+async function afficherVueCourbe() {
   const pt = dernierTrajet?.profil_trajet;
   document.querySelectorAll(".ev-courbe-btn").forEach((b) => b.classList.toggle("active", b.dataset.vue === vueCourbe));
   const vide = $("ev-courbe-vide");
   const conteneur = document.querySelector(".ev-courbe-wrap");
   let message = "";
   if (!pt) message = "Profil indisponible.";
-  else if (!window.Chart) message = "Courbes indisponibles (module graphique non chargé : pas de connexion ?).";
   else if (vueCourbe === "meteo" && !pt.meteo_ok) message = "Coche « 🌦️ Météo réelle sur le trajet » dans les options avancées, puis relance le calcul.";
+  if (!message && !window.Chart) {
+    message = "⏳ Chargement des courbes…";
+    detruireCourbe();
+    vide.textContent = message;
+    vide.classList.remove("hidden");
+    conteneur.classList.add("hidden");
+    try {
+      await chargerChart();
+    } catch {
+      if (dernierTrajet?.profil_trajet === pt) {
+        vide.textContent = "Courbes indisponibles : vérifie la connexion puis réessaie.";
+        vide.classList.remove("hidden");
+      }
+      return;
+    }
+    if (dernierTrajet?.profil_trajet !== pt) return;
+  }
   vide.textContent = message;
   vide.classList.toggle("hidden", !message);
   conteneur.classList.toggle("hidden", !!message);
@@ -2513,4 +2549,3 @@ export function initialiserUI() {
   // Nouveaux utilisateurs seulement (aucune clé encore saisie).
   if (!lireReglages().accueil_vu && !getApiKeys().tomtom && !getApiKeys().openChargeMap) afficherAccueil(afficherVue);
 }
-
