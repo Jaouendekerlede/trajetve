@@ -94,7 +94,7 @@ if ("serviceWorker" in navigator) {
   });
   window.addEventListener("load", async () => {
     try {
-      const inscription = await navigator.serviceWorker.register("./service-worker.js");
+      const inscription = await navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" });
       const verifier = () => inscription.update().catch((e) => console.warn("[SW] Vérification de mise à jour échouée", e));
       verifier();
       setInterval(verifier, VERIFICATION_MAJ_MS);
