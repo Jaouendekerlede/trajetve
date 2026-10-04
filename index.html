@@ -182,6 +182,8 @@
             <div id="ev-zones-evitees-liste"></div>
             <button id="ev-zone-eviter-btn" class="ev-btn" type="button">🚧 Marquer une route coupée sur la carte</button>
           </div>
+          <label class="ev-check"><input type="checkbox" id="ev-plus-court-checkbox"> 📏 Itinéraire le plus court (au lieu du plus rapide)</label>
+          <label class="ev-check"><input type="checkbox" id="ev-eviter-autoroutes-checkbox"> 🚗 Éviter les autoroutes</label>
           <label class="ev-check"><input type="checkbox" id="ev-eviter-peages-checkbox"> 🛣️ Éviter les péages</label>
           <label class="ev-check"><input type="checkbox" id="ev-eviter-ferries-checkbox"> ⛴️ Éviter les ferries</label>
           <label class="ev-check"><input type="checkbox" id="ev-eviter-zfe-checkbox"> 🚫 Éviter les zones à faibles émissions</label>
@@ -308,6 +310,7 @@
       <div class="ev-menu-titre">Aide</div>
       <div class="ev-menu-groupe">
           <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-paiement"><span class="ev-menu-icone">💳</span><span><span class="ev-menu-nom">Payer aux bornes</span><span class="ev-menu-detail">Carte bancaire, applis, badges, liens des réseaux</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-etat"><span class="ev-menu-icone">🩺</span><span><span class="ev-menu-nom">État de l'appli</span><span class="ev-menu-detail">GPS, réseau, clés, données des bornes, hors ligne</span></span></button>
           <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-aide"><span class="ev-menu-icone">❓</span><span><span class="ev-menu-nom">Aide et astuces</span><span class="ev-menu-detail">Mode d'emploi, signaler un problème, version</span></span></button>
       </div>
     </div>
@@ -450,6 +453,7 @@
           <button type="button" data-theme-choix="auto">📱 Auto</button>
         </div>
         <div class="ev-hint">« Auto » suit le réglage clair/sombre de ton téléphone. S'applique tout de suite.</div>
+        <label class="ev-check"><input type="checkbox" id="ev-reglage-contraste"> 🔆 Contraste renforcé (textes et contours plus marqués)</label>
       </div>
 
       <div class="ev-carte-bloc" id="ev-bloc-vehicule">
@@ -726,6 +730,16 @@
         <div class="ev-hint">Informations vérifiées en octobre 2026. Les prix et les offres changent souvent : vérifie-les dans l'appli ou sur le site du réseau.</div>
       </div>
 
+      <div class="ev-carte-bloc" id="ev-bloc-etat">
+        <h3>🩺 État de l'appli</h3>
+        <div class="ev-hint">Ce qui marche et ce qui manque en ce moment. Rien n'est envoyé : tout est lu sur ce téléphone.</div>
+        <div id="ev-etat-liste" class="ev-etat-liste"></div>
+        <div class="ev-grille-2">
+          <button id="ev-etat-gps-btn" class="ev-btn" type="button">📍 Tester le GPS</button>
+          <button id="ev-etat-actualiser-btn" class="ev-btn" type="button">🔄 Actualiser</button>
+        </div>
+      </div>
+
       <div class="ev-carte-bloc" id="ev-bloc-aide">
         <h3>❓ Aide et astuces</h3>
         <details class="ev-sous-menu">
@@ -796,7 +810,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 97 : menu Options du guidage : bouton « Fermer » et fermeture en touchant la carte</div>
+      <div class="ev-hint ev-lien-centre">Version 98 : itinéraire le plus court ou sans autoroute, écran « État de l'appli », contraste renforcé</div>
     </div>
   </div>
 </section>

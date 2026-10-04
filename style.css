@@ -1107,3 +1107,20 @@ button.ev-bandeau { width: 100%; border: none; font-family: inherit; text-align:
 
 /* Menu Options du guidage : bouton de fermeture large, facile à toucher. */
 .ev-fermer-grand { min-height: 44px; padding: 8px 16px; border: 1px solid var(--bordure-forte); border-radius: 999px; background: var(--bloc); font-size: 15px; font-weight: 700; }
+
+/* Menu › État de l'appli. */
+.ev-etat-liste { display: flex; flex-direction: column; gap: 8px; }
+.ev-etat-ligne { display: grid; grid-template-columns: 26px 1fr; gap: 8px; padding: 9px 10px; border-radius: 12px; border: 1px solid var(--bordure); font-size: 14px; line-height: 1.4; }
+.ev-etat-ligne.ev-etat-attention { border-color: rgba(255, 170, 0, 0.6); }
+
+/* Contraste renforcé (Menu › Apparence, ou réglage du téléphone) : textes
+   pleins et contours marqués, dans les deux thèmes. */
+:root[data-contraste="fort"] { --texte: #ffffff; --texte-att: rgba(255, 255, 255, 0.94); --texte-faible: rgba(255, 255, 255, 0.86); --bordure: rgba(255, 255, 255, 0.42); --bordure-forte: rgba(255, 255, 255, 0.62); --separateur: rgba(255, 255, 255, 0.32); }
+:root[data-theme="clair"][data-contraste="fort"] { --texte: #000000; --texte-att: rgba(0, 0, 0, 0.92); --texte-faible: rgba(0, 0, 0, 0.84); --bordure: rgba(0, 0, 0, 0.48); --bordure-forte: rgba(0, 0, 0, 0.66); --separateur: rgba(0, 0, 0, 0.34); }
+@media (prefers-contrast: more) {
+  :root { --texte-att: rgba(255, 255, 255, 0.94); --texte-faible: rgba(255, 255, 255, 0.86); --bordure: rgba(255, 255, 255, 0.42); --bordure-forte: rgba(255, 255, 255, 0.62); }
+  :root[data-theme="clair"] { --texte-att: rgba(0, 0, 0, 0.92); --texte-faible: rgba(0, 0, 0, 0.84); --bordure: rgba(0, 0, 0, 0.48); --bordure-forte: rgba(0, 0, 0, 0.66); }
+}
+
+/* Croix de fermeture des panneaux du guidage : zone de toucher de 44 px. */
+.ev-fermer { min-width: 44px; min-height: 44px; }

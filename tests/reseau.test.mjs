@@ -33,6 +33,15 @@ test("TomTom : les voies ne sont demandées qu'en navigation", async () => {
   assert.ok(appels[1].url.includes("sectionType=lanes") && appels[1].url.includes("language=fr-FR"));
 });
 
+test("TomTom : itinéraire le plus court et sans autoroute, seulement si demandés", async () => {
+  const appels = installerFetch(() => ({ json: { routes: [routeTomTom(50)] } }));
+  await calculerItineraireTomTom("cle", 48, -1, 48.5, -1, {});
+  await calculerItineraireTomTom("cle", 48, -1, 48.5, -1, { plusCourt: true, eviterAutoroutes: true, eviterPeages: true });
+  assert.ok(!appels[0].url.includes("routeType") && !appels[0].url.includes("avoid="), "par défaut : le plus rapide, rien d'évité");
+  assert.ok(appels[1].url.includes("routeType=shortest"));
+  assert.ok(appels[1].url.includes("avoid=motorways") && appels[1].url.includes("avoid=tollRoads"));
+});
+
 test("TomTom : clé absente et clé refusée", async () => {
   assert.equal((await calculerItineraireTomTom("", 48, -1, 48.5, -1)).erreur, "cle_manquante");
   installerFetch(() => ({ statut: 403, json: {} }));

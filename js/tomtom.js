@@ -42,6 +42,9 @@ async function requete(apiKey, points, options, sections, pointsSupport) {
   // Direction actuelle de la voiture : évite un demi-tour absurde au recalcul.
   if (Number.isFinite(options.cap)) params.set("vehicleHeading", String(Math.round(((options.cap % 360) + 360) % 360)));
 
+  // Le plus court plutôt que le plus rapide (TomTom : fastest par défaut).
+  if (options.plusCourt) params.set("routeType", "shortest");
+  if (options.eviterAutoroutes) params.append("avoid", "motorways");
   if (options.eviterPeages) params.append("avoid", "tollRoads");
   if (options.eviterFerries) params.append("avoid", "ferries");
   if (options.eviterZonesFaiblesEmissions) params.append("avoid", "lowEmissionZones");

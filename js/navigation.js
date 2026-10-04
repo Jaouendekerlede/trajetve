@@ -189,6 +189,8 @@ async function calculerRouteNav(pos, cap, { sansSecours = false } = {}) {
     cap,
     zonesEvitees: etat.zonesEvitees,
     eviterPeages: o.eviter_peages,
+    eviterAutoroutes: o.eviter_autoroutes,
+    plusCourt: o.plus_court,
     eviterFerries: o.eviter_ferries,
     eviterZonesFaiblesEmissions: o.eviter_zones_faibles_emissions,
     eviterRoutesNonRevetues: o.eviter_routes_non_revetues,
@@ -198,6 +200,7 @@ async function calculerRouteNav(pos, cap, { sansSecours = false } = {}) {
   // Pas de réseau : guidage préparé à l'avance (« 📥 Hors ligne »), s'il
   // correspond à ce trajet et aux bornes restantes.
   const garde = guidageHorsLigne(etat.destination.lat, etat.destination.lon, etat.arretsRestants.length);
+  if (garde) etat.guidageEnregistre = true;
   return garde ? construireRoute(garde) : null;
 }
 
@@ -1180,18 +1183,41 @@ async function recalculer(raison) {
   // Quota TomTom presque atteint : plus de mise à jour du trafic toutes les
   // 5 min (les recalculs hors itinéraire restent possibles).
   if (raison === "trafic" && appelsTomTomDuJour() > QUOTA_TOMTOM_JOUR * 0.9) return;
+  // Sans réseau, aucun nouveau chemin ne peut être calculé : on le dit une
+  // fois, au lieu d'annoncer un recalcul toutes les 20 secondes pour remettre
+  // le même itinéraire.
+  const sansNouveauChemin = () => {
+    if (!etat.horsRouteSansReseau) {
+      etat.horsRouteSansReseau = true;
+      noter("nav", "hors itinéraire sans réseau : itinéraire d'origine gardé");
+      afficherAlerte("📡 Sans réseau : impossible de calculer un nouveau chemin. L'itinéraire d'origine est gardé : rejoins-le dès que possible.", null, "info");
+      parler("Pas de réseau pour recalculer. Rejoignez l'itinéraire d'origine.", true);
+    }
+  };
+  if (raison === "hors_route" && !navigator.onLine) {
+    etat.dernierRecalcul = Date.now();
+    return sansNouveauChemin();
+  }
   etat.recalculEnCours = true;
   etat.dernierRecalcul = Date.now();
   noter("nav", `recalcul (${raison})`);
-  if (raison === "hors_route") {
+  if (raison === "hors_route" && !etat.horsRouteSansReseau) {
     afficherAlerte("🔄 Recalcul de l'itinéraire…");
     parler("Recalcul de l'itinéraire.", true);
   }
   const ancienneDuree = secondesRestantesJusqua(etat.route.total);
+  etat.guidageEnregistre = false;
   const route = await calculerRouteNav(etat.pos, etat.pos.cap);
   if (!etat) return;
   etat.recalculEnCours = false;
   etat.dernierTrafic = Date.now();
+  // Le téléphone se croit connecté mais rien ne répond : c'est le guidage
+  // enregistré qui est revenu, pas un nouveau chemin.
+  if (route && etat.guidageEnregistre) {
+    if (raison === "hors_route") sansNouveauChemin();
+    return;
+  }
+  etat.horsRouteSansReseau = false;
   if (!route) {
     if (raison === "hors_route") afficherAlerte("⚠️ Recalcul impossible pour le moment (réseau ?). Nouvel essai sous peu.");
     return;
@@ -2013,6 +2039,8 @@ function surReseau() {
     afficherAlerte("📡 Hors réseau : le guidage continue avec l'itinéraire gardé.");
   } else {
     if ($("ev-nav-alerte").textContent.startsWith("📡")) afficherAlerte(null);
+    etat.horsRouteSansReseau = false;
+    etat.dernierRecalcul = 0; // hors itinéraire : nouveau chemin dès la prochaine mesure
     etat.dernierTrafic = 0; // trafic à jour dès que possible
   }
 }
@@ -2875,10 +2903,17 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   const route = await calculerRouteNav(depart, depart.cap);
   if (!etat) return;
   if (!route) {
-    afficherAlerte("⚠️ Impossible de calculer le guidage (clé TomTom ou réseau).", { libelle: "Arrêter", action: () => arreterNavigation() });
+    afficherAlerte(
+      navigator.onLine
+        ? "⚠️ Impossible de calculer le guidage (clé TomTom ou réseau)."
+        : "⚠️ Pas de réseau, et ce trajet n'a pas été préparé pour le hors ligne : le guidage ne peut pas démarrer. Prépare-le avec « 📥 Hors ligne » quand tu as du réseau.",
+      { libelle: "Arrêter", action: () => arreterNavigation() },
+    );
     return;
   }
   installerRoute(route);
+  // Parti sans réseau avec le guidage enregistré : dire tout de suite ce qui manquera.
+  if (etat.guidageEnregistre) afficherAlerte("📡 Sans réseau : guidage enregistré utilisé. Pas de nouvel itinéraire si tu quittes la route, ni trafic, ni état des bornes.", null, "info");
   chercherRadars();
   chercherAires();
   surveillerBatterieTelephone();

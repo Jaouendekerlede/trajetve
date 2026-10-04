@@ -82,6 +82,8 @@ async function calculerItineraire(depart, destination, opts) {
   const departMs = departPrevuMs(opts);
   const optsRoute = {
     eviterPeages: opts.eviter_peages,
+    eviterAutoroutes: opts.eviter_autoroutes,
+    plusCourt: opts.plus_court,
     eviterFerries: opts.eviter_ferries,
     eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
     eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,
@@ -284,6 +286,8 @@ async function planifierSurItineraire(itin, chargePct, opts) {
         const avecArrets = await calculerItineraireTomTom(getApiKeys().tomtom, itin.from_lat, itin.from_lon, itin.to_lat, itin.to_lon, {
           etapes: arretsHorsTrajet.map((a) => ({ lat: a.lat, lon: a.lon })),
           eviterPeages: opts.eviter_peages,
+          eviterAutoroutes: opts.eviter_autoroutes,
+          plusCourt: opts.plus_court,
           eviterFerries: opts.eviter_ferries,
           eviterZonesFaiblesEmissions: opts.eviter_zones_faibles_emissions,
           eviterRoutesNonRevetues: opts.eviter_routes_non_revetues,

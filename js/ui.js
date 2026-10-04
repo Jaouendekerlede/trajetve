@@ -24,6 +24,8 @@ import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement } from "./paiement.js";
+import { lignesEtat } from "./etat-appli.js";
+import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
 import { rendreStats, cablerStats } from "./ui-stats.js";
 import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
@@ -36,11 +38,11 @@ import { ouvrirSOS, cablerSOS } from "./ui-sos.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
-import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
-import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
+import { enrichirBornes, ageEtatsDynamiques, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
+import { demarrerNavigation, etatDiagnostic, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
 import { ageTexte } from "./reprise.js";
 import { cablerDiagnostic } from "./ui-diagnostic.js";
-import { estimerPreparation, preparerHorsLigne, bilanPreparation, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
+import { estimerPreparation, preparerHorsLigne, guidagePrepare, bilanPreparation, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
 
 const VUES = ["bornes", "borne", "trajet", "resultat", "menu", "favoris", "outils", "profil"];
 const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", menu: "haut", favoris: "haut", outils: "haut", profil: "haut" };
@@ -274,6 +276,7 @@ function ouvrirRubrique(vue, bloc, titre) {
 
 // Rubrique désignée par son bloc (titre repris de la ligne du Menu).
 function ouvrirBloc(bloc) {
+  if (bloc === "ev-bloc-etat") rendreEtatAppli();
   const l = document.querySelector(`.ev-menu-ligne[data-bloc="${bloc}"]`);
   ouvrirRubrique(l.dataset.vue, bloc, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
 }
@@ -416,10 +419,10 @@ function pastilleEtat(etat) {
     : "";
   const minutes = etat.date_occupation ? Math.max(0, Math.round((Date.now() - etat.date_occupation) / 60000)) : null;
   const age = minutes === null ? "< 1 h" : minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
-  if (etat.tous_hors_service) return `<span class="ev-cb-pill ${etat.signalement_ancien ? "warn" : "non"}">🔴 Hors service${date}</span>`;
+  if (etat.tous_hors_service) return `<span class="ev-cb-pill ${etat.signalement_ancien ? "warn" : "non"}">⛔ Hors service${date}</span>`;
   if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>`;
-  if (etat.libres) return `<span class="ev-cb-pill ok">🟢 ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>`;
-  if (etat.occupes) return `<span class="ev-cb-pill warn">🟠 Occupée (${age})</span>`;
+  if (etat.libres) return `<span class="ev-cb-pill ok">✅ ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>`;
+  if (etat.occupes) return `<span class="ev-cb-pill warn">⏳ Occupée (${age})</span>`;
   return "";
 }
 
@@ -594,6 +597,8 @@ function appliquerTheme() {
   const choix = reglages.theme || "sombre";
   const theme = themeResolu(choix);
   document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.contraste = reglages.contraste_fort ? "fort" : "normal";
+  $("ev-reglage-contraste").checked = !!reglages.contraste_fort;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "clair" ? "#ffffff" : "#05080e");
   document.querySelectorAll("[data-theme-choix]").forEach((b) => b.classList.toggle("active", b.dataset.themeChoix === choix));
   // Tant que l'utilisateur n'a pas choisi de fond de carte, il suit le thème.
@@ -602,6 +607,12 @@ function appliquerTheme() {
 }
 
 function cablerTheme() {
+  $("ev-reglage-contraste").addEventListener("change", (e) => {
+    // Appliqué tout de suite : inutile de faire apparaître « Enregistrer ».
+    e.stopPropagation();
+    sauverReglages({ contraste_fort: e.target.checked });
+    appliquerTheme();
+  });
   document.querySelectorAll("[data-theme-choix]").forEach((b) =>
     b.addEventListener("click", () => {
       sauverReglages({ theme: b.dataset.themeChoix });
@@ -856,7 +867,7 @@ function ficheBorneHtml(b, ctx) {
       </div>
     </div>
     <div class="ev-badges">
-      ${pastilleEtat(b.etat_dynamique) || (o ? `<span class="ev-cb-pill neutre">⚪ Occupation en temps réel inconnue</span>` : "")}
+      ${pastilleEtat(b.etat_dynamique) || (o ? `<span class="ev-cb-pill neutre">❔ Occupation en temps réel inconnue</span>` : "")}
       <span class="ev-cb-pill ${cb.classe}">${cb.court}</span>
       ${points ? `<span class="ev-cb-pill neutre">🔌 ${escapeHtml(points)} point${points > 1 ? "s" : ""}</span>` : ""}
       ${o?.horaires ? `<span class="ev-cb-pill neutre">🕐 ${escapeHtml(o.horaires)}</span>` : ""}
@@ -1028,6 +1039,8 @@ async function partagerTexte(titre, texte) {
 // ── Formulaire de trajet ───────────────────────────────────────────────────
 
 const CASES = {
+  plus_court: "ev-plus-court-checkbox",
+  eviter_autoroutes: "ev-eviter-autoroutes-checkbox",
   eviter_peages: "ev-eviter-peages-checkbox",
   eviter_ferries: "ev-eviter-ferries-checkbox",
   eviter_zones_faibles_emissions: "ev-eviter-zfe-checkbox",
@@ -2877,7 +2890,59 @@ async function simulerVitesse() {
   }
 }
 
+// Menu › État de l'appli (voir etat-appli.js). gpsTest : résultat du dernier
+// essai lancé par l'utilisateur ; la position elle-même n'est pas gardée.
+let dernierTestGps = null;
+
+async function rendreEtatAppli() {
+  let gpsPermission = null;
+  try {
+    gpsPermission = (await navigator.permissions?.query({ name: "geolocation" }))?.state ?? null;
+  } catch {
+    // Navigateur sans cette interrogation : état inconnu.
+  }
+  const cles = getApiKeys();
+  const prepare = guidagePrepare();
+  const diag = navigationActive() ? etatDiagnostic() : null;
+  const ageEtats = ageEtatsDynamiques();
+  const lignes = lignesEtat({
+    enLigne: navigator.onLine,
+    gpsPermission,
+    gpsTest: dernierTestGps,
+    cles: { tomtom: !!cles.tomtom, openChargeMap: !!cles.openChargeMap },
+    quota: { utilise: appelsTomTomDuJour(), max: QUOTA_TOMTOM_JOUR },
+    etatsBornesAgeMin: ageEtats === null ? null : ageEtats / 60000,
+    guidagePrepare: prepare ? { ageMin: (Date.now() - prepare.ts) / 60000, nbArrets: prepare.nbArrets } : null,
+    regionPreparee: !!regionPreparee(),
+    guidage: diag ? { signal: diag.gps_signal, niveau: diag.gps_niveau, age_s: Number(diag.gps_age_s), ecartees: diag.gps_mesures_ecartees, estimations: diag.gps_passages_a_l_estime } : null,
+  });
+  const symboles = { ok: "✅", attention: "⚠️", info: "ℹ️" };
+  $("ev-etat-liste").innerHTML = lignes.map((l) => `<div class="ev-etat-ligne ev-etat-${l.niveau}"><span aria-hidden="true">${symboles[l.niveau]}</span><div><strong>${escapeHtml(l.titre)}</strong><div>${escapeHtml(l.texte)}</div></div></div>`).join("");
+}
+
+function testerGps() {
+  const bouton = $("ev-etat-gps-btn");
+  bouton.disabled = true;
+  bouton.textContent = "📍 Recherche…";
+  const fin = (resultat) => {
+    dernierTestGps = resultat;
+    bouton.disabled = false;
+    bouton.textContent = "📍 Tester le GPS";
+    rendreEtatAppli();
+  };
+  if (!("geolocation" in navigator)) return fin({ erreur: "La localisation n'existe pas sur cet appareil." });
+  navigator.geolocation.getCurrentPosition(
+    (p) => fin({ precision: p.coords.accuracy, niveau: niveauPrecision(p.coords.accuracy) }),
+    (e) => fin({ erreur: e.code === e.PERMISSION_DENIED ? "Localisation refusée pour cette appli : autorise-la dans les réglages du téléphone." : "Aucune position reçue en 20 secondes : essaie dehors, à ciel dégagé." }),
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+  );
+}
+
 function cablerComplements() {
+  $("ev-etat-gps-btn").addEventListener("click", testerGps);
+  $("ev-etat-actualiser-btn").addEventListener("click", rendreEtatAppli);
+  window.addEventListener("online", () => vueCourante === "profil" && rendreEtatAppli());
+  window.addEventListener("offline", () => vueCourante === "profil" && rendreEtatAppli());
   rendreMoyensPaiement();
   $("ev-moyens-paiement").addEventListener("change", enregistrerMoyensPaiement);
   $("ev-calc-minuteur-btn").addEventListener("click", basculerMinuteurRecharge);

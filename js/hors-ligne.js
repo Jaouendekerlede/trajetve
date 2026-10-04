@@ -90,6 +90,16 @@ export async function preparerGuidage(plan) {
   return true;
 }
 
+// Trajet préparé pour le hors ligne : { ts, nbArrets }, ou null.
+export function guidagePrepare() {
+  try {
+    const g = JSON.parse(localStorage.getItem(CLE_GUIDAGE));
+    return g?.route ? { ts: g.ts, nbArrets: g.nb_arrets } : null;
+  } catch {
+    return null;
+  }
+}
+
 // Guidage gardé pour cette destination et ce nombre de bornes restantes.
 export function guidageHorsLigne(lat, lon, nbArrets) {
   try {

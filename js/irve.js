@@ -132,6 +132,11 @@ function lireEtatsCsv(texte) {
   return etats;
 }
 
+// Âge (ms) des états en mémoire, ou null s'ils n'ont pas été chargés.
+export function ageEtatsDynamiques() {
+  return etatsPdc ? Date.now() - etatsCharges : null;
+}
+
 export function chargerEtatsDynamiques() {
   // En mémoire aussi, les états expirent (appli laissée ouverte des heures).
   if (etatsPdc && Date.now() - etatsCharges < DUREE_ETATS_MS) return Promise.resolve(etatsPdc);
