@@ -79,7 +79,7 @@ export function cablerTrafic() {
   appliquer(!!lireReglages().trafic_carte);
   chip.addEventListener("click", () => {
     const actif = !chip.classList.contains("actif");
-    if (actif && !getApiKeys().tomtom) return toast("🚦 Clé TomTom nécessaire (onglet 🚗 Profil)");
+    if (actif && !getApiKeys().tomtom) return toast("🚦 Clé TomTom nécessaire (Menu › Clés API)");
     sauverReglages({ trafic_carte: actif });
     appliquer(actif);
   });

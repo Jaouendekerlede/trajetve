@@ -56,7 +56,7 @@
     <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
-  <div id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : ouvre l'onglet 🚗 Profil pour les ajouter.</div>
+  <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
 </header>
 
 <!-- Boutons flottants sur la carte -->
@@ -121,6 +121,10 @@
             <button id="ev-depart-gps-btn" class="ev-mini-btn" type="button" title="Ma position">📍</button>
           </span>
           <span class="ev-input-row">
+            <input type="text" id="ev-via-input" class="ev-input" placeholder="Via (étape facultative)" enterkeyhint="done" aria-label="Étape : passer par">
+            <button id="ev-via-ajouter-btn" class="ev-mini-btn" type="button" title="Ajouter cette étape">➕</button>
+          </span>
+          <span class="ev-input-row">
             <input type="text" id="ev-destination-input" class="ev-input" placeholder="Destination (ville, adresse…)" enterkeyhint="go" aria-label="Destination">
             <button id="ev-destination-clear-btn" class="ev-mini-btn" type="button" title="Effacer la destination">🧹</button>
             <button id="ev-destination-micro" class="ev-mini-btn" type="button" title="Dicter la destination">🎤</button>
@@ -131,7 +135,7 @@
             <button type="button" class="ev-chip hidden" id="ev-suggestion-trajet"></button>
           </div>
           <div class="ev-chips hidden" id="ev-points-passage-liste"></div>
-          <p class="ev-hint">💡 Appui long sur la carte pour imposer un point de passage sur l'itinéraire.</p>
+          <p class="ev-hint">💡 Pour passer par une ville, écris-la dans « Via ». Un appui long sur la carte ajoute aussi une étape.</p>
         </div>
         <button id="ev-inverser-btn" class="ev-mini-btn ev-inverser" type="button" title="Inverser départ et destination">⇅</button>
       </div>
@@ -265,6 +269,42 @@
     </div>
 
     <!-- ══ Favoris ══ -->
+    <!-- ══ Menu : tout le reste, rangé par rubrique ══ -->
+    <div id="vue-menu" class="ev-vue hidden">
+      <div class="ev-vue-entete"><h2>☰ Menu</h2></div>
+      <div class="ev-menu-titre">Mes trajets</div>
+      <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" data-vue="favoris"><span class="ev-menu-icone">⭐</span><span><span class="ev-menu-nom">Favoris et historique</span><span class="ev-menu-detail">Trajets favoris, trajets calculés, bornes favorites</span></span></button>
+      </div>
+      <div class="ev-menu-titre">Outils</div>
+      <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-stats"><span class="ev-menu-icone">📊</span><span><span class="ev-menu-nom">Mes statistiques</span><span class="ev-menu-detail">Kilomètres, coût, anciens trajets</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-journal"><span class="ev-menu-icone">📒</span><span><span class="ev-menu-nom">Journal des recharges</span><span class="ev-menu-detail">Recharges faites, ajout à la main</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-recherche"><span class="ev-menu-icone">🔍</span><span><span class="ev-menu-nom">Rechercher des bornes</span><span class="ev-menu-detail">Par ville, enseigne, puissance</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-calculateur"><span class="ev-menu-icone">⏱️</span><span><span class="ev-menu-nom">Calculateur de recharge</span><span class="ev-menu-detail">Temps et coût d'une recharge</span></span></button>
+      </div>
+      <div class="ev-menu-titre">Profil et réglages</div>
+      <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-vehicule"><span class="ev-menu-icone">🚗</span><span><span class="ev-menu-nom">Véhicule</span><span class="ev-menu-detail">Batterie, consommation, prises</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-navigation"><span class="ev-menu-icone">🧭</span><span><span class="ev-menu-nom">Navigation</span><span class="ev-menu-detail">Affichage, voix, alertes</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-cartes"><span class="ev-menu-icone">🗺️</span><span><span class="ev-menu-nom">Cartes</span><span class="ev-menu-detail">Carte hors ligne, carte 3D</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-domicile"><span class="ev-menu-icone">🏠</span><span><span class="ev-menu-nom">Domicile et voix</span><span class="ev-menu-detail">Adresses du domicile et du travail</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-electricite"><span class="ev-menu-icone">💡</span><span><span class="ev-menu-nom">Électricité à domicile</span><span class="ev-menu-detail">Heures creuses, heures pleines</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-abonnements"><span class="ev-menu-icone">💳</span><span><span class="ev-menu-nom">Abonnements de recharge</span><span class="ev-menu-detail">Tes prix par réseau</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-apparence"><span class="ev-menu-icone">🎨</span><span><span class="ev-menu-nom">Apparence</span><span class="ev-menu-detail">Sombre, clair ou automatique</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-cles"><span class="ev-menu-icone">🔑</span><span><span class="ev-menu-nom">Clés API</span><span class="ev-menu-detail">TomTom et Open Charge Map</span></span></button>
+      </div>
+      <div class="ev-menu-titre">Mes données</div>
+      <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-sauvegarde"><span class="ev-menu-icone">💾</span><span><span class="ev-menu-nom">Sauvegarde</span><span class="ev-menu-detail">Lien de restauration, Google Drive</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-raz"><span class="ev-menu-icone">🧹</span><span><span class="ev-menu-nom">Remise à zéro</span><span class="ev-menu-detail">Effacer les données de l'appli</span></span></button>
+      </div>
+      <div class="ev-menu-titre">Aide</div>
+      <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-aide"><span class="ev-menu-icone">❓</span><span><span class="ev-menu-nom">Aide et astuces</span><span class="ev-menu-detail">Mode d'emploi, signaler un problème, version</span></span></button>
+      </div>
+    </div>
+
     <div id="vue-favoris" class="ev-vue hidden">
       <div class="ev-vue-entete"><h2>⭐ Favoris</h2></div>
       <div class="ev-segments">
@@ -284,7 +324,7 @@
     <div id="vue-outils" class="ev-vue hidden">
       <div class="ev-vue-entete"><h2>⚡ Outils</h2></div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-stats">
         <h3>📊 Mes statistiques</h3>
         <div class="ev-segments ev-stats-periodes">
           <button type="button" data-periode="mois" class="active">Ce mois</button>
@@ -296,16 +336,9 @@
           <summary>🗺️ Revoir mes derniers trajets</summary>
           <div id="ev-traces-liste" class="ev-journal-liste"></div>
         </details>
-        <details class="ev-details">
-          <summary>⛽ Comparaison avec une voiture essence</summary>
-          <div class="ev-grille-2">
-            <label class="ev-champ">Prix de l'essence (€/L) <input type="number" id="ev-stats-prix-essence" class="ev-input" min="0.5" step="0.01" inputmode="decimal"></label>
-            <label class="ev-champ">Consommation (L/100 km) <input type="number" id="ev-stats-conso-essence" class="ev-input" min="2" step="0.1" inputmode="decimal"></label>
-          </div>
-        </details>
       </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-journal">
         <h3>📒 Journal des recharges</h3>
         <div class="ev-hint">Rempli tout seul en navigation (à « Reprendre la route »), ou à la main ci-dessous.</div>
         <div id="ev-journal-bilan"></div>
@@ -318,17 +351,10 @@
             <button id="ev-journal-ajouter-btn" class="ev-btn" type="button">Ajouter</button>
           </div>
         </details>
-        <details class="ev-details">
-          <summary>⛽ Comparaison avec une voiture essence</summary>
-          <div class="ev-grille-2">
-            <label class="ev-champ">Consommation (L/100 km) <input type="number" id="ev-journal-conso-essence" class="ev-input" min="0" step="0.1"></label>
-            <label class="ev-champ">Prix du litre (€) <input type="number" id="ev-journal-prix-essence" class="ev-input" min="0" step="0.01"></label>
-          </div>
-        </details>
         <div id="ev-journal-liste" class="ev-journal-liste"></div>
       </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-recherche">
         <h3>🔍 Rechercher des bornes</h3>
         <div class="ev-colonne">
           <label class="ev-champ">Zone (ville, adresse, « Ma position »…)
@@ -376,7 +402,7 @@
         </div>
       </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-calculateur">
         <h3>⏱️ Calculateur de recharge</h3>
         <div class="ev-colonne">
           <label class="ev-champ">Énergie à ajouter (kWh)<input type="number" min="0" step="0.5" id="ev-calc-kwh-input" class="ev-input" value="40" inputmode="decimal"></label>
@@ -399,16 +425,8 @@
     <!-- ══ Profil ══ -->
     <div id="vue-profil" class="ev-vue hidden">
       <div class="ev-vue-entete"><h2>🚗 Profil et réglages</h2></div>
-      <div class="ev-chips ev-profil-sommaire" id="ev-profil-sommaire">
-        <button type="button" class="ev-chip" data-section="ev-profil-vehicule">🚗 Véhicule</button>
-        <button type="button" class="ev-chip" data-section="ev-profil-navigation">🧭 Navigation</button>
-        <button type="button" class="ev-chip" data-section="ev-profil-cartes">🗺️ Cartes</button>
-        <button type="button" class="ev-chip" data-section="ev-profil-cles">🔑 Clés</button>
-        <button type="button" class="ev-chip" data-section="ev-profil-sauvegarde">💾 Sauvegarde</button>
-        <button type="button" class="ev-chip" data-section="ev-profil-aide">❓ Aide</button>
-      </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-apparence">
         <h3>🎨 Apparence</h3>
         <div class="ev-segments" id="ev-theme-choix">
           <button type="button" data-theme-choix="sombre">🌙 Sombre</button>
@@ -418,8 +436,8 @@
         <div class="ev-hint">« Auto » suit le réglage clair/sombre de ton téléphone. S'applique tout de suite.</div>
       </div>
 
-      <div class="ev-carte-bloc">
-        <h3 id="ev-profil-vehicule">Véhicule</h3>
+      <div class="ev-carte-bloc" id="ev-bloc-vehicule">
+        <h3>Véhicule</h3>
         <div class="ev-grille-champs">
           <label class="ev-champ ev-large">Nom<input type="text" id="ev-profil-nom" class="ev-input"></label>
           <label class="ev-champ">Batterie (kWh)<input type="number" step="0.1" id="ev-profil-capacite" class="ev-input" inputmode="decimal"></label>
@@ -439,7 +457,7 @@
         <a href="https://jaouendekerlede.github.io/noticekona/" target="_blank" rel="noopener" class="ev-btn-secondaire" style="display:inline-block;text-decoration:none;text-align:center;margin-top:10px;">📖 Notice Kona (fonctions, commandes, sécurité — hors-ligne)</a>
       </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-electricite">
         <h3>Électricité à domicile</h3>
         <div class="ev-grille-champs">
           <label class="ev-champ">Heures creuses (€/kWh)<input type="number" step="0.0001" min="0.01" id="ev-profil-prix-hc" class="ev-input" inputmode="decimal"></label>
@@ -449,7 +467,7 @@
         <div class="ev-hint">Prix TTC du kWh sur ta facture. Sans option heures creuses, mets le même prix dans les deux cases.</div>
       </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-domicile">
         <h3>Domicile et voix</h3>
         <label class="ev-champ">Adresse du travail (pour « Travail »)
           <input type="text" id="ev-reglage-travail" class="ev-input" placeholder="Ex : 3 rue de la Gare, Rennes">
@@ -460,8 +478,8 @@
         <label class="ev-check"><input type="checkbox" id="ev-reglage-annonce"> 🔊 Annoncer le résultat à voix haute</label>
       </div>
 
-      <div class="ev-carte-bloc">
-        <h3 id="ev-profil-navigation">🧭 Navigation</h3>
+      <div class="ev-carte-bloc" id="ev-bloc-navigation">
+        <h3>🧭 Navigation</h3>
         <div class="ev-hint">Tout est déjà réglé comme conseillé ; ouvrez une rubrique pour changer.</div>
         <details class="ev-sous-menu">
           <summary>🖥️ Affichage</summary>
@@ -529,8 +547,8 @@
         <button id="ev-reglages-conseilles-btn" class="ev-lien ev-lien-centre" type="button">↺ Revenir aux réglages conseillés</button>
       </div>
 
-      <div class="ev-carte-bloc">
-        <h3 id="ev-profil-cartes">Cartes</h3>
+      <div class="ev-carte-bloc" id="ev-bloc-cartes">
+        <h3>Cartes</h3>
         <div class="ev-region-bloc">
           <div class="ev-champ-titre"><strong>📥 Carte hors ligne de ma région</strong></div>
           <div class="ev-hint">Télécharge la carte 3D autour de chez vous : elle s'affichera partout dans la région sans réseau. À faire en Wi-Fi. (Le guidage sans réseau reste celui des trajets préparés avec « Hors ligne ».)</div>
@@ -553,7 +571,7 @@
         <div class="ev-hint">Si la carte choisie ne répond pas, l'autre prend le relais ; sinon la navigation passe en 2D.</div>
       </div>
 
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-abonnements">
         <h3>💳 Mes abonnements de recharge</h3>
         <label class="ev-check"><input type="checkbox" id="ev-reglage-privilegier-abos"> ⭐ Privilégier ces réseaux dans le choix des arrêts</label>
         <div class="ev-hint">Réseau tel qu'il apparaît sur les bornes (ex. Ionity, Tesla, Electra) et ton prix au kWh avec l'abonnement : il remplace le tarif public dans les calculs.</div>
@@ -565,8 +583,8 @@
         <button id="ev-abo-ajouter-btn" class="ev-btn" type="button">➕ Ajouter l'abonnement</button>
       </div>
 
-      <div class="ev-carte-bloc">
-        <h3 id="ev-profil-cles">Clés API</h3>
+      <div class="ev-carte-bloc" id="ev-bloc-cles">
+        <h3>Clés API</h3>
         <div class="ev-hint">Gratuites. Elles restent uniquement dans ce téléphone.</div>
         <label class="ev-champ">Clé TomTom (itinéraires) — <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">créer</a>
           <span class="ev-input-row">
@@ -587,8 +605,8 @@
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
 
-      <div class="ev-carte-bloc">
-        <h3 id="ev-profil-sauvegarde">💾 Sauvegarde de mes données</h3>
+      <div class="ev-carte-bloc" id="ev-bloc-sauvegarde">
+        <h3>💾 Sauvegarde de mes données</h3>
         <div class="ev-hint">Envoie-toi ce lien par e-mail (Gmail…). Sur un nouveau téléphone, il suffit de le toucher : l'appli s'ouvre avec tes clés, ta voiture, tes favoris, ton journal et tes réglages. Le lien contient tes clés : ne le transfère à personne.</div>
         <button id="ev-lien-sauvegarde-btn" class="ev-btn-principal" type="button">📧 M'envoyer le lien de restauration</button>
         <div id="ev-lien-sauvegarde-info" class="ev-hint ev-lien-centre"></div>
@@ -612,14 +630,14 @@
         </div>
         <input type="file" id="ev-import-donnees-fichier" accept=".json,application/json" class="hidden">
       </div>
-      <div class="ev-carte-bloc">
+      <div class="ev-carte-bloc" id="ev-bloc-raz">
         <h3>🧹 Remise à zéro</h3>
         <div class="ev-hint">Si l'appli se comporte bizarrement : efface réglages, favoris, historique, journal des recharges, trajets et données apprises. <strong>Reste en place</strong> : votre voiture (Kona 65 kWh et ses données), vos clés, la carte de la région téléchargée.</div>
         <button id="ev-remise-zero-btn" class="ev-btn ev-btn-plein" type="button">🧹 Remettre à zéro</button>
       </div>
 
-      <div class="ev-carte-bloc">
-        <h3 id="ev-profil-aide">❓ Aide et astuces</h3>
+      <div class="ev-carte-bloc" id="ev-bloc-aide">
+        <h3>❓ Aide et astuces</h3>
         <details class="ev-sous-menu" id="ev-aide">
           <summary>En navigation, mains sur le volant</summary>
           <ul class="ev-aide-liste">
@@ -678,7 +696,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 86 : champs du trajet plus larges, sommaire du Profil, bouton Enregistrer toujours visible après une modification</div>
+      <div class="ev-hint ev-lien-centre">Version 87 : trois touches en bas (Carte, Trajet, Menu) avec tout rangé par rubrique, étape « Via » dans Trajet, comparaison essence retirée</div>
     </div>
   </div>
 </section>
@@ -687,9 +705,7 @@
 <nav class="ev-nav">
   <button type="button" class="ev-nav-btn actif" data-vue="bornes"><span>🗺️</span>Carte</button>
   <button type="button" class="ev-nav-btn" data-vue="trajet"><span>🧭</span>Trajet</button>
-  <button type="button" class="ev-nav-btn" data-vue="favoris"><span>⭐</span>Favoris</button>
-  <button type="button" class="ev-nav-btn" data-vue="outils"><span>⚡</span>Outils</button>
-  <button type="button" class="ev-nav-btn" data-vue="profil"><span>🚗</span>Profil</button>
+  <button type="button" class="ev-nav-btn" data-vue="menu"><span>☰</span>Menu</button>
 </nav>
 
 <!-- Mode urgence -->

@@ -41,9 +41,9 @@ import { ageTexte } from "./reprise.js";
 import { cablerDiagnostic } from "./ui-diagnostic.js";
 import { estimerPreparation, preparerHorsLigne, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
 
-const VUES = ["bornes", "borne", "trajet", "resultat", "favoris", "outils", "profil"];
-const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", favoris: "haut", outils: "haut", profil: "haut" };
-const ONGLET_PAR_VUE = { bornes: "bornes", trajet: "trajet", resultat: "trajet", favoris: "favoris", outils: "outils", profil: "profil" };
+const VUES = ["bornes", "borne", "trajet", "resultat", "menu", "favoris", "outils", "profil"];
+const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", menu: "haut", favoris: "haut", outils: "haut", profil: "haut" };
+const ONGLET_PAR_VUE = { bornes: "bornes", trajet: "trajet", resultat: "trajet", menu: "menu", favoris: "menu", outils: "menu", profil: "menu" };
 const LABELS_MODE = { rapide: "⚡ Rapide", economique: "💶 Économique", confort: "🛋️ Confort", prudent: "🛡️ Prudent" };
 const BOUTONS_CALCUL = ["ev-trajet-run-btn", "ev-aller-retour-btn", "ev-scenarios-btn"];
 const HAUTEUR_REPLIEE = 172;
@@ -226,8 +226,60 @@ function cablerFeuille() {
 
 // ── Navigation entre les vues ──────────────────────────────────────────────
 
-function afficherVue(vue, { etat, historique = true } = {}) {
+// ── Menu : une rubrique à la fois ──────────────────────────────────────────
+// Favoris, Outils et Profil s'ouvrent depuis le Menu, rubrique par rubrique :
+// seul le bloc choisi reste affiché, avec un retour au Menu. Ouvertes sans
+// rubrique, ces vues s'affichent en entier.
+const VUES_A_RUBRIQUES = ["favoris", "outils", "profil"];
+const titresVues = {};
+let rubriqueOuverte = false;
+
+function appliquerRubrique(vue, rubrique) {
+  rubriqueOuverte = !!rubrique;
+  if (!VUES_A_RUBRIQUES.includes(vue)) return;
+  const racine = $(`vue-${vue}`);
+  const entete = racine.querySelector(".ev-vue-entete");
+  const titre = entete.querySelector("h2");
+  titresVues[vue] ??= titre.textContent;
+  let retour = entete.querySelector(".ev-retour-menu");
+  if (!retour) {
+    retour = document.createElement("button");
+    retour.type = "button";
+    retour.className = "ev-lien ev-retour-menu";
+    retour.textContent = "‹ Menu";
+    retour.addEventListener("click", () => (history.state?.rubrique ? history.back() : afficherVue("menu")));
+    entete.prepend(retour);
+  }
+  retour.classList.toggle("hidden", !rubrique);
+  titre.textContent = rubrique?.titre || titresVues[vue];
+  const bloc = rubrique?.bloc ? $(rubrique.bloc) : null;
+  let apresBloc = false;
+  for (const el of racine.children) {
+    let visible = !bloc || el === entete || el === bloc;
+    // « Enregistrer » ne concerne que les réglages placés avant lui.
+    if (bloc && el.id === "ev-profil-save-btn") visible = !!(el.compareDocumentPosition(bloc) & Node.DOCUMENT_POSITION_PRECEDING);
+    // Présentation, mentions légales et version suivent l'aide.
+    if (bloc?.id === "ev-bloc-aide" && apresBloc) visible = true;
+    if (el === bloc) apresBloc = true;
+    el.classList.toggle("ev-hors-rubrique", !visible);
+  }
+}
+
+function ouvrirRubrique(vue, bloc, titre) {
+  afficherVue(vue, { historique: false, rubrique: { bloc, titre } });
+  if (vue === "favoris") renderFavoris();
+  history.pushState({ vue, rubrique: true }, "");
+}
+
+// Rubrique désignée par son bloc (titre repris de la ligne du Menu).
+function ouvrirBloc(bloc) {
+  const l = document.querySelector(`.ev-menu-ligne[data-bloc="${bloc}"]`);
+  ouvrirRubrique(l.dataset.vue, bloc, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
+}
+
+function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   if (vue === "borne" && vueCourante !== "borne") vueAvantBorne = vueCourante;
+  appliquerRubrique(vue, rubrique);
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
   if (vue === "trajet") {
@@ -290,8 +342,17 @@ function cablerNavigation() {
       return;
     }
     if (vueCourante === "borne") revenirDeBorne();
+    // Retour depuis une rubrique : on revient au Menu.
+    else if (rubriqueOuverte) afficherVue("menu", { historique: history.state?.vue !== "menu" });
     else if (vueCourante !== "bornes") afficherVue("bornes", { historique: false });
   });
+  $("vue-menu").addEventListener("click", (e) => {
+    const l = e.target.closest(".ev-menu-ligne");
+    if (!l) return;
+    if (l.dataset.bloc) ouvrirBloc(l.dataset.bloc);
+    else ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
+  });
+  $("ev-cles-manquantes").addEventListener("click", () => ouvrirBloc("ev-bloc-cles"));
   $("ev-recherche-rapide").addEventListener("click", () => {
     afficherVue("trajet");
     setTimeout(() => $("ev-destination-input").focus(), 320);
@@ -669,7 +730,7 @@ function cablerCarte() {
   $("ev-reglage-notif").addEventListener("change", (e) => {
     if (e.target.checked && "Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
   });
-  cablerSuggestions(["ev-depart-input", "ev-destination-input"]);
+  cablerSuggestions(["ev-depart-input", "ev-via-input", "ev-destination-input"]);
   // 🎤 Dicter la destination : « Nantes », « aller à la gare de Rennes »…
   $("ev-destination-micro").addEventListener("click", async () => {
     if (!reconnaissanceDispo()) return toast("🎤 Dictée indisponible sur ce navigateur");
@@ -1081,8 +1142,38 @@ function rendrePointsPassage() {
   const conteneur = $("ev-points-passage-liste");
   conteneur.classList.toggle("hidden", pointsPassage.length === 0);
   conteneur.innerHTML = pointsPassage
-    .map((_, i) => `<button type="button" class="ev-chip" data-retirer-etape="${i}">📍 Étape ${i + 1} ✕</button>`)
+    .map((p, i) => `<button type="button" class="ev-chip" data-retirer-etape="${i}">📍 ${p.nom ? `Via ${escapeHtml(p.nom)}` : `Étape ${i + 1}`} ✕</button>`)
     .join("");
+}
+
+// Étape écrite dans « Via » (« Bréhan via Auray ») : trouvée par son adresse
+// puis ajoutée aux mêmes points de passage que l'appui long. Un seul ajout à
+// la fois : quitter le champ, « ➕ » et « Calculer » peuvent le demander
+// ensemble. relancer = false quand l'appelant lance lui-même le calcul.
+let ajoutVia = null;
+function ajouterVia(relancer = true) {
+  ajoutVia ??= (async () => {
+    const champ = $("ev-via-input");
+    const texte = champ.value.trim();
+    if (!texte) return;
+    champ.value = "";
+    // Referme la liste de suggestions encore en attente pour ce texte.
+    champ.dispatchEvent(new Event("input", { bubbles: true }));
+    const r = lireReglages();
+    const lieu = await resoudreLieu(texte, r.adresse_domicile, r.adresse_travail);
+    if (lieu.erreur) {
+      champ.value = texte;
+      toast(`⚠️ Étape introuvable : « ${texte} ». Vérifie l'orthographe ou choisis une suggestion.`);
+      return;
+    }
+    pointsPassage.push({ lat: lieu.lat, lon: lieu.lon, nom: nomCourt(lieu.nom || texte).split(",")[0] });
+    rendrePointsPassage();
+    if (relancer && trajetAffiche) {
+      toast("➕ Étape ajoutée : nouveau calcul…");
+      lancerTrajet();
+    }
+  })().finally(() => (ajoutVia = null));
+  return ajoutVia;
 }
 
 function cablerPointsPassage() {
@@ -1094,6 +1185,14 @@ function cablerPointsPassage() {
   $("ev-points-passage-liste").addEventListener("click", (e) => {
     const i = e.target.closest("[data-retirer-etape]")?.dataset.retirerEtape;
     if (i !== undefined) retirerPointPassage(Number(i));
+  });
+  $("ev-via-ajouter-btn").addEventListener("click", () => ajouterVia());
+  // « change » : suggestion choisie, ou champ quitté après la saisie.
+  $("ev-via-input").addEventListener("change", () => ajouterVia());
+  $("ev-via-input").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    ajouterVia();
   });
 }
 
@@ -1161,6 +1260,7 @@ function exigerDestination(options) {
 }
 
 async function lancerTrajet() {
+  await ajouterVia(false);
   const options = construireOptions();
   if (!exigerDestination(options)) return;
   await avecVerrou("ev-trajet-run-btn", "⏳ Calcul en cours…", async () => {
@@ -1203,6 +1303,7 @@ async function planifierItinerairesAlternatifs(bruts, options, jeton) {
 }
 
 async function lancerAllerRetour() {
+  await ajouterVia(false);
   const options = construireOptions();
   if (!exigerDestination(options)) return;
   await avecVerrou("ev-aller-retour-btn", "⏳ Aller + retour…", async () => {
@@ -1216,6 +1317,7 @@ async function lancerAllerRetour() {
 }
 
 async function lancerScenarios() {
+  await ajouterVia(false);
   const options = construireOptions();
   if (!exigerDestination(options)) return;
   await avecVerrou("ev-scenarios-btn", "⏳ 4 modes…", async () => {
@@ -2128,7 +2230,7 @@ function cablerUrgence() {
     }
     bornesUrg = r.bornes || [];
     if (!bornesUrg.length) {
-      corps.innerHTML = hint("Aucune borne compatible dans un rayon de 30 km. Élargis la recherche depuis l'onglet ⚡ Outils.");
+      corps.innerHTML = hint("Aucune borne compatible dans un rayon de 30 km. Élargis la recherche depuis Menu › Rechercher des bornes.");
       return;
     }
     corps.innerHTML =
@@ -2384,11 +2486,6 @@ function cablerProfil() {
       $(`${id}-voir`).textContent = champ.type === "password" ? "👁️" : "🙈";
     });
   }
-  // Sommaire du Profil : aller droit à une section de cette longue page.
-  $("ev-profil-sommaire").addEventListener("click", (e) => {
-    const section = e.target.closest("[data-section]")?.dataset.section;
-    if (section) $(section).scrollIntoView({ behavior: "smooth", block: "start" });
-  });
   // « Enregistrer » est loin en bas : dès qu'un réglage placé avant lui est
   // modifié, il reste affiché en bas de l'écran jusqu'à l'enregistrement.
   const enregistrer = $("ev-profil-save-btn");
@@ -2564,5 +2661,5 @@ export function initialiserUI() {
   positionDeDepart();
   proposerRepriseNavigation();
   // Nouveaux utilisateurs seulement (aucune clé encore saisie).
-  if (!lireReglages().accueil_vu && !getApiKeys().tomtom && !getApiKeys().openChargeMap) afficherAccueil(afficherVue);
+  if (!lireReglages().accueil_vu && !getApiKeys().tomtom && !getApiKeys().openChargeMap) afficherAccueil((vue) => (vue === "profil" ? ouvrirBloc("ev-bloc-cles") : afficherVue(vue)));
 }

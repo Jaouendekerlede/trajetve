@@ -15,16 +15,15 @@ test("météo : alerte la plus grave, rien par beau temps", () => {
   assert.equal(m.precip, 5);
 });
 
-test("statistiques : période, économie vs essence, prix réel du journal", () => {
+test("statistiques : période, prix réel du journal", () => {
   const maintenant = Date.UTC(2026, 8, 26, 12);
   const trajets = [{ date: Date.UTC(2026, 8, 10), km: 100, kwh: 15 }, { date: Date.UTC(2026, 2, 1), km: 200, kwh: 30 }];
   const journal = [{ ts: Date.UTC(2026, 8, 11), kwh: 20, cout_eur: 5 }];
-  const essence = { prix_l: 2, conso_l_100: 6 };
-  const mois = statistiques(trajets, journal, "mois", maintenant, essence);
+  const mois = statistiques(trajets, journal, "mois", maintenant);
   assert.equal(mois.km, 100);
   assert.equal(mois.recharges, 1);
-  // 15 kWh à 0,25 €/kWh (prix réel du journal) = 3,75 € ; essence 100 km = 12 €.
-  assert.ok(Math.abs(mois.economie - 8.25) < 0.01);
-  assert.equal(statistiques(trajets, journal, "annee", maintenant, essence).km, 300);
-  assert.ok(Math.abs(statistiques(trajets, journal, "tout", maintenant, essence).co2_evite_kg - 31.5) < 0.01);
+  // 15 kWh à 0,25 €/kWh (prix réel du journal) = 3,75 € pour 100 km.
+  assert.ok(Math.abs(mois.cout_km - 0.0375) < 0.0001);
+  assert.equal(statistiques(trajets, journal, "annee", maintenant).km, 300);
+  assert.ok(Math.abs(statistiques(trajets, journal, "tout", maintenant).co2_evite_kg - 31.5) < 0.01);
 });

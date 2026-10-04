@@ -1,4 +1,4 @@
-// Abonnements de recharge (onglet Profil) : prix au kWh par réseau.
+// Abonnements de recharge (Menu › Abonnements de recharge) : prix au kWh par réseau.
 
 import { $, toast, euros, nombreOuUndefined, hint, badgeOperateur } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";

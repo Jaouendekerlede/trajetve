@@ -318,7 +318,7 @@ body[data-feuille="haut"] .ev-fabs { opacity: 0; pointer-events: none; }
   height: calc(var(--nav-h) + var(--securite-bas));
   padding-bottom: var(--securite-bas);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: var(--nav-fond);
   border-top: 1px solid var(--bordure-forte);
 }
@@ -1076,10 +1076,21 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 /* Message « rien sur cette période » : toute la largeur, pas une colonne. */
 .ev-tuiles > .ev-hint { grid-column: 1 / -1; }
 
-/* Profil : sommaire sur une ligne, et « Enregistrer » gardé sous les yeux
-   tant qu'une modification n'est pas enregistrée. */
-.ev-profil-sommaire { flex-wrap: nowrap; overflow-x: auto; margin-top: 0; padding-bottom: 6px; scrollbar-width: none; }
-.ev-profil-sommaire::-webkit-scrollbar { display: none; }
-.ev-profil-sommaire .ev-chip { flex-shrink: 0; }
-#vue-profil h3[id] { scroll-margin-top: 14px; }
+/* Profil : « Enregistrer » gardé sous les yeux tant qu'une modification
+   n'est pas enregistrée. */
 #ev-profil-save-btn.ev-a-enregistrer { position: sticky; bottom: 10px; z-index: 5; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.6); }
+
+/* ── Menu : rubriques rangées par groupe, une page par rubrique ───────── */
+.ev-menu-titre { margin: 6px 4px -4px; font-size: 12px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: var(--texte-att); }
+.ev-menu-groupe { display: flex; flex-direction: column; background: var(--bloc); border: 1px solid var(--bordure); border-radius: 16px; overflow: hidden; }
+.ev-menu-ligne { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; min-height: 60px; padding: 8px 14px; background: none; border: none; border-bottom: 1px solid var(--bordure); color: var(--texte); font: inherit; text-align: left; cursor: pointer; }
+.ev-menu-ligne:last-child { border-bottom: none; }
+.ev-menu-ligne:active { background: var(--bloc-2); }
+.ev-menu-ligne::after { content: "›"; font-size: 24px; line-height: 1; color: var(--texte-faible); }
+.ev-menu-icone { font-size: 22px; text-align: center; }
+.ev-menu-nom { display: block; font-size: 15.5px; font-weight: 700; }
+.ev-menu-detail { display: block; margin-top: 2px; font-size: 12.5px; color: var(--texte-att); }
+.ev-hors-rubrique { display: none !important; }
+.ev-retour-menu { flex-shrink: 0; padding: 8px 12px 8px 0; font-size: 15px; }
+.ev-vue-entete:has(.ev-retour-menu:not(.hidden)) { justify-content: flex-start; }
+button.ev-bandeau { width: 100%; border: none; font-family: inherit; text-align: left; cursor: pointer; }

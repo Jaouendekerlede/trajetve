@@ -2507,7 +2507,7 @@ export function navigationActive() {
 export async function demarrerNavigation(plan, { options = {}, demo = false, chargeDepartPct, onReplanifier, onFin } = {}) {
   if (etat) return;
   if (!getApiKeys().tomtom) {
-    alert("Clé TomTom manquante : ajoute-la dans l'onglet 🚗 Profil.");
+    alert("Clé TomTom manquante : ajoute-la dans Menu › Clés API.");
     return;
   }
   cablerBoutons();

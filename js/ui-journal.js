@@ -1,35 +1,25 @@
-// Journal des recharges (onglet Outils) : bilan mensuel, ajout manuel,
-// comparaison avec une voiture essence.
+// Journal des recharges (Menu › Outils) : bilan mensuel, ajout manuel.
 
 import { $, toast, euros, nombre, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
-import { lireReglages, sauverReglages, obtenirProfilVehicule, listerJournal, ajouterAuJournal, retirerDuJournal } from "./storage.js";
-
-const ESSENCE_PAR_DEFAUT = { conso: 6.5, prix: 1.85 };
+import { obtenirProfilVehicule, listerJournal, ajouterAuJournal, retirerDuJournal } from "./storage.js";
 
 function moisLisible(cle) {
   const [a, m] = cle.split("-").map(Number);
   return new Date(a, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 }
 
-// Économie : les km parcourus avec ces kWh (consommation du profil), payés
-// en essence, moins ce qu'ont coûté les recharges.
+// Km : ceux parcourus avec ces kWh, d'après la consommation du profil.
 function bilanRecharges(entrees) {
-  const r = lireReglages();
-  const consoEssence = r.essence_l_100km ?? ESSENCE_PAR_DEFAUT.conso;
-  const prixEssence = r.essence_prix_l ?? ESSENCE_PAR_DEFAUT.prix;
   const consoVe = obtenirProfilVehicule().consommation_kwh_100km || 15;
   const kwh = entrees.reduce((s, e) => s + (e.kwh || 0), 0);
   const cout = entrees.reduce((s, e) => s + (e.cout_eur || 0), 0);
   const km = (kwh / consoVe) * 100;
-  return { n: entrees.length, kwh, cout, km, economie: (km * consoEssence * prixEssence) / 100 - cout };
+  return { n: entrees.length, kwh, cout, km };
 }
 
 export function rendreJournal() {
   const journal = listerJournal();
-  const r = lireReglages();
-  $("ev-journal-conso-essence").value = r.essence_l_100km ?? ESSENCE_PAR_DEFAUT.conso;
-  $("ev-journal-prix-essence").value = r.essence_prix_l ?? ESSENCE_PAR_DEFAUT.prix;
   if (!journal.length) {
     $("ev-journal-bilan").innerHTML = hint("Aucune recharge enregistrée pour l'instant.");
     $("ev-journal-liste").innerHTML = "";
@@ -44,10 +34,10 @@ export function rendreJournal() {
   }
   const lignes = [...parMois.entries()].slice(0, 6).map(([cle, entrees]) => {
     const b = bilanRecharges(entrees);
-    return `<div class="ev-journal-mois"><strong>${escapeHtml(moisLisible(cle))}</strong><span>${b.n} recharge${b.n > 1 ? "s" : ""} · ${nombre(b.kwh, 1)} kWh · ${euros(b.cout)} · ~${nombre(b.km)} km</span><span class="${b.economie >= 0 ? "ev-positif" : "ev-negatif"}">${b.economie >= 0 ? "Économie" : "Surcoût"} vs essence : ${euros(Math.abs(b.economie))}</span></div>`;
+    return `<div class="ev-journal-mois"><strong>${escapeHtml(moisLisible(cle))}</strong><span>${b.n} recharge${b.n > 1 ? "s" : ""} · ${nombre(b.kwh, 1)} kWh · ${euros(b.cout)} · ~${nombre(b.km)} km</span></div>`;
   });
   const total = bilanRecharges(journal);
-  $("ev-journal-bilan").innerHTML = `<div class="ev-tuiles">${tuile("cyan", `${nombre(total.kwh)} kWh`, "Énergie totale")}${tuile("violet", euros(total.cout), "Dépensé")}${tuile(total.economie >= 0 ? "good" : "bad", euros(Math.abs(total.economie)), total.economie >= 0 ? "Économisé" : "Surcoût")}</div>${lignes.join("")}`;
+  $("ev-journal-bilan").innerHTML = `<div class="ev-tuiles">${tuile("cyan", `${nombre(total.kwh)} kWh`, "Énergie totale")}${tuile("violet", euros(total.cout), "Dépensé")}${tuile("good", `~${nombre(total.km)} km`, "Parcourus avec")}</div>${lignes.join("")}`;
   $("ev-journal-liste").innerHTML = journal
     .slice(0, 15)
     .map(
@@ -73,11 +63,4 @@ export function cablerJournal() {
     toast("✅ Recharge ajoutée au journal");
     rendreJournal();
   });
-  for (const [id, cle] of [["ev-journal-conso-essence", "essence_l_100km"], ["ev-journal-prix-essence", "essence_prix_l"]]) {
-    $(id).addEventListener("change", () => {
-      const v = nombreOuUndefined($(id).value);
-      if (v !== undefined && v >= 0) sauverReglages({ [cle]: v });
-      rendreJournal();
-    });
-  }
 }

@@ -15,9 +15,8 @@ function dansPeriode(ms, periode, maintenant) {
   return periode === "annee" || d.getMonth() === n.getMonth();
 }
 
-// trajets : [{ date, km, kwh }] ; journal : [{ ts, kwh, cout_eur }] ;
-// essence : { prix_l, conso_l_100 }.
-export function statistiques(trajets, journal, periode, maintenant, essence) {
+// trajets : [{ date, km, kwh }] ; journal : [{ ts, kwh, cout_eur }].
+export function statistiques(trajets, journal, periode, maintenant) {
   const t = trajets.filter((x) => dansPeriode(x.date, periode, maintenant));
   const j = journal.filter((x) => dansPeriode(x.ts, periode, maintenant));
   const km = t.reduce((s, x) => s + (x.km || 0), 0);
@@ -27,7 +26,6 @@ export function statistiques(trajets, journal, periode, maintenant, essence) {
   // Prix réel payé si le journal en dit assez, sinon un prix moyen.
   const prixKwh = kwhRecharges >= 5 ? coutRecharges / kwhRecharges : PRIX_KWH_DEFAUT_EUR;
   const coutElectrique = kwh * prixKwh;
-  const coutEssence = (km * essence.conso_l_100 * essence.prix_l) / 100;
   return {
     trajets: t.length,
     km,
@@ -36,7 +34,6 @@ export function statistiques(trajets, journal, periode, maintenant, essence) {
     kwh_recharges: kwhRecharges,
     cout_recharges: coutRecharges,
     cout_km: km > 0 ? coutElectrique / km : 0,
-    economie: coutEssence - coutElectrique,
     co2_evite_kg: (km * (CO2_ESSENCE_G_KM - CO2_ELECTRIQUE_G_KM)) / 1000,
   };
 }

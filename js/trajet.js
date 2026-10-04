@@ -30,12 +30,12 @@ function chargeProbablementNecessaire(distanceKm, chargePct, margePct, profil) {
 
 function messageOcm(erreur) {
   return erreur === "cle_manquante"
-    ? "Clé Open Charge Map manquante ou invalide (🚗 Profil véhicule > Clés API)."
+    ? "Clé Open Charge Map manquante ou invalide (Menu › Clés API)."
     : `Service de recherche de bornes indisponible (${erreur}).`;
 }
 
 function messageTomTom(erreur, fromName, toName) {
-  if (erreur === "cle_manquante") return "Itinéraire routier indisponible : clé TomTom manquante (🚗 Profil véhicule > Clés API).";
+  if (erreur === "cle_manquante") return "Itinéraire routier indisponible : clé TomTom manquante (Menu › Clés API).";
   if (erreur === "http_403" || erreur === "http_401") return "Clé TomTom refusée : vérifie la clé et que l'« API de routage » est bien cochée sur developer.tomtom.com.";
   if (erreur === "reseau") return "Pas de connexion réseau : impossible de calculer l'itinéraire.";
   return `Aucun itinéraire routier trouvé entre "${fromName}" et "${toName}" (destination non joignable par la route, ou lieu mal identifié).`;

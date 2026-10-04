@@ -94,7 +94,7 @@ export async function resoudreLieu(nomLieu, adresseDomicile, adresseTravail) {
   if (choisi) return choisi;
   if (MOTS_DOMICILE.includes(cle)) {
     if (!adresseDomicile) {
-      return { erreur: "Adresse du domicile non renseignée. Ajoute-la dans 🚗 Profil véhicule, ou utilise « Ma position »." };
+      return { erreur: "Adresse du domicile non renseignée. Ajoute-la dans Menu › Domicile et voix, ou utilise « Ma position »." };
     }
     const lieu = await geocodeLieu(adresseDomicile);
     return lieu ? { ...lieu, nom: `Chez moi (${lieu.nom})` } : { erreur: `Adresse du domicile introuvable : "${adresseDomicile}".` };

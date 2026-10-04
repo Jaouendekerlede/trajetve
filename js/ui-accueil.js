@@ -17,8 +17,8 @@ const PAGES_ACCUEIL = [
   {
     icone: "🔑",
     titre: "Deux clés gratuites",
-    texte: "TomTom calcule les itinéraires, Open Charge Map trouve les bornes. Crée-les gratuitement (liens dans l'onglet 🚗 Profil) puis colle-les dans « Clés API ». Elles restent dans ce téléphone.",
-    action: { libelle: "Ouvrir le Profil", vue: "profil" },
+    texte: "TomTom calcule les itinéraires, Open Charge Map trouve les bornes. Crée-les gratuitement (liens dans Menu › Clés API) puis colle-les dans « Clés API ». Elles restent dans ce téléphone.",
+    action: { libelle: "Saisir mes clés", vue: "profil" },
   },
   {
     icone: "🚗",
