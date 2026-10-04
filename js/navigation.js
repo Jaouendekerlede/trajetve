@@ -19,7 +19,7 @@ import { ouvrirSOS } from "./ui-sos.js";
 import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom, appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
-import { zoomNavigation } from "./zoom-nav.js";
+import { zoomNavigation, vitessePourZoom } from "./zoom-nav.js";
 import { qualiteMesure, recaler, evaluerHorsRoute, estimerProgression } from "./recalage.js";
 import { enregistrerReprise, oublierReprise, lireReprise } from "./reprise.js";
 import { noter } from "./journal-erreurs.js";
@@ -1429,14 +1429,8 @@ function surPosition(p) {
   }
   if (!arret && (etat.offset >= etat.route.total - 30 || haversineKm(p.lat, p.lon, etat.destination.lat, etat.destination.lon) < 0.04)) arriveeDestination();
 
-  const zoom = zoomNavigation({ kmh: (p.vitesse || 0) * 3.6, offset: etat.offset, instructions: etat.route.instructions, voies: etat.route.voies, zoomActuel: etat.zoom, enManoeuvre: !!etat.zoomManoeuvre, renforce: etat.prefs.zoomRenforce });
-  // etat.zoom garde la valeur brute (sert de référence à l'hystérésis de
-  // zoomNavigation, palier par palier) : le décalage manuel du réglage
-  // Profil ne s'applique qu'à l'affichage, plus bas (programmerAnimation).
-  etat.zoom = zoom.zoom;
-  etat.zoomManoeuvre = zoom.manoeuvre;
-  // Rond-point, carrefour serré : vue 3D presque de dessus, plus lisible.
-  vue.inclinaisonNavigation?.(zoom.manoeuvre === "rondpoint" || zoom.manoeuvre === "carrefour" ? "plat" : "normal");
+  // Heure de la mesure (pas celle de sa réception) : c'est elle qui sépare deux vitesses.
+  majZoom((p.vitesse || 0) * 3.6, Number.isFinite(p.t) ? p.t : maintenant);
   programmerAnimation(p, m);
   annonces();
   majEcran();
@@ -1448,6 +1442,30 @@ function surPosition(p) {
   if (etat.prefs.parkingArrivee && !etat.parkingsProposes && !etat.arretsRestants.length && !etat.destinationFinale && etat.odometre > 500 && etat.route.total - etat.offset < DISTANCE_PROPOSITION_PARKING_M) {
     proposerParkings();
   }
+}
+
+// Zoom voulu pour la position courante (etat.offset). kmh : vitesse reçue,
+// lissée ici avant de servir ; t : heure de la mesure (ms).
+function majZoom(kmh, t) {
+  etat.vitesseZoom = vitessePourZoom(etat.vitesseZoom, { kmh, t, limite: etat.route.limites[etat.idx] });
+  const zoom = zoomNavigation({
+    kmh: etat.vitesseZoom.kmh,
+    kmhZoom: etat.vitesseZoom.kmhZoom,
+    offset: etat.offset,
+    instructions: etat.route.instructions,
+    voies: etat.route.voies,
+    zoomActuel: etat.zoom,
+    enManoeuvre: !!etat.zoomManoeuvre,
+    renforce: etat.prefs.zoomRenforce,
+    hauteurEcran: window.innerHeight,
+  });
+  // etat.zoom garde la valeur brute (référence pour ne pas bouger à chaque
+  // petite variation) : le décalage manuel du réglage Profil ne s'applique
+  // qu'à l'affichage, plus bas (programmerAnimation).
+  etat.zoom = zoom.zoom;
+  etat.zoomManoeuvre = zoom.manoeuvre;
+  // Rond-point, carrefour serré : vue 3D presque de dessus, plus lisible.
+  vue.inclinaisonNavigation?.(zoom.manoeuvre === "rondpoint" || zoom.manoeuvre === "carrefour" ? "plat" : "normal");
 }
 
 // ── Animation fluide de la voiture ──────────────────────────────────────────
@@ -1588,6 +1606,7 @@ function surveillerSignal() {
   const pt = pointSurRoute(e.offset);
   etat.idx = pt.i;
   etat.offset = e.offset;
+  majZoom(etat.dernierFixe.vitesse * 3.6, Date.now());
   programmerAnimation({ lat: pt.lat, lon: pt.lon, cap: pt.cap, vitesse: etat.dernierFixe.vitesse }, { d: 0, offset: e.offset });
   annonces();
   majEcran();
@@ -1779,16 +1798,16 @@ function cablerBoutons() {
     if (i !== undefined && etat?.parkingsTrouves?.[i]) allerAuParking(etat.parkingsTrouves[i]);
   });
   $("ev-nav-apercu-btn").addEventListener("click", () => {
+    clearTimeout(etat.retourSuivi);
+    etat.apercu = true;
     etat.suivi = false;
     $("ev-nav-recentrer-btn").textContent = vue === carte2D ? "🎯 Revenir au guidage" : "🎯 Recentrer";
     $("ev-nav-recentrer-btn").classList.remove("hidden");
     vue.apercuNavigation(etat.route.coords.slice(etat.idx));
   });
   $("ev-nav-recentrer-btn").addEventListener("click", () => {
-    etat.suivi = true;
-    $("ev-nav-recentrer-btn").classList.add("hidden");
-    $("ev-nav-recentrer-btn").textContent = "🎯 Recentrer";
-    if (etat.pos) vue.cameraNavigation(etat.pos.lat, etat.pos.lon, etat.pos.cap, 16, etat.sensDeMarche, false);
+    etat.apercu = false;
+    reprendreSuivi();
   });
   $("ev-nav-batt-btn").addEventListener("click", () => {
     const panneau = $("ev-nav-batterie-panneau");
@@ -2517,8 +2536,24 @@ function signalerRemplacementCarte() {
   }, 12000);
 }
 
+// Après un geste sur la carte, le guidage reprend seul au bout de ce délai
+// sans nouveau geste (choix validé avec l'utilisateur le 2026-10-04).
+// L'aperçu du trajet, lui, reste affiché jusqu'à « Revenir au guidage ».
+const RETOUR_AUTO_SUIVI_MS = 20000;
+
+function reprendreSuivi() {
+  clearTimeout(etat.retourSuivi);
+  etat.suivi = true;
+  $("ev-nav-recentrer-btn").classList.add("hidden");
+  $("ev-nav-recentrer-btn").textContent = "🎯 Recentrer";
+  const a = etat.aff || etat.pos;
+  if (a) vue.cameraNavigation(a.lat, a.lon, a.cap, zoomAffiche(a.zoom ?? etat.zoom ?? 16), etat.sensDeMarche, false);
+}
+
 function surDeplacementManuel() {
   if (!etat) return;
+  clearTimeout(etat.retourSuivi);
+  if (!etat.apercu) etat.retourSuivi = setTimeout(() => etat && !etat.suivi && !etat.apercu && reprendreSuivi(), RETOUR_AUTO_SUIVI_MS);
   etat.suivi = false;
   if (vue === carte2D) $("ev-nav-recentrer-btn").textContent = "🎯 Revenir au guidage";
   else $("ev-nav-recentrer-btn").textContent = "🎯 Recentrer";
@@ -2809,6 +2844,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   oublierNavigationInterrompue();
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
   clearInterval(etat.surveillanceSignal);
+  clearTimeout(etat.retourSuivi);
   $("ev-nav-gps")?.classList.add("hidden");
   if (etat.demoTimer) clearInterval(etat.demoTimer);
   if (etat.raf) cancelAnimationFrame(etat.raf);
