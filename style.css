@@ -1104,3 +1104,6 @@ button.ev-bandeau { width: 100%; border: none; font-family: inherit; text-align:
 /* Guidage : état du signal GPS (affiché seulement quand il n'est pas bon). */
 .ev-nav-gps { align-self: flex-start; padding: 5px 11px; border-radius: 999px; background: rgba(110, 72, 0, 0.94); border: 1px solid rgba(255, 190, 60, 0.7); color: #fff; font-size: 12.5px; font-weight: 700; }
 .ev-nav-gps.ev-nav-gps-estime { background: rgba(20, 60, 110, 0.95); border-color: rgba(100, 170, 255, 0.7); }
+
+/* Menu Options du guidage : bouton de fermeture large, facile à toucher. */
+.ev-fermer-grand { min-height: 44px; padding: 8px 16px; border: 1px solid var(--bordure-forte); border-radius: 999px; background: var(--bloc); font-size: 15px; font-weight: 700; }

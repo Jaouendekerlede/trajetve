@@ -1735,8 +1735,19 @@ function cablerBoutons() {
     const b = e.target.closest("button");
     if (!b) return;
     $("ev-nav-menu").classList.add("hidden");
-    actionMenu(b.dataset.navAction);
+    if (b.dataset.navAction) actionMenu(b.dataset.navAction);
   });
+  // Un toucher en dehors du menu (la carte, le bandeau) le referme : en
+  // roulant, pas question de viser un petit bouton.
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      const menu = $("ev-nav-menu");
+      if (menu.classList.contains("hidden") || menu.contains(e.target) || e.target.closest("#ev-nav-menu-btn")) return;
+      menu.classList.add("hidden");
+    },
+    true,
+  );
   $("ev-nav-hud").addEventListener("click", () => basculerHud(false));
   $("ev-nav-micro-btn").addEventListener("click", commandeVocale);
   window.addEventListener("online", surReseau);
