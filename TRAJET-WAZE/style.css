@@ -38,6 +38,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .maplibregl-ctrl-attrib { font: 9px Inter, "Segoe UI", Arial, sans-serif !important; }
 .maplibregl-ctrl-attrib a { color: #315d7d !important; }
 .leaflet-container { background: #dce3e1; font: inherit; }
+.app.map-theme-dark .leaflet-tile-pane { filter: brightness(.68) invert(.88) hue-rotate(180deg) saturate(.8); }
 .leaflet-control-attribution { padding: 2px 5px !important; border-radius: 5px 0 0 !important; background: rgb(255 255 255 / 82%) !important; color: #4b515a !important; font-size: 9px !important; }
 .leaflet-control-attribution a { color: #2e5c82 !important; }
 .leaflet-control-scale-line { border-color: #41464c !important; background: rgb(255 255 255 / 75%) !important; color: #343940 !important; font-size: 9px !important; }

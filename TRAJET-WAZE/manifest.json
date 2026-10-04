@@ -22,7 +22,7 @@
       "purpose": "any"
     },
     {
-      "src": "./trajet-waze-512.png",
+      "src": "./trajet-waze-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

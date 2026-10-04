@@ -34,10 +34,23 @@ const lightTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.p
   subdomains: 'abc',
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
-const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+const lightFallbackTiles = L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
   maxZoom: 20,
-  subdomains: 'abcd',
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://tile.openstreetmap.de">OpenStreetMap Germany</a>',
+});
+let lightTilesFallbackActive = false;
+let mapTilesFallbackErrorShown = false;
+lightTiles.on('tileerror', () => {
+  if (lightTilesFallbackActive || !map.hasLayer(lightTiles)) return;
+  lightTilesFallbackActive = true;
+  map.removeLayer(lightTiles);
+  lightFallbackTiles.addTo(map);
+  showToast('Fond OpenStreetMap indisponible ; affichage du fond de secours.');
+});
+lightFallbackTiles.on('tileerror', () => {
+  if (!lightTilesFallbackActive || !map.hasLayer(lightFallbackTiles) || mapTilesFallbackErrorShown) return;
+  mapTilesFallbackErrorShown = true;
+  showToast('La carte ne peut pas être chargée. Vérifiez la connexion Internet.');
 });
 L.control.scale({ imperial: false, position: 'bottomright' }).addTo(map);
 
@@ -744,6 +757,10 @@ async function setMap3d(enabled, { silent = false } = {}) {
     if (!silent) showToast('Vue 3D cartographique activée.');
   } catch (error) {
     state.map3dEnabled = false;
+    if (state.map3d) {
+      state.map3d.remove();
+      state.map3d = null;
+    }
     document.querySelector('.app').classList.remove('map-is-3d');
     button.setAttribute('aria-pressed', 'false');
     button.textContent = '3D';
@@ -1104,10 +1121,10 @@ function applySettingsToControls() {
 
 function setMapStyle(style) {
   settings.mapStyle = style === 'dark' ? 'dark' : 'standard';
-  const active = settings.mapStyle === 'dark' ? darkTiles : lightTiles;
-  const inactive = settings.mapStyle === 'dark' ? lightTiles : darkTiles;
+  const lightLayer = lightTilesFallbackActive ? lightFallbackTiles : lightTiles;
+  const inactive = lightLayer === lightTiles ? lightFallbackTiles : lightTiles;
   if (map.hasLayer(inactive)) map.removeLayer(inactive);
-  if (!map.hasLayer(active)) active.addTo(map);
+  if (!map.hasLayer(lightLayer)) lightLayer.addTo(map);
   document.querySelector('.app').classList.toggle('map-theme-dark', settings.mapStyle === 'dark');
   saveSettings();
 }

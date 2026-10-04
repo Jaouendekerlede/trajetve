@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trajet-waze-v5';
+const CACHE_NAME = 'trajet-waze-v7';
 const APP_FILES = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const APP_FILES = [
   './trajet-waze.svg',
   './trajet-waze-192.png',
   './trajet-waze-512.png',
+  './trajet-waze-maskable-512.png',
   './trajet-waze.png',
 ];
 const CACHEABLE_EXTERNAL_HOSTS = ['unpkg.com'];
