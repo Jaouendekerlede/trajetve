@@ -166,3 +166,15 @@ test("remise à zéro : garde voiture, clés, région et journal de diagnostic, 
   for (let i = 0; i < localStorage.length; i++) cles.push(localStorage.key(i));
   assert.deepEqual(s.clesRemiseAZero(cles).sort(), ["trajetve_favoris", "trajetve_journal", "trajetve_reglages", "tve_conso_x", "tve_navigation_en_cours"].sort());
 });
+
+test("trajet favori : les étapes « via » sont gardées et distinguent deux favoris", () => {
+  localStorage.clear();
+  const auray = { lat: 47.668, lon: -2.983, nom: "Auray", autre: "ignoré" };
+  s.ajouterTrajetFavori("Ma position", "Bréhan");
+  s.ajouterTrajetFavori("Ma position", "Bréhan", [auray]);
+  s.ajouterTrajetFavori("Ma position", "Bréhan", [auray]);
+  const favoris = s.listerTrajetsFavoris();
+  assert.equal(favoris.length, 2, "le même trajet avec et sans étape fait deux favoris, sans doublon");
+  assert.deepEqual(favoris[0].etapes, [{ lat: 47.668, lon: -2.983, nom: "Auray" }]);
+  assert.equal(favoris[1].etapes, undefined);
+});

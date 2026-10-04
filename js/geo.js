@@ -83,6 +83,12 @@ function positionGps() {
 
 // Même rôle que _resoudre_lieu_itineraire de JARVIS : "chez moi" et "ma
 // position" sont des raccourcis, tout le reste passe par le géocodage.
+// « Ma position » (ou champ vide) : résolu par le GPS, sans géocodage.
+export function estMaPosition(nomLieu) {
+  const cle = (nomLieu || "").trim().toLowerCase();
+  return !cle || MOTS_POSITION.includes(cle);
+}
+
 export async function resoudreLieu(nomLieu, adresseDomicile, adresseTravail) {
   const brut = (nomLieu || "").trim();
   const cle = brut.toLowerCase();

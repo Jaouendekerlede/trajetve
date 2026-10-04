@@ -4,7 +4,7 @@
 
 import { getApiKeys, PALIERS_TEMPERATURE, MODES_TRAJET, MULTIPLICATEUR_CHARGE_LOURDE } from "./config.js";
 import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements, rectanglesZonesEvitees } from "./storage.js";
-import { resoudreLieu, pointADistanceSurTrace, haversineKm } from "./geo.js";
+import { resoudreLieu, estMaPosition, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { echangeursDuTrajet } from "./panneau-nav.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km, kmSurTrace } from "./planner.js";
@@ -63,11 +63,20 @@ async function calculerItineraire(depart, destination, opts) {
   if (!tomtom) return { ok: false, erreur: messageTomTom("cle_manquante") };
   const domicile = lireReglages().adresse_domicile;
 
-  // Séquentiel exprès : Nominatim demande au plus 1 requête/seconde.
+  // Séquentiel exprès : Nominatim demande au plus 1 requête/seconde. Un
+  // départ « Ma position » ne l'interroge pas (GPS) : il se cherche pendant
+  // que la destination est géocodée, au lieu d'attendre l'un puis l'autre.
   const travail = lireReglages().adresse_travail;
-  const a = await resoudreLieu(depart, domicile, travail);
+  let a;
+  let b;
+  if (estMaPosition(depart)) {
+    [a, b] = await Promise.all([resoudreLieu(depart, domicile, travail), resoudreLieu(destination, domicile, travail)]);
+  } else {
+    a = await resoudreLieu(depart, domicile, travail);
+    if (a.erreur) return { ok: false, erreur: a.erreur };
+    b = await resoudreLieu(destination, domicile, travail);
+  }
   if (a.erreur) return { ok: false, erreur: a.erreur };
-  const b = await resoudreLieu(destination, domicile, travail);
   if (b.erreur) return { ok: false, erreur: b.erreur };
 
   const departMs = departPrevuMs(opts);
@@ -341,6 +350,7 @@ export async function planifierTrajet(depart, destination, opts, sauvegarder = t
       charge_pct: opts.charge_pct,
       eviter_peages: opts.eviter_peages,
       puissance_min_kw: opts.puissance_min_kw,
+      points_passage: (opts.points_passage || []).map(({ lat, lon, nom }) => ({ lat, lon, nom })),
     });
   }
   return resultat;

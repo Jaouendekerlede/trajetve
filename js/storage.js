@@ -112,13 +112,15 @@ export function listerTrajetsFavoris() {
   return lireJson(STORAGE_KEYS.favoris, []);
 }
 
-export function ajouterTrajetFavori(depart, destination) {
+// etapes : points de passage « via » [{ lat, lon, nom }], dans l'ordre.
+export function ajouterTrajetFavori(depart, destination, etapes = []) {
   const favoris = listerTrajetsFavoris();
+  const cleEtapes = (liste) => (liste || []).map((e) => `${e.lat},${e.lon}`).join(";");
   const existe = favoris.some(
-    (f) => f.depart.toLowerCase() === depart.toLowerCase() && f.destination.toLowerCase() === destination.toLowerCase(),
+    (f) => f.depart.toLowerCase() === depart.toLowerCase() && f.destination.toLowerCase() === destination.toLowerCase() && cleEtapes(f.etapes) === cleEtapes(etapes),
   );
   if (!existe) {
-    favoris.unshift({ id: `fav_${Date.now()}`, depart, destination });
+    favoris.unshift({ id: `fav_${Date.now()}`, depart, destination, ...(etapes.length ? { etapes: etapes.map(({ lat, lon, nom }) => ({ lat, lon, nom })) } : {}) });
   }
   ecrireJson(STORAGE_KEYS.favoris, favoris.slice(0, MAX_TRAJETS_FAVORIS));
   return favoris;

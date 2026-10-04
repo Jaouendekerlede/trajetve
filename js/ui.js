@@ -1064,6 +1064,11 @@ function cablerFormulaire() {
     const d = $("ev-depart-input").value;
     $("ev-depart-input").value = $("ev-destination-input").value;
     $("ev-destination-input").value = d;
+    // Les étapes « via » se parcourent alors dans l'autre sens.
+    if (pointsPassage.length > 1) {
+      pointsPassage.reverse();
+      rendrePointsPassage();
+    }
   });
   $("ev-destination-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -1084,7 +1089,7 @@ function cablerFormulaire() {
       toast("Indique d'abord une destination.");
       return;
     }
-    ajouterTrajetFavori($("ev-depart-input").value.trim() || "Ma position", destination);
+    ajouterTrajetFavori($("ev-depart-input").value.trim() || "Ma position", destination, pointsPassage);
     toast("⭐ Trajet ajouté aux favoris");
   });
 }
@@ -2037,9 +2042,13 @@ function cablerFrise() {
 
 let ongletFavoris = "trajets";
 
-function chargerEtLancerTrajet(depart, destination, reglages) {
+function chargerEtLancerTrajet(depart, destination, reglages, etapes) {
   $("ev-depart-input").value = depart;
   $("ev-destination-input").value = destination;
+  // Les étapes « via » de ce trajet-là, pas celles restées à l'écran.
+  $("ev-via-input").value = "";
+  pointsPassage = (etapes || reglages?.points_passage || []).map(({ lat, lon, nom }) => ({ lat, lon, nom }));
+  rendrePointsPassage();
   if (reglages) {
     if (reglages.mode && MODES_TRAJET[reglages.mode]) {
       modeTrajet = reglages.mode;
@@ -2065,6 +2074,11 @@ function ligneSimple(titre, sous, idx, idSuppr) {
   </div>`;
 }
 
+// « via Auray, Vannes » pour les listes de favoris et d'historique.
+function texteVia(etapes) {
+  return etapes?.length ? `via ${etapes.map((e, i) => e.nom || `étape ${i + 1}`).join(", ")}` : "";
+}
+
 function renderFavoris() {
   document.querySelectorAll(".ev-fav-onglet").forEach((b) => b.classList.toggle("active", b.dataset.onglet === ongletFavoris));
   $("ev-favoris-list").classList.toggle("hidden", ongletFavoris !== "trajets");
@@ -2074,7 +2088,7 @@ function renderFavoris() {
   const favoris = listerTrajetsFavoris();
   listesAffichees.set("ev-favoris-list", favoris);
   $("ev-favoris-list").innerHTML =
-    favoris.map((f, i) => ligneSimple(`⭐ ${escapeHtml(f.depart)} → ${escapeHtml(f.destination)}`, "", i, f.id)).join("") ||
+    favoris.map((f, i) => ligneSimple(`⭐ ${escapeHtml(f.depart)} → ${escapeHtml(f.destination)}`, escapeHtml(texteVia(f.etapes)), i, f.id)).join("") ||
     hint("Aucun trajet favori. Utilise « ☆ Trajet favori » dans l'onglet Trajet.");
 
   const historique = listerHistoriqueTrajets();
@@ -2085,7 +2099,7 @@ function renderFavoris() {
         ligneSimple(
           `${escapeHtml(nomCourt(h.from_name) || h.depart)} → ${escapeHtml(nomCourt(h.to_name) || h.destination)}`,
           escapeHtml(
-            [`${h.distance_km} km`, h.duree_text, `${h.nb_arrets} arrêt(s)`, LABELS_MODE[h.reglages?.mode] || "", new Date(h.ts * 1000).toLocaleDateString("fr-FR")]
+            [texteVia(h.reglages?.points_passage), `${h.distance_km} km`, h.duree_text, `${h.nb_arrets} arrêt(s)`, LABELS_MODE[h.reglages?.mode] || "", new Date(h.ts * 1000).toLocaleDateString("fr-FR")]
               .filter(Boolean)
               .join(" · "),
           ),
@@ -2122,7 +2136,7 @@ function cablerFavoris() {
       const element = ligne && listesAffichees.get(id)?.[Number(ligne.dataset.idx)];
       if (element) ouvrir(element);
     });
-  gerer("ev-favoris-list", (f) => chargerEtLancerTrajet(f.depart, f.destination), retirerTrajetFavori);
+  gerer("ev-favoris-list", (f) => chargerEtLancerTrajet(f.depart, f.destination, null, f.etapes), retirerTrajetFavori);
   gerer("ev-historique-list", (h) => chargerEtLancerTrajet(h.depart, h.destination, h.reglages), supprimerTrajetHistorique);
   gerer(
     "ev-bornes-favorites-list",
@@ -2636,6 +2650,13 @@ export function executerAction(action) {
 export function viderChampsTrajet() {
   $("ev-depart-input").value = "";
   $("ev-destination-input").value = "";
+  // Les étapes « via » suivent : restées là, elles s'appliqueraient au
+  // trajet suivant sans qu'on y pense.
+  $("ev-via-input").value = "";
+  if (pointsPassage.length) {
+    pointsPassage = [];
+    rendrePointsPassage();
+  }
 }
 
 export function initialiserUI() {
