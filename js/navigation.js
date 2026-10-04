@@ -20,6 +20,7 @@ import { rechercherParkings } from "./parkings.js";
 import { calculerItineraireTomTom, appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation } from "./zoom-nav.js";
+import { qualiteMesure, recaler, evaluerHorsRoute, estimerProgression } from "./recalage.js";
 import { enregistrerReprise, oublierReprise, lireReprise } from "./reprise.js";
 import { noter } from "./journal-erreurs.js";
 import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitiale, capEntre, fleche, svgFleche, construireRoute, traceRestante, FLECHES_VOIE, dessinVoies } from "./nav-outils.js";
@@ -222,6 +223,10 @@ function installerRoute(route) {
     const m = projeter(etat.pos.lat, etat.pos.lon, null);
     etat.idx = m.i;
     etat.offset = m.offset;
+    // Nouveau tracé : le recalage et le compteur de distance repartent d'ici.
+    etat.recalage = null;
+    etat.offsetMesure = m.offset;
+    if (etat.dernierFixe) etat.dernierFixe = { ...etat.dernierFixe, offset: m.offset, d: m.d };
   }
   chercherFeux(route);
 }
@@ -836,7 +841,9 @@ function annonces() {
     const d = instr.offset - etat.offset;
     const loin = Math.min(2000, Math.max(600, v * 60));
     const proche = Math.min(500, Math.max(120, v * 12));
-    const maintenant = Math.min(60, Math.max(20, v * 3));
+    // Position imprécise ou estimée : l'annonce finale part plus tôt,
+    // de la valeur de l'incertitude (60 m au plus), plutôt que trop tard.
+    const maintenant = Math.min(60, Math.max(20, v * 3)) + Math.min(60, etat.incertitudeM || 0);
     const precedente = etat.route.instructions.filter((i) => i.offset < instr.offset).pop();
     const ecart = precedente ? instr.offset - precedente.offset : Infinity;
     if (d <= maintenant && !instr.annonces.has(3)) {
@@ -1333,20 +1340,50 @@ async function reessayerRouteBarree() {
 
 // ── Réception des positions ─────────────────────────────────────────────────
 
+// Quatre positions à ne pas confondre :
+//   - la mesure du téléphone, telle quelle (etat.posBrute, jamais modifiée) ;
+//   - la position de travail (etat.pos) : la mesure, avec vitesse et cap
+//     complétés quand le téléphone ne les donne pas ;
+//   - le point de l'itinéraire retenu par le recalage (etat.recalage,
+//     etat.offset) : c'est lui qui sert aux distances, annonces et alertes ;
+//   - la voiture dessinée (etat.aff), lissée pour l'œil seulement.
 function surPosition(p) {
   if (!etat?.route) return;
+  const maintenant = Date.now();
+  // Mesure ancienne, dans le désordre ou physiquement impossible : écartée,
+  // avec sa raison dans le journal. La démo fabrique des mesures parfaites.
+  const q = etat.demo ? { valide: true, niveau: "bon", age_s: 0, suivi: {} } : qualiteMesure(p, etat.posBrute, maintenant, etat.suiviGps);
+  etat.suiviGps = q.suivi;
+  if (!q.valide) {
+    etat.gpsRejets = (etat.gpsRejets || 0) + 1;
+    if (maintenant - (etat.dernierRejetNote || 0) > 10000) {
+      etat.dernierRejetNote = maintenant;
+      noter("gps", `mesure écartée : ${q.raison}`);
+    }
+    return;
+  }
+  etat.posBrute = { lat: p.lat, lon: p.lon, precision: p.precision, t: p.t, cap: p.cap, vitesse: p.vitesse };
   const precedent = etat.pos;
   if (!Number.isFinite(p.vitesse) && precedent) {
     const dt = (p.t - precedent.t) / 1000;
     p.vitesse = dt > 0 ? (haversineKm(precedent.lat, precedent.lon, p.lat, p.lon) * 1000) / dt : 0;
   }
-  const m = projeter(p.lat, p.lon, etat.idx);
+  // Recalage avec le cap du GPS (avant qu'il soit complété plus bas).
+  const m = recaler(etat.route, { lat: p.lat, lon: p.lon, precision: p.precision, cap: p.cap, vitesse: p.vitesse, t: p.t }, etat.recalage);
+  etat.recalage = m;
+  etat.gps = { niveau: q.niveau, age_s: q.age_s, confiance: m.confiance, ecart_m: m.d };
+  // Heure d'arrivée de la mesure (horloge du téléphone) : sert à savoir
+  // depuis quand on n'en reçoit plus.
+  etat.dernierFixe = { offset: m.offset, vitesse: p.vitesse || 0, t: maintenant, d: m.d, precision: p.precision };
+  majSignalGps("suivi");
   const [lonA, latA] = etat.route.coords[m.i];
   const [lonB, latB] = etat.route.coords[Math.min(m.i + 1, etat.route.coords.length - 1)];
   const capRoute = capEntre(latA, lonA, latB, lonB);
   if (!Number.isFinite(p.cap) || (p.vitesse || 0) < 2) p.cap = m.d < 30 ? capRoute : precedent?.cap ?? capRoute;
 
-  const avance = m.offset - etat.offset;
+  // Distance réellement mesurée (pas celle estimée sans signal).
+  const avance = m.offset - (etat.offsetMesure ?? etat.offset);
+  etat.offsetMesure = m.offset;
   if (avance > 0 && avance < 20000) {
     etat.odometre += avance;
     // Type de route (pour la conso apprise) d'après la vitesse.
@@ -1367,9 +1404,11 @@ function surPosition(p) {
   etat.pos = p;
   carte2D.afficherPrecisionGPS(p.lat, p.lon, p.precision);
 
-  // Hors itinéraire : plusieurs positions de suite trop loin du tracé
-  const seuil = Math.max(40, (p.precision || 20) * 1.5);
-  etat.horsRoute = m.d > seuil && (p.vitesse || 0) > 2 ? etat.horsRoute + 1 : 0;
+  // Hors itinéraire : plusieurs positions de suite trop loin du tracé, et
+  // d'autant plus de mesures que le signal est mauvais (voir recalage.js).
+  const hors = evaluerHorsRoute({ compte: etat.horsRoute, depuis: etat.horsRouteDepuis }, { d: m.d, precision: p.precision, vitesse: p.vitesse, t: maintenant, niveau: q.niveau });
+  etat.horsRoute = hors.compte;
+  etat.horsRouteDepuis = hors.depuis;
   // Passé quand même par l'endroit barré (voiture au bout des zones, pas
   // seulement en approche) : plus rien à éviter devant.
   if (etat.reessaiBarree && traceTraverseCarres([[p.lon, p.lat]], etat.reessaiBarree.zones.slice(-2))) {
@@ -1379,7 +1418,7 @@ function surPosition(p) {
   if (etat.reessaiBarree && etat.odometre >= etat.reessaiBarree.odometre && !etat.recalculEnCours) reessayerRouteBarree();
   // 2 mesures de suite (pas 3) : recalcule plus vite après un changement de
   // route voulu, demande du 2026-10-03 ("ça met du temps à se remettre").
-  else if (etat.horsRoute >= 2 && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
+  else if (hors.confirme && Date.now() - etat.dernierRecalcul > DELAI_MIN_RECALCUL_MS) recalculer("hors_route");
   else if (!etat.demo && Date.now() - etat.dernierTrafic > DELAI_TRAFIC_MS) recalculer("trafic");
 
   // Arrivée à une borne ou à destination
@@ -1509,7 +1548,53 @@ function boucleAnimation(t) {
 
 // ── Source de position : GPS réel ───────────────────────────────────────────
 
+// ── Signal GPS : imprécis, absent, position estimée ─────────────────────────
+// Sans mesure depuis 3 s (tunnel, parking), la voiture est supposée continuer
+// à la même vitesse sur le tracé, 30 s au plus ; au-delà, la position est
+// annoncée perdue. L'écran le dit toujours : une position estimée n'est
+// jamais présentée comme une mesure.
+
+function majSignalGps(signal, incertitude = null) {
+  const g = etat.gps || {};
+  const precision = Math.round(etat.pos?.precision ?? etat.dernierFixe?.precision ?? 0);
+  if (signal !== etat.signal) {
+    if (signal === "estime") etat.gpsEstimations = (etat.gpsEstimations || 0) + 1;
+    if (etat.signal && (signal !== "suivi" || etat.signal !== "suivi")) noter("gps", `signal : ${etat.signal} → ${signal}`);
+    etat.signal = signal;
+  }
+  // Incertitude utilisée par les annonces : nulle quand le signal est bon.
+  etat.incertitudeM = signal === "estime" || signal === "perdu" ? incertitude ?? 0 : g.niveau === "bon" ? 0 : precision;
+  const textes = {
+    estime: `📡 Position estimée (sans GPS depuis ${Math.round((Date.now() - (etat.dernierFixe?.t || Date.now())) / 1000)} s)`,
+    perdu: "📡 GPS perdu : position non fiable",
+    fige: "📡 Pas de signal GPS",
+    suivi: g.niveau === "mauvais" ? `📡 GPS très imprécis (±${precision} m)` : g.niveau === "faible" && precision ? `📡 GPS imprécis (±${precision} m)` : "",
+  };
+  const el = $("ev-nav-gps");
+  if (!el) return;
+  el.textContent = textes[signal] || "";
+  el.classList.toggle("hidden", !el.textContent);
+  el.classList.toggle("ev-nav-gps-estime", signal !== "suivi");
+}
+
+function surveillerSignal() {
+  if (!etat?.route || !etat.dernierFixe || etat.aLaBorne || etat.arrive || etat.recalculEnCours) return;
+  const e = estimerProgression(etat.dernierFixe, Date.now(), etat.route.total);
+  if (e.etat === "suivi") return;
+  const dejaPerdu = etat.signal === "perdu";
+  majSignalGps(e.etat, e.incertitude_m);
+  // Position perdue ou figée : plus rien n'avance.
+  if (e.etat !== "estime" || dejaPerdu) return;
+  const pt = pointSurRoute(e.offset);
+  etat.idx = pt.i;
+  etat.offset = e.offset;
+  programmerAnimation({ lat: pt.lat, lon: pt.lon, cap: pt.cap, vitesse: etat.dernierFixe.vitesse }, { d: 0, offset: e.offset });
+  annonces();
+  majEcran();
+}
+
 function demarrerGps() {
+  etat.surveillanceSignal = setInterval(surveillerSignal, 1000);
   etat.watchId = navigator.geolocation.watchPosition(
     (pos) => {
       if (etat?.alerteGps) {
@@ -2113,6 +2198,13 @@ export function etatDiagnostic() {
     batterie_estimee: Math.round(batterieEstimee()),
     gps_precision_m: p?.precision != null ? Math.round(p.precision) : "?",
     vitesse_kmh: Math.round((p?.vitesse || 0) * 3.6),
+    gps_signal: etat.signal || "?",
+    gps_niveau: etat.gps?.niveau || "?",
+    gps_age_s: etat.gps?.age_s != null ? Math.round(etat.gps.age_s * 10) / 10 : "?",
+    gps_ecart_trace_m: etat.gps?.ecart_m != null ? Math.round(etat.gps.ecart_m) : "?",
+    gps_confiance_recalage: etat.gps?.confiance || "?",
+    gps_mesures_ecartees: etat.gpsRejets || 0,
+    gps_passages_a_l_estime: etat.gpsEstimations || 0,
     position_approx: p ? `${p.lat.toFixed(2)},${p.lon.toFixed(2)}` : "?",
     zoom: etat.zoom,
     voix: etat.voix ? "oui" : "non",
@@ -2716,6 +2808,8 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   window.removeEventListener("pagehide", sauverNavigation);
   oublierNavigationInterrompue();
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
+  clearInterval(etat.surveillanceSignal);
+  $("ev-nav-gps")?.classList.add("hidden");
   if (etat.demoTimer) clearInterval(etat.demoTimer);
   if (etat.raf) cancelAnimationFrame(etat.raf);
   try {
