@@ -638,7 +638,7 @@ async function preparerMaintenant({ sombre = true, fond = sombre ? "sombre" : "p
 const INCLINAISON_EXPLO = 50;
 const SANS_MARGE = { top: 0, left: 0, right: 0, bottom: 0 };
 const VIDE = { type: "FeatureCollection", features: [] };
-const COUCHES_EXPLO = ["alt-ligne", "alt-zone", "plan-halo", "plan-aller", "plan-retour", "plan-bouchons"];
+const COUCHES_EXPLO = ["alt-ligne", "alt-zone", "plan-halo", "plan-aller", "plan-retour", "plan-bouchons", "autonomie-ligne"];
 
 const explo = {
   actif: false,
@@ -668,6 +668,7 @@ let enNavigation = false;
 function ajouterCouchesExplo() {
   carte.addSource("plan", { type: "geojson", data: VIDE });
   carte.addSource("plan-alternatives", { type: "geojson", data: VIDE });
+  carte.addSource("autonomie", { type: "geojson", data: VIDE });
   const dessous = coucheSousLesNoms();
   const rond = { "line-cap": "round", "line-join": "round" };
   carte.addLayer({ id: "alt-ligne", type: "line", source: "plan-alternatives", layout: rond, paint: { "line-color": "#7d8797", "line-width": 5, "line-opacity": 0.8 } }, dessous);
@@ -679,6 +680,7 @@ function ajouterCouchesExplo() {
   carte.addLayer({ id: "plan-retour", type: "line", source: "plan", filter: filtre("retour"), paint: { "line-color": "#ffb400", "line-width": 4, "line-opacity": 0.85, "line-dasharray": [2, 2] } }, dessous);
   // Ralentissements et bouchons par-dessus le tracé (couleur calculée par carte.js).
   carte.addLayer({ id: "plan-bouchons", type: "line", source: "plan", filter: filtre("bouchon"), layout: rond, paint: { "line-color": ["get", "couleur"], "line-width": 6, "line-opacity": 0.95 } }, dessous);
+  carte.addLayer({ id: "autonomie-ligne", type: "line", source: "autonomie", paint: { "line-color": "#22e5a0", "line-width": 3, "line-dasharray": [2, 2] } }, dessous);
   carte.on("click", "alt-zone", (e) => explo.alternatives[e.features?.[0]?.properties?.i]?.onClic?.());
   carte.on("moveend", () => {
     if (!explo.actif || enNavigation) return;
@@ -776,6 +778,24 @@ function rendreBornes() {
   for (const b of seules) rendreBorne(b);
 }
 
+// Cercle d'autonomie : { lat, lon, rayonKm } ou null.
+export function exploAutonomie(cercle) {
+  explo.autonomie = cercle;
+  rendreAutonomie(true);
+}
+
+function rendreAutonomie(cadrer = false) {
+  const source = carte?.getSource("autonomie");
+  if (!source) return;
+  const c = explo.autonomie;
+  if (!c) return source.setData(VIDE);
+  const dLat = c.rayonKm / 111.32;
+  const dLon = c.rayonKm / (111.32 * Math.cos((c.lat * Math.PI) / 180));
+  const contour = Array.from({ length: 73 }, (_, i) => [c.lon + dLon * Math.cos((i * Math.PI) / 36), c.lat + dLat * Math.sin((i * Math.PI) / 36)]);
+  source.setData({ type: "Feature", geometry: { type: "LineString", coordinates: contour }, properties: {} });
+  if (cadrer && explo.actif && !enNavigation) carte.fitBounds([[c.lon - dLon, c.lat - dLat], [c.lon + dLon, c.lat + dLat]], { padding: 30, duration: 600 });
+}
+
 function rendrePosition() {
   explo.marqueurPosition?.remove();
   explo.marqueurPosition = null;
@@ -861,6 +881,7 @@ function rendreTrajet(recadrer) {
 }
 
 function rendreExplo() {
+  rendreAutonomie();
   rendreBornes();
   rendreParkings();
   rendrePosition();

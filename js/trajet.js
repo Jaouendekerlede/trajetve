@@ -3,7 +3,7 @@
 // mais exécuté directement dans le téléphone, sans serveur.
 
 import { getApiKeys, PALIERS_TEMPERATURE, MODES_TRAJET, MULTIPLICATEUR_CHARGE_LOURDE } from "./config.js";
-import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements, rectanglesZonesEvitees } from "./storage.js";
+import { obtenirProfilVehicule, enregistrerHistoriqueTrajet, lireReglages, appliquerAbonnements, rectanglesZonesEvitees, borneEnPanneJusqua } from "./storage.js";
 import { resoudreLieu, estMaPosition, pointADistanceSurTrace, haversineKm } from "./geo.js";
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { echangeursDuTrajet } from "./panneau-nav.js";
@@ -260,6 +260,7 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     arretImpose: opts.arret_impose || null,
     bonusAbonnementMin: lireReglages().privilegier_abonnements === false ? 0 : BONUS_ABONNEMENT_MIN,
     fusionner: fusionnerBornes,
+    estExclue: (b) => borneEnPanneJusqua(b.lat, b.lon) !== null,
     bornesSupplementaires: async (lat, lon) => {
       const r = await stationsOfficiellesZone(lat, lon, 20, { puissanceMin: Math.max(40, opts.puissance_min_kw || 0), maxLignes: 300 });
       return r.ok ? r.bornes : [];
@@ -337,9 +338,37 @@ function bouchonsDuTrajet(sections) {
 // proposées par TomTom (itineraires_alternatifs), dont le plan de recharge
 // reste à faire avec planifierAlternative : l'énergie, donc les arrêts,
 // dépendent de chaque route.
+// Dernier itinéraire calculé, gardé pour le simuler à vitesse réduite sans
+// redemander la route à TomTom.
+let dernierItineraire = null;
+
+// Même trajet en ne dépassant jamais `vitesseMaxKmh` : consommation, arrêts
+// et durée recalculés. Renvoie le plan (avec minutes_route_en_plus), ou
+// { ok: false, erreur }.
+export async function simulerVitesseMax(vitesseMaxKmh) {
+  if (!dernierItineraire) return { ok: false, erreur: "Calcule d'abord un trajet." };
+  const { itin, opts } = dernierItineraire;
+  let profilEnergie;
+  try {
+    profilEnergie = await construireProfilEnergie(itin, obtenirProfilVehicule(), {
+      ajuster_meteo: opts.ajuster_meteo,
+      charge_lourde: opts.charge_lourde,
+      depart_ms: itin.depart_ms,
+      vitesse_max_kmh: vitesseMaxKmh,
+    });
+  } catch (e) {
+    return { ok: false, erreur: `Simulation impossible : ${e?.message || e}` };
+  }
+  const plan = await planifierSurItineraire(itin, opts.charge_pct, { ...opts, profil_energie: profilEnergie, modele_detaille: true });
+  if (!plan.ok) return plan;
+  const enPlus = Math.round(profilEnergie.secondes_en_plus / 60);
+  return { ...plan, minutes_route_en_plus: enPlus, duree_totale_min: plan.duree_totale_min + enPlus };
+}
+
 export async function planifierTrajet(depart, destination, opts, sauvegarder = true) {
   const itin = await calculerItineraire(depart, destination, opts);
   if (!itin.ok) return itin;
+  dernierItineraire = { itin, opts };
   const resultat = await planifierSurItineraire(itin, opts.charge_pct, opts);
   resultat.itineraires_alternatifs = itin._alternatives;
   if (resultat.ok && sauvegarder) {

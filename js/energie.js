@@ -301,7 +301,15 @@ export async function construireProfilEnergie(itin, profil, options) {
   const echelle = itin.distance_km / Math.max(1e-6, cumBrut[cumBrut.length - 1]);
   const cumKm = cumBrut.map((d) => d * echelle);
 
-  const { vitesse, tunnel, cumSec } = profilVitesse(coords, cumKm, itin._sections || [], itin._summary || {});
+  const { vitesse, tunnel, cumSec: cumSecLibre } = profilVitesse(coords, cumKm, itin._sections || [], itin._summary || {});
+  // Simulation « et si je roulais moins vite ? » : la vitesse est plafonnée,
+  // le temps de route s'allonge d'autant (secondes_en_plus).
+  let cumSec = cumSecLibre;
+  if (options.vitesse_max_kmh > 0) {
+    cumSec = [0];
+    for (let i = 0; i < vitesse.length; i++) cumSec.push(cumSec[i] + ((cumKm[i + 1] - cumKm[i]) / Math.max(Math.min(vitesse[i], options.vitesse_max_kmh), 1)) * 3600);
+  }
+  const secondesEnPlus = cumSec[cumSec.length - 1] - cumSecLibre[cumSecLibre.length - 1];
   const points = echantillonner(coords, cumKm, cumSec);
 
   const [altBrutes, stations] = await Promise.all([
@@ -387,6 +395,7 @@ export async function construireProfilEnergie(itin, profil, options) {
     relief_ok: reliefOk,
     meteo_ok: meteoOk,
     meteo_depart: meteoDepart,
+    secondes_en_plus: secondesEnPlus,
     stats: {
       conso_moyenne_kwh100: itin.distance_km > 0 ? (energieTotale / itin.distance_km) * 100 : 0,
       energie_totale_kwh: energieTotale,

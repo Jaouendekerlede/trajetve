@@ -136,6 +136,33 @@ function idBorne(nom, lat, lon) {
   return `${String(nom).trim().toLowerCase()}@${Number(lat).toFixed(4)},${Number(lon).toFixed(4)}`;
 }
 
+// Bornes signalées en panne par l'utilisateur : écartées des trajets
+// pendant quelques jours, puis oubliées toutes seules.
+const CLE_BORNES_EN_PANNE = "trajetve_bornes_en_panne";
+export const JOURS_BORNE_EN_PANNE = 3;
+
+export function listerBornesEnPanne(maintenant = Date.now()) {
+  return lireJson(CLE_BORNES_EN_PANNE, []).filter((p) => p.jusqu_a > maintenant);
+}
+
+// Reconnue à son emplacement (environ 50 m), pas à son nom : la même borne
+// porte des noms différents selon la base qui la décrit.
+const memeEndroit = (p, lat, lon) => Math.abs(p.lat - lat) < 0.0005 && Math.abs(p.lon - lon) < 0.0007;
+
+// Renvoie la date de fin du signalement (ms), ou null.
+export function borneEnPanneJusqua(lat, lon, maintenant = Date.now()) {
+  return listerBornesEnPanne(maintenant).find((p) => memeEndroit(p, lat, lon))?.jusqu_a ?? null;
+}
+
+// Signale la borne en panne, ou annule le signalement. Renvoie le nouvel état.
+export function basculerBorneEnPanne(nom, lat, lon, maintenant = Date.now()) {
+  const pannes = listerBornesEnPanne(maintenant);
+  const dejaSignalee = pannes.some((p) => memeEndroit(p, lat, lon));
+  const suite = dejaSignalee ? pannes.filter((p) => !memeEndroit(p, lat, lon)) : [...pannes, { nom, lat, lon, jusqu_a: maintenant + JOURS_BORNE_EN_PANNE * 86400000 }];
+  ecrireJson(CLE_BORNES_EN_PANNE, suite);
+  return !dejaSignalee;
+}
+
 export function listerBornesFavorites() {
   return lireJson(STORAGE_KEYS.bornesFavorites, []);
 }

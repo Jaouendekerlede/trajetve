@@ -4,12 +4,12 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
-import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
+import { planifierTrajet, simulerVitesseMax, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import { initCarte, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage } from "./carte.js";
+import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage } from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
@@ -23,6 +23,7 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
+import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement } from "./paiement.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
 import { rendreStats, cablerStats } from "./ui-stats.js";
 import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
@@ -477,6 +478,7 @@ function passeFiltres(b) {
   const enAttente = b.officiel === undefined;
   if (filtres.has("rapide") && puissanceBorne(b) < 50) return false;
   if (filtres.has("cb") && !cbPossible(b)) return false;
+  if (filtres.has("payable") && !enAttente && facilitePaiement(b, lireMoyens(lireReglages())).niveau === "incertain") return false;
   if (filtres.has("compatible") && !borneCompatible(b, obtenirProfilVehicule().connecteurs_acceptes)) return false;
   if (filtres.has("h24") && !enAttente && !(o && /24\s*\/\s*7|24\s*h/i.test(o.horaires))) return false;
   if (filtres.has("gratuit") && !enAttente && !(o?.gratuit === "oui" || /gratuit|free/i.test(b.cout_texte || ""))) return false;
@@ -867,6 +869,11 @@ function ficheBorneHtml(b, ctx) {
       }
     </div>`;
 
+  const panneJusqua = borneEnPanneJusqua(b.lat, b.lon);
+  html += panneJusqua
+    ? `<div class="ev-alerte">⚠️ Tu as signalé cette borne en panne : elle n'est plus proposée dans tes trajets jusqu'au ${new Date(panneJusqua).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}. <button id="ev-borne-panne-btn" class="ev-lien" type="button">✅ Elle remarche</button></div>`
+    : `<button id="ev-borne-panne-btn" class="ev-lien" type="button">⚠️ Signaler cette borne en panne (${JOURS_BORNE_EN_PANNE} jours)</button>`;
+
   if (ctx) {
     html += `<div class="ev-carte-bloc"><h3>🔋 Cet arrêt dans ton trajet</h3>
       <div class="ev-meta"><span>km ${escapeHtml(ctx.km_depuis_depart)}</span><span>⚡ ${escapeHtml(ctx.puissance_kw)} kW</span><span>+${escapeHtml(ctx.kwh_ajoutes)} kWh</span><span>⏱️ ${escapeHtml(ctx.temps_charge_min)} min</span></div>
@@ -894,7 +901,9 @@ function ficheBorneHtml(b, ctx) {
   const prises = prisesHtml(b);
   if (prises) html += `<div class="ev-carte-bloc"><h3>🔌 Prises</h3>${prises}${o?.cable_attache === "oui" ? hint("Câble Type 2 attaché à la borne.") : ""}</div>`;
 
-  let paiement = ligneInfo("Carte bancaire", `<strong class="ev-cb-texte ${cb.classe}">${escapeHtml(cb.long)}</strong>`);
+  const facilite = facilitePaiement(b, lireMoyens(lireReglages()));
+  let paiement = ligneInfo("Avec tes moyens de paiement", `<strong>${{ sur: "✅", probable: "🟡", incertain: "❓" }[facilite.niveau]} ${escapeHtml(facilite.texte)}</strong>`);
+  paiement += ligneInfo("Carte bancaire", `<strong class="ev-cb-texte ${cb.classe}">${escapeHtml(cb.long)}</strong>`);
   if (o) {
     paiement += ligneInfo("Sans abonnement (à l'acte)", OUI_NON[o.paiement_acte]);
     paiement += ligneInfo("Badge, appli, abonnement", OUI_NON[o.paiement_autre]);
@@ -955,6 +964,11 @@ function remplirFiche(b, ctx) {
     remplirFiche(b, ctx);
   });
   $("ev-borne-partager-btn")?.addEventListener("click", () => partagerTexte(nom, `${nom}\n${b.adresse || ""}\n${lienGoogleMaps(b.lat, b.lon)}`));
+  $("ev-borne-panne-btn")?.addEventListener("click", () => {
+    const signalee = basculerBorneEnPanne(nom, b.lat, b.lon);
+    toast(signalee ? `⚠️ Borne écartée de tes trajets pendant ${JOURS_BORNE_EN_PANNE} jours` : "✅ Borne de nouveau proposée dans tes trajets");
+    remplirFiche(b, ctx);
+  });
 }
 
 function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer = false } = {}) {
@@ -1156,7 +1170,11 @@ function rendrePointsPassage() {
   const conteneur = $("ev-points-passage-liste");
   conteneur.classList.toggle("hidden", pointsPassage.length === 0);
   conteneur.innerHTML = pointsPassage
-    .map((p, i) => `<button type="button" class="ev-chip" data-retirer-etape="${i}">📍 ${p.nom ? `Via ${escapeHtml(p.nom)}` : `Étape ${i + 1}`} ✕</button>`)
+    .map(
+      (p, i) =>
+        `${i > 0 ? `<button type="button" class="ev-chip ev-chip-mini" data-monter-etape="${i}" title="Passer cette étape avant la précédente" aria-label="Passer cette étape avant la précédente">⬆</button>` : ""}` +
+        `<button type="button" class="ev-chip" data-retirer-etape="${i}">📍 ${p.nom ? `Via ${escapeHtml(p.nom)}` : `Étape ${i + 1}`} ✕</button>`,
+    )
     .join("");
 }
 
@@ -1197,6 +1215,13 @@ function cablerPointsPassage() {
     else if (a === "fermer") $("ev-plan-point").classList.add("hidden");
   });
   $("ev-points-passage-liste").addEventListener("click", (e) => {
+    const m = Number(e.target.closest("[data-monter-etape]")?.dataset.monterEtape);
+    if (m > 0) {
+      [pointsPassage[m - 1], pointsPassage[m]] = [pointsPassage[m], pointsPassage[m - 1]];
+      rendrePointsPassage();
+      if (trajetAffiche) lancerTrajet();
+      return;
+    }
     const i = e.target.closest("[data-retirer-etape]")?.dataset.retirerEtape;
     if (i !== undefined) retirerPointPassage(Number(i));
   });
@@ -1401,6 +1426,7 @@ function etapesHtml(p) {
             <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
             <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique)}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            ${a.alternatives?.length ? `<div class="ev-hint">🔁 Plan B si elle est prise ou en panne : <strong>${escapeHtml(a.alternatives[0].nom)}</strong> (${escapeHtml(a.alternatives[0].distance_km)} km, ${escapeHtml(a.alternatives[0].puissance_max_kw)} kW)</div>` : ""}
             ${a.pct_evite_arret ? `<div class="ev-hint">💡 Charger jusqu'à ${nombre(a.pct_evite_arret.pct)} % ici aurait évité l'arrêt suivant, mais aurait pris ${formaterMinutes(a.pct_evite_arret.cout_min)} de plus au total.</div>` : ""}
           </div>
           ${route(a.km_depuis_depart, suivant)}
@@ -1446,7 +1472,12 @@ function afficherResultat(p) {
       ? `↩️ Retour : ${nombre(p.retour.distance_km)} km, ${p.retour.duree_text}, ${p.retour.nb_arrets} arrêt(s), arrivée à ${nombre(p.retour.pct_batterie_arrivee)} % (tracé orange).`
       : `↩️ Retour impossible à calculer : ${p.retour.erreur}`;
   }
-  $("ev-trajet-summary").innerHTML = `<div class="ev-tuiles">${tuiles}</div>${meteo ? `<div class="ev-meteo-info">${escapeHtml(meteo)}</div>` : ""}${
+  const peage = p.km_peage
+    ? `<div class="ev-meteo-info">🛣️ Péages : environ <strong>${euros(coutPeage(p.km_peage))}</strong> (estimation sur ${nombre(p.km_peage)} km à péage) · recharge + péages ≈ <strong>${euros(coutPeage(p.km_peage) + (p.cout_total_eur || 0))}</strong></div>`
+    : "";
+  // Nouvelle simulation à refaire pour ce trajet-ci.
+  $("ev-vitesse-resultat").classList.add("hidden");
+  $("ev-trajet-summary").innerHTML = `<div class="ev-tuiles">${tuiles}</div>${peage}${meteo ? `<div class="ev-meteo-info">${escapeHtml(meteo)}</div>` : ""}${
     retour ? `<div class="ev-meteo-info">${escapeHtml(retour)}</div>` : ""
   }`;
 
@@ -1527,6 +1558,13 @@ function badgesItineraires(plans) {
   return badges;
 }
 
+// Prix des péages : moyenne des autoroutes françaises pour une voiture
+// (les tarifs réels vont d'environ 7 à 13 centimes du km selon le tronçon).
+const TARIF_PEAGE_EUR_KM = 0.1;
+function coutPeage(km) {
+  return km * TARIF_PEAGE_EUR_KM;
+}
+
 function ecartMinutes(min) {
   if (Math.abs(min) < 1) return "même durée";
   return `${min > 0 ? "+" : "−"}${formaterMinutes(Math.abs(min))}`;
@@ -1547,7 +1585,7 @@ function carteItineraire(i, plan, route, badges, affiche) {
   const ligne = `🏁 <strong>${formaterMinutes(plan.duree_totale_min ?? plan.duree_min)}</strong> au total · ${routeTxt} · ${arrets} · ${plan.cout_total_eur ? euros(plan.cout_total_eur) : "0 €"} · 🔋 ${nombre(plan.pct_batterie_arrivee)} %`;
   const details = [];
   if (plan.km_autoroute) details.push(`🛣️ ${nombre(plan.km_autoroute)} km d'autoroute`);
-  details.push(plan.km_peage ? `péage sur ${nombre(plan.km_peage)} km` : "sans péage");
+  details.push(plan.km_peage ? `péage sur ${nombre(plan.km_peage)} km (≈ ${euros(coutPeage(plan.km_peage))})` : "sans péage");
   if (plan.retard_trafic_min >= 5) details.push(`🚦 ${formaterMinutes(plan.retard_trafic_min)} de bouchons`);
   if (!choisi && affiche?.ok) details.push(`${ecartMinutes((plan.duree_totale_min ?? 0) - (affiche.duree_totale_min ?? 0))} par rapport à l'affiché`);
   return `<button type="button" class="ev-itineraire${choisi ? " choisi" : ""}" data-itin="${i}">${titre}${pastilles}<div class="ev-itin-ligne">${ligne}</div><div class="ev-itin-sous">${details.join(" · ")}</div></button>`;
@@ -2224,6 +2262,8 @@ function cablerOutils() {
   majCalculateur();
 }
 
+let dernierCalculRecharge = { minutes: 0, cible: 80 };
+
 // Calculateur de recharge : trois curseurs liés (batterie actuelle, niveau
 // visé, énergie à ajouter) et résultat recalculé à chaque mouvement.
 // source : le curseur qui vient de bouger ; les deux autres suivent.
@@ -2252,6 +2292,7 @@ function majCalculateur(source = "cible") {
   const types = typesDeCharge(profil);
   const type = types[$("ev-calc-type-select").value] || types.rapide;
   const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw, { pctDebut: debut, profil }));
+  dernierCalculRecharge = { minutes, cible };
   $("ev-calc-result").innerHTML =
     `⏱️ De ${debut} % à ${cible} % : <strong>${formaterMinutes(minutes)}</strong> (à ${escapeHtml(type.puissance_kw)} kW)` +
     `<br>🏠 À la maison : <strong>${euros(kwh * profil.prix_hc_eur_kwh)}</strong> en heures creuses, <strong>${euros(kwh * profil.prix_hp_eur_kwh)}</strong> en heures pleines` +
@@ -2692,6 +2733,154 @@ export function viderChampsTrajet() {
   }
 }
 
+// ── Compléments : moyens de paiement, minuteur, autonomie, vitesse ─────────
+
+// Menu › Payer aux bornes : ce que l'utilisateur possède pour payer.
+function rendreMoyensPaiement() {
+  const m = lireMoyens(lireReglages());
+  const case_ = (attr, coche, texte) => `<label class="ev-check"><input type="checkbox" ${attr}${coche ? " checked" : ""}> ${texte}</label>`;
+  $("ev-moyens-paiement").innerHTML =
+    case_('data-moyen="cb"', m.cb, "💳 Carte bancaire sans contact") +
+    case_('data-moyen="badge"', m.badge, "🪪 Un badge multi-réseaux (Chargemap, Freshmile, Shell Recharge…)") +
+    `<div class="ev-hint">Les applis de réseau où j'ai un compte :</div>` +
+    RESEAUX_PAIEMENT.map((r) => case_(`data-reseau="${r.id}"`, m.reseaux.includes(r.id), `📲 ${escapeHtml(r.nom)}`)).join("");
+}
+
+function enregistrerMoyensPaiement() {
+  const zone = $("ev-moyens-paiement");
+  sauverReglages({
+    moyens_paiement: {
+      cb: zone.querySelector('[data-moyen="cb"]').checked,
+      badge: zone.querySelector('[data-moyen="badge"]').checked,
+      reseaux: [...zone.querySelectorAll("[data-reseau]:checked")].map((c) => c.dataset.reseau),
+    },
+  });
+  // Le filtre « Je peux payer » dépend de ces choix.
+  if (filtres.has("payable")) renderBornes();
+}
+
+// Minuteur de recharge hors guidage (depuis le calculateur). Gardé dans le
+// téléphone : il reprend si l'appli est rouverte entre-temps.
+const CLE_MINUTEUR_RECHARGE = "tve_minuteur_recharge";
+let minuteurRechargeId = null;
+
+function lireMinuteurRecharge() {
+  try {
+    return JSON.parse(localStorage.getItem(CLE_MINUTEUR_RECHARGE));
+  } catch {
+    return null;
+  }
+}
+
+function majMinuteurRecharge() {
+  const zone = $("ev-calc-minuteur");
+  const bouton = $("ev-calc-minuteur-btn");
+  const m = lireMinuteurRecharge();
+  if (!m) {
+    zone.classList.add("hidden");
+    bouton.textContent = "🔔 Me prévenir à la fin de cette recharge";
+    clearInterval(minuteurRechargeId);
+    minuteurRechargeId = null;
+    return;
+  }
+  zone.classList.remove("hidden");
+  bouton.textContent = "✕ Arrêter le minuteur";
+  const reste = Math.round((m.fin - Date.now()) / 60000);
+  if (reste > 0) {
+    zone.textContent = `⏱️ Recharge jusqu'à ${m.cible} % : fin estimée à ${heure(m.fin)}, dans ${formaterMinutes(reste)}. Garde l'appli ouverte pour être prévenu.`;
+  } else {
+    zone.textContent = `✅ Recharge jusqu'à ${m.cible} % terminée (estimation) depuis ${heure(m.fin)}.`;
+    if (!m.prevenu) {
+      localStorage.setItem(CLE_MINUTEUR_RECHARGE, JSON.stringify({ ...m, prevenu: true }));
+      toast(`🔋 Recharge terminée (estimation) : ${m.cible} % atteints`);
+      navigator.vibrate?.([300, 150, 300]);
+      navigator.serviceWorker?.getRegistration?.().then((reg) => reg?.showNotification("🔋 Recharge terminée (estimation)", { body: `${m.cible} % atteints : tu peux débrancher.`, tag: "recharge", icon: "./icons/icon-192.png" })).catch(() => {});
+    }
+  }
+  if (!minuteurRechargeId) minuteurRechargeId = setInterval(majMinuteurRecharge, 20000);
+}
+
+function basculerMinuteurRecharge() {
+  if (lireMinuteurRecharge()) {
+    localStorage.removeItem(CLE_MINUTEUR_RECHARGE);
+  } else {
+    const { minutes, cible } = dernierCalculRecharge;
+    if (minutes <= 0) return toast("Règle d'abord une recharge à faire avec les curseurs.");
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    localStorage.setItem(CLE_MINUTEUR_RECHARGE, JSON.stringify({ fin: Date.now() + minutes * 60000, cible }));
+  }
+  majMinuteurRecharge();
+}
+
+// Cercle d'autonomie : jusqu'où aller avec la batterie réglée dans Trajet, en
+// gardant la réserve. Une route n'est jamais droite : le rayon à vol d'oiseau
+// est pris à 75 % de la distance par la route.
+const PART_VOL_OISEAU = 0.75;
+let autonomieAffichee = false;
+
+async function basculerAutonomie() {
+  const chip = $("ev-autonomie-chip");
+  if (autonomieAffichee) {
+    autonomieAffichee = false;
+    chip.classList.remove("actif");
+    afficherAutonomie(0, 0, 0);
+    return;
+  }
+  const p = obtenirProfilVehicule();
+  const conso = consoMesuree()?.kwh_100km || p.consommation_kwh_100km * (MULTIPLICATEURS_SAISON[p.saison] ?? 1);
+  const charge = Number($("ev-charge-pct-input").value);
+  const marge = Number($("ev-marge-pct-input").value);
+  const kmRoute = Math.max(0, ((p.capacite_kwh * (charge - marge)) / 100 / conso) * 100);
+  if (kmRoute < 1) return toast("🔋 Batterie au départ trop basse (réglage dans Trajet).");
+  toast("📍 Recherche de ta position…");
+  const pos = await resoudreLieu("ma position");
+  const centre = pos.erreur ? centreVisible() : pos;
+  autonomieAffichee = true;
+  chip.classList.add("actif");
+  afficherAutonomie(centre.lat, centre.lon, kmRoute * PART_VOL_OISEAU);
+  toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : environ ${nombre(kmRoute)} km de route${pos.erreur ? ", autour du centre de la carte" : ""}. Niveau de batterie réglable dans Trajet.`);
+}
+
+// « Et si je roulais à 110 ? » : le même trajet, vitesse plafonnée.
+const VITESSE_CONSEIL_KMH = 110;
+
+async function simulerVitesse() {
+  const p = dernierTrajet;
+  if (!p) return;
+  const bouton = $("ev-vitesse-btn");
+  const zone = $("ev-vitesse-resultat");
+  bouton.disabled = true;
+  zone.classList.remove("hidden");
+  zone.textContent = `⏳ Simulation à ${VITESSE_CONSEIL_KMH} km/h…`;
+  try {
+    const s = await simulerVitesseMax(VITESSE_CONSEIL_KMH);
+    const arrets = (n) => (n ? `${n} arrêt${n > 1 ? "s" : ""}` : "aucun arrêt");
+    if (!s.ok) zone.textContent = `⚠️ ${s.erreur || "Simulation impossible."}`;
+    else if (s.minutes_route_en_plus < 2) zone.textContent = `Ce trajet ne dépasse presque jamais ${VITESSE_CONSEIL_KMH} km/h : rouler moins vite n'y changerait rien.`;
+    else {
+      zone.innerHTML =
+        `🐢 <strong>À ${VITESSE_CONSEIL_KMH} km/h maximum</strong> : ${formaterMinutes(s.minutes_route_en_plus)} de route en plus, ${arrets(s.nb_arrets)} (au lieu de ${arrets(p.nb_arrets)}), ` +
+        `arrivée avec <strong>${nombre(s.pct_batterie_arrivee)} %</strong> (au lieu de ${nombre(p.pct_batterie_arrivee)} %).` +
+        `<br>Recharges comprises : <strong>${formaterMinutes(s.duree_totale_min)}</strong> au total, soit ${ecartMinutes(s.duree_totale_min - p.duree_totale_min)} · recharge ${euros(s.cout_total_eur || 0)} (au lieu de ${euros(p.cout_total_eur || 0)}).`;
+    }
+  } catch (e) {
+    zone.textContent = `⚠️ Simulation impossible : ${e?.message || e}`;
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
+function cablerComplements() {
+  rendreMoyensPaiement();
+  $("ev-moyens-paiement").addEventListener("change", enregistrerMoyensPaiement);
+  $("ev-calc-minuteur-btn").addEventListener("click", basculerMinuteurRecharge);
+  // Les minuteries s'endorment en arrière-plan : on recale au retour.
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && lireMinuteurRecharge() && majMinuteurRecharge());
+  majMinuteurRecharge();
+  $("ev-autonomie-chip").addEventListener("click", basculerAutonomie);
+  $("ev-vitesse-btn").addEventListener("click", simulerVitesse);
+}
+
 export function initialiserUI() {
   viderChampsTrajet();
   initCarte("ev-carte", { fondInitial: lireReglages().fond_carte || fondParDefaut(), onDeplacement: surDeplacementCarte });
@@ -2708,6 +2897,7 @@ export function initialiserUI() {
   cablerOutils();
   cablerUrgence();
   cablerProfil();
+  cablerComplements();
 
   chargerPrefs();
   rendreProfil();

@@ -198,3 +198,14 @@ test("derniers trajets : supprimer un tracé retire aussi le trajet des statisti
   assert.equal(s.supprimerTrace(1_700_000_000_000), false, "déjà supprimé");
   assert.equal(s.listerTrajetsFaits().length, 1);
 });
+
+test("borne en panne : signalée trois jours, puis oubliée toute seule", () => {
+  const t0 = 1_700_000_000_000;
+  assert.equal(s.borneEnPanneJusqua(47.66, -2.75, t0), null);
+  assert.equal(s.basculerBorneEnPanne("Ionity Vannes", 47.66, -2.75, t0), true);
+  assert.equal(s.borneEnPanneJusqua(47.6602, -2.7502, t0 + 86400000), t0 + 3 * 86400000, "même borne à une vingtaine de mètres près");
+  assert.equal(s.borneEnPanneJusqua(47.67, -2.75, t0), null, "une borne à un kilomètre n'est pas concernée");
+  assert.equal(s.borneEnPanneJusqua(47.66, -2.75, t0 + 4 * 86400000), null, "oubliée après trois jours");
+  assert.equal(s.basculerBorneEnPanne("Ionity Vannes", 47.66, -2.75, t0), false, "second appui : signalement annulé");
+  assert.equal(s.listerBornesEnPanne(t0).length, 0);
+});

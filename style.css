@@ -1097,3 +1097,6 @@ button.ev-bandeau { width: 100%; border: none; font-family: inherit; text-align:
 
 /* Clés API masquées par des points sans être des champs « mot de passe ». */
 .ev-cle-masquee { -webkit-text-security: disc; }
+
+/* Étapes « via » : petite flèche pour changer l'ordre. */
+.ev-chip-mini { padding-left: 11px; padding-right: 11px; }

@@ -405,6 +405,8 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     if (!recherche.bornes.length) return { erreur: `Aucune borne de recharge trouvée à proximité du km ${Math.round(km)}, même en élargissant la recherche.` };
     let candidates = recherche.bornes.filter((b) => borneCompatible(b, connecteursAcceptes));
     if (puissanceMinKw > 0) candidates = candidates.filter((b) => (b.puissance_max_kw || 0) >= puissanceMinKw);
+    // Bornes signalées en panne par l'utilisateur : ni arrêt, ni plan B.
+    if (options.estExclue) candidates = candidates.filter((b) => !options.estExclue(b));
     if (!candidates.length) return { erreur: `Aucune borne compatible (connecteur/puissance) trouvée à proximité du km ${Math.round(km)}.` };
     if (options.enrichirBornes) await options.enrichirBornes(candidates);
     for (const b of candidates) b._score_info = calculerScoreBorne(b, profil, mode, !!options.preferCb);

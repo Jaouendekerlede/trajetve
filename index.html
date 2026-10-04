@@ -49,11 +49,13 @@
   <div class="ev-chips" id="ev-filtres">
     <button class="ev-chip" type="button" data-filtre="rapide">⚡ Rapide</button>
     <button class="ev-chip" type="button" data-filtre="cb">💳 Carte bancaire</button>
+    <button class="ev-chip" type="button" data-filtre="payable" title="Bornes où tes moyens de paiement passent (Menu › Payer aux bornes)">✅ Je peux payer</button>
     <button class="ev-chip" type="button" data-filtre="compatible">🔌 Mes prises</button>
     <button class="ev-chip" type="button" data-filtre="h24">🕐 24h/24</button>
     <button class="ev-chip" type="button" data-filtre="gratuit">🎁 Gratuit</button>
     <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
     <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
+    <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
   <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
@@ -135,7 +137,7 @@
             <button type="button" class="ev-chip hidden" id="ev-suggestion-trajet"></button>
           </div>
           <div class="ev-chips hidden" id="ev-points-passage-liste"></div>
-          <p class="ev-hint">💡 Pour passer par une ville, écris-la dans « Via ». Un appui long sur la carte ajoute aussi une étape.</p>
+          <p class="ev-hint">💡 Pour passer par une ville, écris-la dans « Via ». Un appui long sur la carte ajoute aussi une étape. La flèche ⬆ fait passer une étape avant la précédente.</p>
         </div>
         <button id="ev-inverser-btn" class="ev-mini-btn ev-inverser" type="button" title="Inverser départ et destination">⇅</button>
       </div>
@@ -222,6 +224,10 @@
       <button id="ev-nav-demarrer-btn" class="ev-btn-principal ev-btn-go" type="button">▶ Démarrer la navigation</button>
       <button id="ev-nav-demo-btn" class="ev-lien ev-lien-centre" type="button">🎬 Essayer en mode démo (trajet simulé)</button>
       <div id="ev-cout-alerte" class="ev-alerte hidden"></div>
+      <div class="ev-carte-bloc">
+        <button id="ev-vitesse-btn" class="ev-btn" type="button">🐢 Et si je roulais à 110 km/h maximum ?</button>
+        <div id="ev-vitesse-resultat" class="ev-hint hidden"></div>
+      </div>
 
       <div id="ev-etapes" class="ev-etapes"></div>
 
@@ -424,6 +430,8 @@
             </select>
           </label>
           <div id="ev-calc-result" class="ev-resultat-calc"></div>
+          <button id="ev-calc-minuteur-btn" class="ev-btn" type="button">🔔 Me prévenir à la fin de cette recharge</button>
+          <div id="ev-calc-minuteur" class="ev-hint hidden"></div>
         </div>
       </div>
 
@@ -648,6 +656,11 @@
         <h3>💳 Payer aux bornes</h3>
         <div class="ev-hint">Pas besoin de tout avoir. Pour partir tranquille : <strong>ta carte bancaire sans contact</strong>, <strong>un badge multi-réseaux</strong> pour les bornes qui ne prennent pas la carte, et l'appli du réseau que tu utilises le plus.</div>
         <details class="ev-sous-menu" open>
+          <summary>Mes moyens de paiement</summary>
+          <div class="ev-hint">Coche ce que tu as. La fiche de chaque borne te dit alors si tu peux y payer, et le filtre « ✅ Je peux payer » de la carte ne garde que ces bornes.</div>
+          <div id="ev-moyens-paiement" class="ev-colonne"></div>
+        </details>
+        <details class="ev-sous-menu">
           <summary>Les façons de payer</summary>
           <ul class="ev-aide-liste">
             <li><strong>💳 Carte bancaire sans contact</strong> : le plus simple, comme à la pompe. Obligatoire sur les bornes rapides (50 kW et plus) installées depuis avril 2024. Les bornes plus anciennes et les bornes lentes n'en ont pas toujours.</li>
@@ -704,6 +717,8 @@
           <ul class="ev-aide-liste">
             <li>Sur la carte, la pastille <strong>CB</strong> sur une borne indique qu'elle accepte la carte bancaire.</li>
             <li>Le filtre <strong>💳 Carte bancaire</strong>, en haut de la carte, ne montre que ces bornes.</li>
+            <li>Le filtre <strong>✅ Je peux payer</strong> ne garde que les bornes où tes moyens de paiement (cochés ci-dessus) passent.</li>
+            <li>Sur la fiche d'une borne, <strong>« Signaler cette borne en panne »</strong> l'écarte de tes trajets pendant trois jours.</li>
             <li>Dans Trajet › Options avancées, <strong>« Privilégier les bornes qui acceptent la carte bancaire »</strong> choisit ces bornes pour tes arrêts.</li>
             <li>Si tu as un abonnement, indique ton prix dans <strong>Menu › Abonnements de recharge</strong> : le coût du trajet en tient compte.</li>
           </ul>
@@ -771,7 +786,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 91 : calculateur de recharge à curseurs (batterie actuelle, niveau visé, énergie), suppression des derniers trajets dans les statistiques</div>
+      <div class="ev-hint ev-lien-centre">Version 92 : prix des péages estimé, moyens de paiement, borne en panne, cercle d'autonomie, simulation à 110 km/h, minuteur de recharge, ordre des étapes</div>
     </div>
   </div>
 </section>
