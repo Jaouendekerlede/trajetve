@@ -110,7 +110,10 @@ const URL_ETATS = "https://www.data.gouv.fr/api/1/datasets/r/89185b1f-f958-4c5b-
 const CACHE_ETATS = "trajetve-etats-irve";
 const DUREE_ETATS_MS = 6 * 3600 * 1000;
 const OCCUPATION_RECENTE_MS = 3600 * 1000;
+// Un signalement « hors service » plus vieux que cela est sans doute périmé.
+const SIGNALEMENT_ANCIEN_MS = 30 * 86400 * 1000;
 let etatsPdc = null;
+let etatsCharges = 0;
 let chargementEtats = null;
 
 function lireEtatsCsv(texte) {
@@ -130,18 +133,25 @@ function lireEtatsCsv(texte) {
 }
 
 export function chargerEtatsDynamiques() {
-  if (etatsPdc) return Promise.resolve(etatsPdc);
+  // En mémoire aussi, les états expirent (appli laissée ouverte des heures).
+  if (etatsPdc && Date.now() - etatsCharges < DUREE_ETATS_MS) return Promise.resolve(etatsPdc);
+  if (etatsPdc) {
+    etatsPdc = null;
+    chargementEtats = null;
+  }
   chargementEtats ??= (async () => {
     try {
       const cache = typeof caches !== "undefined" ? await caches.open(CACHE_ETATS) : null;
       const garde = await cache?.match("etats.json");
       if (garde && Date.now() - Number(garde.headers.get("x-date")) < DUREE_ETATS_MS) {
         etatsPdc = await garde.json();
+        etatsCharges = Number(garde.headers.get("x-date"));
         return etatsPdc;
       }
       const resp = await fetch(URL_ETATS);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       etatsPdc = lireEtatsCsv(await resp.text());
+      etatsCharges = Date.now();
       await cache?.put("etats.json", new Response(JSON.stringify(etatsPdc), { headers: { "content-type": "application/json", "x-date": String(Date.now()) } }));
       return etatsPdc;
     } catch (e) {
@@ -162,6 +172,7 @@ export function etatStation(officiel) {
   let libres = 0;
   let occupes = 0;
   let dateSignalement = 0;
+  let dateOccupation = 0;
   const limite = Date.now() - OCCUPATION_RECENTE_MS;
   for (const id of ids) {
     const e = etatsPdc[id];
@@ -172,10 +183,22 @@ export function etatStation(officiel) {
     } else if (e.e === "en_service" && e.t > limite) {
       if (e.o === "libre") libres++;
       else if (e.o === "occupe" || e.o === "reserve") occupes++;
+      if (e.o === "libre" || e.o === "occupe" || e.o === "reserve") dateOccupation = Math.max(dateOccupation, e.t);
     }
   }
   if (!horsService && !libres && !occupes) return null;
-  return { total: ids.length, hors_service: horsService, tous_hors_service: horsService === ids.length, libres, occupes, date_signalement: dateSignalement || null };
+  return {
+    total: ids.length,
+    hors_service: horsService,
+    tous_hors_service: horsService === ids.length,
+    libres,
+    occupes,
+    date_signalement: dateSignalement || null,
+    // Panne déclarée il y a longtemps : l'information elle-même est douteuse.
+    signalement_ancien: !!dateSignalement && Date.now() - dateSignalement > SIGNALEMENT_ANCIEN_MS,
+    // Heure de la dernière occupation connue (toujours de moins d'une heure).
+    date_occupation: dateOccupation || null,
+  };
 }
 
 function ressemblance(a, b) {

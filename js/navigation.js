@@ -24,7 +24,7 @@ import { qualiteMesure, recaler, evaluerHorsRoute, estimerProgression } from "./
 import { creerSujet, lienSuivi, messagePosition, publier, INTERVALLE_PARTAGE_MS } from "./partage-position.js";
 import { enregistrerReprise, oublierReprise, lireReprise } from "./reprise.js";
 import { noter } from "./journal-erreurs.js";
-import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitiale, capEntre, fleche, svgFleche, construireRoute, traceRestante, FLECHES_VOIE, dessinVoies } from "./nav-outils.js";
+import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitiale, capEntre, incertitudeBatterie, fleche, svgFleche, construireRoute, traceRestante, FLECHES_VOIE, dessinVoies } from "./nav-outils.js";
 // Réexportés pour les autres modules (ui.js, essais).
 export { traceRestante, dessinVoies } from "./nav-outils.js";
 
@@ -481,7 +481,7 @@ function majEcran() {
     const reste = Math.max(0, offsetBorne - etat.offset);
     const pctBorne = pctMaintenant - (reste / 1000) * (etat.consoKwhKm / etat.capacite) * 100;
     const heureBorne = Date.now() + secondesRestantesJusqua(offsetBorne) * 1000;
-    $("ev-nav-borne").innerHTML = `${arret.pause ? "📍" : "🔋"} <strong>${escapeHtml(arret.nom_borne)}</strong> · ${distanceAffichee(reste)} · ${heure(heureBorne)} · ~${Math.round(pctBorne)} %`;
+    $("ev-nav-borne").innerHTML = `${arret.pause ? "📍" : "🔋"} <strong>${escapeHtml(arret.nom_borne)}</strong> · ${distanceAffichee(reste)} · ${heure(heureBorne)} · ~${Math.round(pctBorne)} %${incertitudeBatterie(etat.batterie.refPct - pctBorne) >= 3 ? ` (±${incertitudeBatterie(etat.batterie.refPct - pctBorne)})` : ""}`;
     $("ev-nav-borne").classList.remove("hidden");
     // Alerte seulement si les deux estimations (linéaire, et plan corrigé de
     // l'écart réel) sont sous le seuil, plusieurs fois de suite ; effacée dès
@@ -2117,7 +2117,9 @@ function majGraphiqueBatterie() {
   $("ev-nav-batt-table").innerHTML = tableauBatterie(prevus, reels);
   const kmNow = etat.odometre / 1000;
   const ecart = Math.round(batterieEstimee() - pctPrevuA(prevus, kmNow));
-  $("ev-nav-batt-info").textContent = `Maintenant : ~${Math.round(batterieEstimee())} % (prévu ${Math.round(pctPrevuA(prevus, kmNow))} %, ${ecart >= 0 ? "+" : ""}${ecart})`;
+  $("ev-nav-batt-info").textContent =
+    `Maintenant : ~${Math.round(batterieEstimee())} % (prévu ${Math.round(pctPrevuA(prevus, kmNow))} %, ${ecart >= 0 ? "+" : ""}${ecart}). ` +
+    `Estimation à ±${incertitudeBatterie(etat.batterie.refPct - batterieEstimee())} % : l'appli ne lit pas la voiture, corrige le niveau ci-dessous quand tu peux.`;
 }
 
 function toucherGraphique(e) {

@@ -59,3 +59,12 @@ test("présentation : pas devant une navigation, un raccourci ou un lien de rest
   assert.ok(MENTION_COURTE.includes("Jean-Luc RIO") && MENTION_COURTE.includes("Tous droits réservés"));
   assert.ok(MENTION_LEGALE.includes("L.122-4"));
 });
+
+test("batterie estimée : l'incertitude grandit avec l'énergie consommée", async () => {
+  const { incertitudeBatterie } = await import("../js/nav-outils.js");
+  assert.equal(incertitudeBatterie(0), 1);
+  assert.equal(incertitudeBatterie(20), 4);
+  assert.equal(incertitudeBatterie(60), 10);
+  assert.equal(incertitudeBatterie(-5), 1, "juste après un recalage");
+  assert.equal(incertitudeBatterie(undefined), 1);
+});

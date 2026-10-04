@@ -45,6 +45,17 @@ export function minusculeInitiale(texte) {
   return texte ? texte.charAt(0).toLowerCase() + texte.slice(1) : "";
 }
 
+// Incertitude (en points de %) de la batterie estimée, après avoir consommé
+// `pctConsomme` points depuis le dernier niveau donné par l'utilisateur.
+// L'appli ne lit pas la batterie de la voiture : elle déduit le niveau de la
+// consommation prévue, dont l'erreur s'accumule avec la distance. 15 % de
+// l'énergie consommée est un ordre de grandeur (vent, chauffage, style de
+// conduite), pas une mesure : à resserrer avec les écarts constatés aux bornes.
+const PART_ERREUR_CONSOMMATION = 0.15;
+export function incertitudeBatterie(pctConsomme) {
+  return Math.round(1 + PART_ERREUR_CONSOMMATION * Math.max(0, pctConsomme || 0));
+}
+
 export function capEntre(lat1, lon1, lat2, lon2) {
   const r = Math.PI / 180;
   const y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r);

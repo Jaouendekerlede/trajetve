@@ -124,10 +124,38 @@ export async function preparerHorsLigne(plan, onProgres) {
   const { annexes, adresse } = await ressourcesCarte();
   const tuiles = tuilesDuTrace(plan.coords).map(adresse);
   const total = annexes.length + tuiles.length;
-  await telecharger(annexes, onProgres, 0, total);
+  const annexesOk = await telecharger(annexes, onProgres, 0, total);
   const tuilesOk = await telecharger(tuiles, onProgres, annexes.length, total);
   const guidage = await preparerGuidage(plan).catch(() => false);
-  return { tuiles: tuilesOk, tuilesTotal: tuiles.length, guidage };
+  return { tuiles: tuilesOk, tuilesTotal: tuiles.length, annexes: annexesOk, annexesTotal: annexes.length, guidage };
+}
+
+// Ce que la préparation a réellement obtenu, et ce que l'appli saura faire
+// ou non sans réseau. Rien n'est annoncé « prêt » sans avoir été téléchargé.
+//   r : résultat de preparerHorsLigne.
+// Renvoie { complet, titre, lignes }.
+const PART_CARTE_SUFFISANTE = 0.97;
+export function bilanPreparation(r) {
+  const carteOk = r.tuilesTotal > 0 && r.tuiles / r.tuilesTotal >= PART_CARTE_SUFFISANTE && r.annexes === r.annexesTotal;
+  const complet = carteOk && !!r.guidage;
+  const lignes = [];
+  lignes.push(
+    carteOk
+      ? "✅ Carte 3D le long du trajet : téléchargée."
+      : `⚠️ Carte 3D incomplète : ${r.tuiles} morceaux sur ${r.tuilesTotal}${r.annexes === r.annexesTotal ? "" : ", et il manque des éléments du moteur de carte (icônes, polices)"}. Des zones pourront rester vides.`,
+  );
+  lignes.push(r.guidage ? "✅ Guidage (itinéraire, consignes vocales, bornes prévues) : enregistré." : "⚠️ Guidage non enregistré : sans réseau, la navigation ne pourra pas démarrer.");
+  lignes.push(
+    "",
+    "Sans réseau, tu n'auras PAS :",
+    "• de nouvel itinéraire si tu quittes la route prévue ou changes de borne ;",
+    "• le trafic, les travaux, la météo ;",
+    "• l'état des bornes (libre, occupée, en panne) ni la recherche de bornes ;",
+    "• la carte à plat (2D) ni la recherche d'adresses.",
+    "",
+    "Le guidage enregistré vaut pour cette destination et ces bornes : relance la préparation si tu modifies le trajet.",
+  );
+  return { complet, titre: complet ? "✅ Trajet prêt pour rouler sans réseau" : "⚠️ Préparation hors ligne incomplète", lignes };
 }
 
 // ── Carte de la région (autour de la maison) ────────────────────────────────

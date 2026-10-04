@@ -56,6 +56,9 @@ test("état des bornes : points hors service et occupation récente", async () =
   const mixte = etatStation({ ids_pdc: ["FR1", "FR3", "FR4"] });
   assert.equal(mixte.tous_hors_service, false);
   assert.equal(mixte.libres, 1, "FR4 : occupation trop ancienne, ignorée");
+  assert.ok(Date.now() - mixte.date_occupation < 5 * 60000, "heure de l'occupation connue, récente");
+  assert.equal(panne.date_occupation, null, "hors service : pas d'occupation à dater");
+  assert.equal(typeof panne.signalement_ancien, "boolean");
   assert.equal(etatStation({ ids_pdc: ["FR4"] }), null, "rien de récent ni de hors service");
 });
 

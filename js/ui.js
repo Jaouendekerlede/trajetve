@@ -40,7 +40,7 @@ import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve
 import { demarrerNavigation, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
 import { ageTexte } from "./reprise.js";
 import { cablerDiagnostic } from "./ui-diagnostic.js";
-import { estimerPreparation, preparerHorsLigne, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
+import { estimerPreparation, preparerHorsLigne, bilanPreparation, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
 
 const VUES = ["bornes", "borne", "trajet", "resultat", "menu", "favoris", "outils", "profil"];
 const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", menu: "haut", favoris: "haut", outils: "haut", profil: "haut" };
@@ -410,11 +410,16 @@ function coutHtml(coutEstime, prixKwh, estimation) {
 // ou, si l'information a moins d'une heure, points libres.
 function pastilleEtat(etat) {
   if (!etat) return "";
-  const date = etat.date_signalement ? ` (${new Date(etat.date_signalement).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })})` : "";
-  if (etat.tous_hors_service) return `<span class="ev-cb-pill non">🔴 Hors service${date}</span>`;
+  // Chaque état porte son âge : une information ancienne n'est pas présentée comme actuelle.
+  const date = etat.date_signalement
+    ? ` (signalé le ${new Date(etat.date_signalement).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}${etat.signalement_ancien ? ", ancien : à vérifier" : ""})`
+    : "";
+  const minutes = etat.date_occupation ? Math.max(0, Math.round((Date.now() - etat.date_occupation) / 60000)) : null;
+  const age = minutes === null ? "< 1 h" : minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
+  if (etat.tous_hors_service) return `<span class="ev-cb-pill ${etat.signalement_ancien ? "warn" : "non"}">🔴 Hors service${date}</span>`;
   if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>`;
-  if (etat.libres) return `<span class="ev-cb-pill ok">🟢 ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (< 1 h)</span>`;
-  if (etat.occupes) return `<span class="ev-cb-pill warn">🟠 Occupée (< 1 h)</span>`;
+  if (etat.libres) return `<span class="ev-cb-pill ok">🟢 ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>`;
+  if (etat.occupes) return `<span class="ev-cb-pill warn">🟠 Occupée (${age})</span>`;
   return "";
 }
 
@@ -851,7 +856,7 @@ function ficheBorneHtml(b, ctx) {
       </div>
     </div>
     <div class="ev-badges">
-      ${pastilleEtat(b.etat_dynamique)}
+      ${pastilleEtat(b.etat_dynamique) || (o ? `<span class="ev-cb-pill neutre">⚪ Occupation en temps réel inconnue</span>` : "")}
       <span class="ev-cb-pill ${cb.classe}">${cb.court}</span>
       ${points ? `<span class="ev-cb-pill neutre">🔌 ${escapeHtml(points)} point${points > 1 ? "s" : ""}</span>` : ""}
       ${o?.horaires ? `<span class="ev-cb-pill neutre">🕐 ${escapeHtml(o.horaires)}</span>` : ""}
@@ -1747,7 +1752,9 @@ async function preparerTrajetHorsLigne() {
     const r = await preparerHorsLigne(dernierTrajet, (fait, total) => {
       if (fait % 25 === 0 || fait === total) toast(`📥 Préparation hors ligne : ${Math.round((fait / total) * 100)} %`);
     });
-    toast(`✅ Prêt hors ligne : ${r.tuiles}/${r.tuilesTotal} morceaux de carte${r.guidage ? " + guidage" : " (guidage indisponible)"}. Utilise la vue 3D sans réseau.`);
+    const bilan = bilanPreparation(r);
+    toast(bilan.titre);
+    alert(`${bilan.titre}\n\n${bilan.lignes.join("\n")}`);
   } catch (e) {
     toast(`⚠️ Préparation impossible : ${e.message}`);
   } finally {
