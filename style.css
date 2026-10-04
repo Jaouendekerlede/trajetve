@@ -1094,3 +1094,6 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 .ev-retour-menu { flex-shrink: 0; padding: 8px 12px 8px 0; font-size: 15px; }
 .ev-vue-entete:has(.ev-retour-menu:not(.hidden)) { justify-content: flex-start; }
 button.ev-bandeau { width: 100%; border: none; font-family: inherit; text-align: left; cursor: pointer; }
+
+/* Clés API masquées par des points sans être des champs « mot de passe ». */
+.ev-cle-masquee { -webkit-text-security: disc; }

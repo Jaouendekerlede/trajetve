@@ -2481,9 +2481,11 @@ function cablerProfil() {
   $("ev-tester-tomtom-btn").addEventListener("click", () => testerCleTomTom($("ev-cle-tomtom").value.trim() || getApiKeys().tomtom));
   for (const id of ["ev-cle-tomtom", "ev-cle-ocm"]) {
     $(`${id}-voir`).addEventListener("click", () => {
-      const champ = $(id);
-      champ.type = champ.type === "password" ? "text" : "password";
-      $(`${id}-voir`).textContent = champ.type === "password" ? "👁️" : "🙈";
+      // Masquage par le style, pas par un champ « mot de passe » : sinon le
+      // téléphone prend la destination pour un identifiant et propose
+      // d'enregistrer un mot de passe Google à chaque calcul de trajet.
+      const masquee = $(id).classList.toggle("ev-cle-masquee");
+      $(`${id}-voir`).textContent = masquee ? "👁️" : "🙈";
     });
   }
   // « Enregistrer » est loin en bas : dès qu'un réglage placé avant lui est
