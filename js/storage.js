@@ -499,6 +499,22 @@ export function ajouterTrace(trace) {
   }
 }
 
+// Retire un tracé et le trajet fait enregistré au même moment (c'est lui qui
+// compte dans les statistiques). Renvoie false si le tracé n'existe plus.
+export function supprimerTrace(date) {
+  const traces = listerTraces();
+  const trace = traces.find((t) => t.date === date);
+  if (!trace) return false;
+  ecrireJson(CLE_TRACES, traces.filter((t) => t !== trace));
+  const faits = listerTrajetsFaits();
+  const i = faits.findIndex((f) => Math.abs(f.date - date) < 5000 && f.km === trace.km);
+  if (i >= 0) {
+    faits.splice(i, 1);
+    ecrireJson(CLE_TRAJETS_FAITS, faits);
+  }
+  return true;
+}
+
 // Trajets fréquents : destination souvent prise à cette heure-ci (±1 h),
 // d'après les trajets faits. Renvoie le nom, ou null.
 export function destinationHabituelle(maintenant = new Date()) {

@@ -178,3 +178,23 @@ test("trajet favori : les étapes « via » sont gardées et distinguent deux fa
   assert.deepEqual(favoris[0].etapes, [{ lat: 47.668, lon: -2.983, nom: "Auray" }]);
   assert.equal(favoris[1].etapes, undefined);
 });
+
+test("derniers trajets : supprimer un tracé retire aussi le trajet des statistiques", () => {
+  const realNow = Date.now;
+  let t = 1_700_000_000_000;
+  Date.now = () => t;
+  try {
+    s.ajouterTrace({ destination: "Rennes", km: 42.5, coords: [[-1.6, 48.1], [-1.7, 48.1]] });
+    s.ajouterTrajetFait({ km: 42.5, kwh: 6, destination: "Rennes" });
+    t += 3_600_000;
+    s.ajouterTrace({ destination: "Vannes", km: 110, coords: [[-2.7, 47.6], [-2.8, 47.6]] });
+    s.ajouterTrajetFait({ km: 110, kwh: 17, destination: "Vannes" });
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal(s.supprimerTrace(1_700_000_000_000), true);
+  assert.deepEqual(s.listerTraces().map((x) => x.destination), ["Vannes"]);
+  assert.deepEqual(s.listerTrajetsFaits().map((x) => x.destination), ["Vannes"]);
+  assert.equal(s.supprimerTrace(1_700_000_000_000), false, "déjà supprimé");
+  assert.equal(s.listerTrajetsFaits().length, 1);
+});

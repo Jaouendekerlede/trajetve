@@ -4,7 +4,7 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
 import { planifierTrajet, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom } from "./tomtom.js";
 
@@ -712,6 +712,15 @@ function cablerCarte() {
     lancerTrajet();
   });
   $("ev-traces-liste").addEventListener("click", (e) => {
+    const aSupprimer = e.target.closest("[data-suppr-trace]")?.dataset.supprTrace;
+    if (aSupprimer !== undefined) {
+      const t = listerTraces().find((x) => String(x.date) === aSupprimer);
+      if (!t || !confirm(`Supprimer le trajet du ${new Date(t.date).toLocaleDateString("fr-FR")} (${nomCourt(t.destination || "Trajet").split(",")[0]}, ${nombre(t.km)} km) ?\n\nIl sera retiré de cette liste et des statistiques.`)) return;
+      supprimerTrace(t.date);
+      rendreTraces();
+      rendreStats();
+      return;
+    }
     const i = e.target.closest("[data-trace]")?.dataset.trace;
     const t = i !== undefined ? listerTraces()[Number(i)] : null;
     if (!t) return;
@@ -2210,20 +2219,43 @@ function cablerOutils() {
     }
   });
 
-  $("ev-calc-run-btn").addEventListener("click", () => {
-    const profil = obtenirProfilVehicule();
-    const types = typesDeCharge(profil);
-    const type = types[$("ev-calc-type-select").value] || types.rapide;
-    const kwh = parseFloat($("ev-calc-kwh-input").value) || 0;
-    // Calculateur : charge supposée partir de 20 % (cas le plus courant).
-    const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw, { pctDebut: 20, profil }));
-    const resultat = $("ev-calc-result");
-    resultat.classList.remove("hidden");
-    resultat.innerHTML =
-      `⏱️ Temps de charge : <strong>${formaterMinutes(minutes)}</strong> (à ${escapeHtml(type.puissance_kw)} kW)` +
-      `<br>🏠 À la maison : <strong>${euros(kwh * profil.prix_hc_eur_kwh)}</strong> en heures creuses, <strong>${euros(kwh * profil.prix_hp_eur_kwh)}</strong> en heures pleines` +
-      `<br>🔌 Sur borne publique (~${euros(0.45)}/kWh) : environ <strong>${euros(kwh * 0.45)}</strong>`;
-  });
+  for (const source of ["debut", "cible", "kwh"]) $(`ev-calc-${source}-input`).addEventListener("input", () => majCalculateur(source));
+  $("ev-calc-type-select").addEventListener("change", () => majCalculateur());
+  majCalculateur();
+}
+
+// Calculateur de recharge : trois curseurs liés (batterie actuelle, niveau
+// visé, énergie à ajouter) et résultat recalculé à chaque mouvement.
+// source : le curseur qui vient de bouger ; les deux autres suivent.
+function majCalculateur(source = "cible") {
+  const profil = obtenirProfilVehicule();
+  const capacite = profil.capacite_kwh || 60;
+  const champ = (nom) => $(`ev-calc-${nom}-input`);
+  champ("kwh").max = String(Math.ceil(capacite * 2) / 2);
+  let debut = Number(champ("debut").value);
+  let cible = Number(champ("cible").value);
+  let kwh;
+  if (source === "kwh") {
+    // L'énergie choisie fixe le niveau visé, sans dépasser 100 %.
+    cible = Math.min(100, Math.round(debut + (Number(champ("kwh").value) / capacite) * 100));
+  } else if (source === "debut" && cible < debut) cible = debut;
+  else if (source === "cible" && cible < debut) debut = cible;
+  if (source !== "kwh" || cible === 100) kwh = Math.round((((cible - debut) / 100) * capacite) * 2) / 2;
+  else kwh = Number(champ("kwh").value);
+  champ("debut").value = String(debut);
+  champ("cible").value = String(cible);
+  champ("kwh").value = String(kwh);
+  $("ev-calc-debut-val").textContent = String(debut);
+  $("ev-calc-cible-val").textContent = String(cible);
+  $("ev-calc-kwh-val").textContent = nombre(kwh, 1);
+
+  const types = typesDeCharge(profil);
+  const type = types[$("ev-calc-type-select").value] || types.rapide;
+  const minutes = Math.round(calculerTempsCharge(kwh, type.puissance_kw, { pctDebut: debut, profil }));
+  $("ev-calc-result").innerHTML =
+    `⏱️ De ${debut} % à ${cible} % : <strong>${formaterMinutes(minutes)}</strong> (à ${escapeHtml(type.puissance_kw)} kW)` +
+    `<br>🏠 À la maison : <strong>${euros(kwh * profil.prix_hc_eur_kwh)}</strong> en heures creuses, <strong>${euros(kwh * profil.prix_hp_eur_kwh)}</strong> en heures pleines` +
+    `<br>🔌 Sur borne publique (~${euros(0.45)}/kWh) : environ <strong>${euros(kwh * 0.45)}</strong>`;
 }
 
 // ── Mode urgence ───────────────────────────────────────────────────────────
@@ -2387,6 +2419,7 @@ function rendreReglagesProfil() {
     const t = types[option.value];
     if (t) option.textContent = `${t.label} — ${t.puissance_kw} kW`;
   }
+  majCalculateur();
 }
 
 // Explique un refus TomTom en clair (les codes seuls ne parlent à personne).
@@ -2616,7 +2649,7 @@ function rendreTraces() {
   const traces = listerTraces();
   $("ev-traces-liste").innerHTML = traces.length
     ? traces
-        .map((t, i) => `<div class="ev-journal-ligne"><span>${new Date(t.date).toLocaleDateString("fr-FR")} · ${escapeHtml(nomCourt(t.destination || "Trajet").split(",")[0])} · ${nombre(t.km)} km</span><button type="button" class="ev-btn" data-trace="${i}">Voir</button></div>`)
+        .map((t, i) => `<div class="ev-journal-ligne"><span>${new Date(t.date).toLocaleDateString("fr-FR")} · ${escapeHtml(nomCourt(t.destination || "Trajet").split(",")[0])} · ${nombre(t.km)} km</span><button type="button" class="ev-btn" data-trace="${i}">Voir</button><button type="button" class="ev-lien" data-suppr-trace="${t.date}" title="Supprimer ce trajet" aria-label="Supprimer ce trajet">✕</button></div>`)
         .join("")
     : `<div class="ev-hint">Les trajets guidés apparaîtront ici.</div>`;
 }
