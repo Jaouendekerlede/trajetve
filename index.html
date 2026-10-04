@@ -301,6 +301,7 @@
       </div>
       <div class="ev-menu-titre">Aide</div>
       <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-paiement"><span class="ev-menu-icone">💳</span><span><span class="ev-menu-nom">Payer aux bornes</span><span class="ev-menu-detail">Carte bancaire, applis, badges, liens des réseaux</span></span></button>
           <button type="button" class="ev-menu-ligne" data-vue="profil" data-bloc="ev-bloc-aide"><span class="ev-menu-icone">❓</span><span><span class="ev-menu-nom">Aide et astuces</span><span class="ev-menu-detail">Mode d'emploi, signaler un problème, version</span></span></button>
       </div>
     </div>
@@ -636,6 +637,73 @@
         <button id="ev-remise-zero-btn" class="ev-btn ev-btn-plein" type="button">🧹 Remettre à zéro</button>
       </div>
 
+      <div class="ev-carte-bloc" id="ev-bloc-paiement">
+        <h3>💳 Payer aux bornes</h3>
+        <div class="ev-hint">Pas besoin de tout avoir. Pour partir tranquille : <strong>ta carte bancaire sans contact</strong>, <strong>un badge multi-réseaux</strong> pour les bornes qui ne prennent pas la carte, et l'appli du réseau que tu utilises le plus.</div>
+        <details class="ev-sous-menu" open>
+          <summary>Les façons de payer</summary>
+          <ul class="ev-aide-liste">
+            <li><strong>💳 Carte bancaire sans contact</strong> : le plus simple, comme à la pompe. Obligatoire sur les bornes rapides (50 kW et plus) installées depuis avril 2024. Les bornes plus anciennes et les bornes lentes n'en ont pas toujours.</li>
+            <li><strong>📱 QR code sur la borne</strong> : tu le scannes avec l'appareil photo, une page de paiement s'ouvre et tu saisis ta carte. Sans compte ni appli, mais il faut du réseau.</li>
+            <li><strong>📲 Appli du réseau</strong> : tu crées un compte une fois, avec ta carte. Tu lances la recharge depuis le téléphone. C'est souvent là que le prix est le plus bas, surtout avec un abonnement.</li>
+            <li><strong>🪪 Badge (carte de recharge)</strong> : une carte en plastique à passer devant la borne. Un seul badge marche sur des dizaines de réseaux. Indispensable sur les bornes de ville et de parking sans lecteur de carte bancaire. Le prix peut être un peu plus élevé qu'en direct.</li>
+            <li><strong>🔌 Brancher et c'est tout</strong> (« Plug &amp; Charge ») : la voiture est reconnue au branchement. Seulement sur certains réseaux et certaines voitures.</li>
+          </ul>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>Les réseaux de recharge rapide</summary>
+          <div class="ev-hint">« Site » ouvre le site du réseau, « Appli » la cherche dans le Play Store.</div>
+          <ul class="ev-aide-liste">
+            <li><strong>Ionity</strong> : aires d'autoroute, bornes très puissantes. <a href="https://www.ionity.eu/fr" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=IONITY&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>TotalEnergies</strong> : stations-service et autoroutes. <a href="https://www.totalenergies.fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=TotalEnergies%20recharge%20%C3%A9lectrique&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Tesla Superchargeur</strong> : une partie des stations est ouverte aux autres marques, avec l'appli Tesla. <a href="https://www.tesla.com/fr_fr/supercharger" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Tesla&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Electra</strong> : villes et grands axes. <a href="https://www.go-electra.com/fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Electra%20recharge&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Fastned</strong> : aires et sorties d'autoroute (toit jaune). <a href="https://www.fastnedcharging.com/fr" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Fastned&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Power Dot</strong> : parkings de commerces et de restaurants. <a href="https://www.powerdot.eu/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Power%20Dot%20recharge&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Lidl</strong> : parkings des magasins. <a href="https://www.lidl.fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Lidl%20Plus&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Engie Vianeo</strong> : aires d'autoroute. <a href="https://www.vianeo.com/fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Engie%20Vianeo&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Allego</strong> : commerces, hôtels, grands axes. <a href="https://www.allego.eu/fr-fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Allego%20Smoov&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Zunder</strong> : grands axes, surtout dans le sud. <a href="https://www.zunder.com/fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Zunder&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Atlante</strong> : grands axes et parkings. <a href="https://atlante.energy/fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Atlante%20recharge&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Izivia (EDF)</strong> : villes, parkings, commerces. <a href="https://izivia.com/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Izivia&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+          </ul>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>Les badges multi-réseaux</summary>
+          <div class="ev-hint">Un seul suffit. Ils se commandent sur le site ou dans l'appli et arrivent par la poste : à prévoir avant un long trajet.</div>
+          <ul class="ev-aide-liste">
+            <li><strong>Chargemap Pass</strong> : badge payant à l'achat, sans abonnement, très répandu. <a href="https://chargemap.com/fr-fr/pass" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Chargemap&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Freshmile</strong> : badge peu cher, sans abonnement. <a href="https://www.freshmile.com/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Freshmile&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Shell Recharge</strong> : badge gratuit, sans abonnement. <a href="https://www.shell.fr/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Shell%20Recharge&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Fulli</strong> : petit abonnement mensuel, sans commission par recharge. <a href="https://www.fulli.com/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Fulli&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Ulys Electric</strong> : le badge de télépéage qui paie aussi la recharge. <a href="https://ulys.com/" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Ulys&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Octopus Electroverse</strong> : badge gratuit, sans abonnement. <a href="https://electroverse.com/fr-FR" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Electroverse&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+            <li><strong>Charge myHyundai</strong> : le badge proposé par Hyundai pour ses voitures. <a href="https://chargemyhyundai.com/web/fr/hyundai-fr" target="_blank" rel="noopener">Site</a> · <a href="https://play.google.com/store/search?q=Charge%20myHyundai&amp;c=apps" target="_blank" rel="noopener">Appli</a></li>
+          </ul>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>Les pièges à connaître</summary>
+          <ul class="ev-aide-liste">
+            <li><strong>Somme bloquée</strong> : en payant par carte bancaire, la borne réserve d'abord quelques dizaines d'euros sur ton compte. Seul le vrai montant est débité, le reste est libéré quelques jours plus tard.</li>
+            <li><strong>Prix au kWh ou à la minute</strong> : le prix est affiché sur la borne ou dans l'appli. À la minute, une recharge lente coûte cher.</li>
+            <li><strong>Frais de stationnement</strong> : certains réseaux font payer chaque minute passée branché après la fin de la recharge. Débranche dès que c'est fini.</li>
+            <li><strong>Même borne, prix différents</strong> : carte bancaire, appli du réseau et badge ne donnent pas le même prix sur une même borne.</li>
+            <li><strong>Pas de réseau mobile</strong> : en sous-sol, QR code et appli ne marchent pas. Le badge et la carte bancaire, si.</li>
+            <li><strong>Facture</strong> : par carte bancaire, pense à demander le reçu sur la borne ou à noter le numéro de la recharge.</li>
+          </ul>
+        </details>
+        <details class="ev-sous-menu">
+          <summary>Dans Trajet VE</summary>
+          <ul class="ev-aide-liste">
+            <li>Sur la carte, la pastille <strong>CB</strong> sur une borne indique qu'elle accepte la carte bancaire.</li>
+            <li>Le filtre <strong>💳 Carte bancaire</strong>, en haut de la carte, ne montre que ces bornes.</li>
+            <li>Dans Trajet › Options avancées, <strong>« Privilégier les bornes qui acceptent la carte bancaire »</strong> choisit ces bornes pour tes arrêts.</li>
+            <li>Si tu as un abonnement, indique ton prix dans <strong>Menu › Abonnements de recharge</strong> : le coût du trajet en tient compte.</li>
+          </ul>
+        </details>
+        <div class="ev-hint">Informations vérifiées en octobre 2026. Les prix et les offres changent souvent : vérifie-les dans l'appli ou sur le site du réseau.</div>
+      </div>
+
       <div class="ev-carte-bloc" id="ev-bloc-aide">
         <h3>❓ Aide et astuces</h3>
         <details class="ev-sous-menu" id="ev-aide">
@@ -696,7 +764,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 89 : étapes « Via » gardées dans les favoris et l'historique, position et destination cherchées en même temps</div>
+      <div class="ev-hint ev-lien-centre">Version 90 : nouveau guide « Payer aux bornes » dans le Menu : carte bancaire, applis, badges et liens des réseaux</div>
     </div>
   </div>
 </section>
