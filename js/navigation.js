@@ -21,6 +21,7 @@ import { calculerItineraireTomTom, appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from 
 import { guidageHorsLigne, preparerGuidage, preparerHorsLigne } from "./hors-ligne.js";
 import { zoomNavigation, vitessePourZoom } from "./zoom-nav.js";
 import { qualiteMesure, recaler, evaluerHorsRoute, estimerProgression } from "./recalage.js";
+import { creerSujet, lienSuivi, messagePosition, publier, INTERVALLE_PARTAGE_MS } from "./partage-position.js";
 import { enregistrerReprise, oublierReprise, lireReprise } from "./reprise.js";
 import { noter } from "./journal-erreurs.js";
 import { heure, distanceAffichee, distanceParlee, messageCourt, minusculeInitiale, capEntre, fleche, svgFleche, construireRoute, traceRestante, FLECHES_VOIE, dessinVoies } from "./nav-outils.js";
@@ -1074,6 +1075,7 @@ function bilanArrivee() {
 function arriveeDestination() {
   if (etat.arrive) return;
   etat.arrive = true;
+  envoyerPositionPartagee("arrive");
   parler(`Vous êtes arrivé à destination. Batterie estimée : ${Math.round(batterieEstimee())} pour cent.`, true);
   // Où la voiture est garée (onglet Carte › 🚗 Ma voiture).
   const finale = etat.destinationFinale;
@@ -2011,6 +2013,7 @@ function actionMenu(action) {
   else if (action === "recherche") $("ev-nav-recherche").classList.remove("hidden");
   else if (action === "parkings") proposerParkings(true);
   else if (action === "partage") partagerArrivee();
+  else if (action === "suivi") basculerPartagePosition();
   else if (action === "sos") ouvrirSOSNavigation(false);
   else if (action === "signaler") {
     signalerProbleme("menu");
@@ -2260,6 +2263,80 @@ function nomCourtLieu(nom) {
 }
 
 // « J'arrive à Nantes vers 18 h 40 » par SMS, WhatsApp… (ou copié).
+// ── Position en direct : un lien de suivi pour un proche ───────────────────
+// Lancé à la demande, pour ce guidage seulement (voir partage-position.js :
+// les positions passent par un service public que l'appli ne contrôle pas).
+
+function majBoutonPartagePosition() {
+  const libelle = $("ev-nav-suivi-btn")?.querySelector("span");
+  if (libelle) libelle.textContent = etat?.partage ? "Arrêter la position en direct" : "Position en direct";
+}
+
+// etatForce : "arrive" ou "termine" pour le dernier message.
+function envoyerPositionPartagee(etatForce = null) {
+  const partage = etat?.partage;
+  if (!partage || !etat.pos) return;
+  const fin = etat.destinationFinale || etat.destination;
+  const sansSignal = etat.signal === "perdu" || etat.signal === "fige";
+  const message = messagePosition({
+    lat: etat.pos.lat,
+    lon: etat.pos.lon,
+    cap: etat.pos.cap,
+    kmh: (etat.pos.vitesse || 0) * 3.6,
+    arrivee_ms: etat.route ? Date.now() + secondesJusquArrivee() * 1000 : null,
+    restant_km: etat.route ? (etat.route.total - etat.offset) / 1000 : null,
+    batterie_pct: batterieEstimee(),
+    destination: nomCourtLieu(fin.nom),
+    etat: etatForce || (etat.arrive ? "arrive" : etat.aLaBorne ? "a_la_borne" : sansSignal ? "signal_perdu" : "en_route"),
+  });
+  publier(partage.sujet, message).then((ok) => {
+    partage.echecs = ok ? 0 : partage.echecs + 1;
+    // Sans réseau, les envois échouent : on le dit une fois, sans insister.
+    if (partage.echecs === 3) toast("📡 Position en direct : envoi impossible pour l'instant (réseau ?)");
+  });
+}
+
+function arreterPartagePosition(parUtilisateur) {
+  if (!etat?.partage) return;
+  clearInterval(etat.partage.minuteur);
+  envoyerPositionPartagee(etat.arrive ? "arrive" : "termine");
+  etat.partage = null;
+  majBoutonPartagePosition();
+  noter("nav", "partage de position arrêté");
+  if (parUtilisateur) toast("📡 Position en direct arrêtée");
+}
+
+async function basculerPartagePosition() {
+  if (etat.partage) return arreterPartagePosition(true);
+  if (etat.demo) return toast("📡 La position en direct ne se partage pas en mode démo.");
+  const accord = confirm(
+    "Partager ta position en direct ?\n\n" +
+      "Elle sera envoyée toutes les 2 minutes, jusqu'à la fin de ce guidage, à un service public gratuit (ntfy.sh) que l'appli ne contrôle pas. " +
+      "Toute personne qui a le lien peut la voir pendant quelques heures.\n\nTu peux arrêter à tout moment depuis ce menu.",
+  );
+  if (!accord) return;
+  const sujet = creerSujet();
+  etat.partage = { sujet, echecs: 0, minuteur: setInterval(() => envoyerPositionPartagee(), INTERVALLE_PARTAGE_MS) };
+  majBoutonPartagePosition();
+  noter("nav", "partage de position lancé");
+  envoyerPositionPartagee();
+  const lien = lienSuivi(sujet);
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: "🚗 Suis mon trajet en direct :", url: lien });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return toast("📡 Position en direct lancée. Le lien n'a pas été envoyé : relance le partage pour l'envoyer.");
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(lien);
+    toast("📋 Lien de suivi copié : colle-le dans un message à ton proche.");
+  } catch {
+    prompt("Lien de suivi à envoyer à ton proche :", lien);
+  }
+}
+
 async function partagerArrivee() {
   if (!etat?.route) return;
   const secondes = secondesJusquArrivee();
@@ -2837,6 +2914,7 @@ export function navigationInterrompue() {
 
 export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat) return;
+  arreterPartagePosition(false);
   noter("nav", `navigation arrêtée à ${Math.round(etat.odometre / 1000)} km`);
   clearInterval(etat.minuteurSauvegarde);
   clearInterval(etat.minuteurRechargeId);
