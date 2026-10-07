@@ -1,6 +1,7 @@
 /* Trajet VE -- appli "carte d'abord" (carte plein écran, panneau
    coulissant, barre de navigation), aux couleurs du panneau Trajet VE de
-   JARVIS : fond nuit, vert électrique #22e5a0, cyan #00e5ff. */
+   JARVIS : fond nuit, couleurs façon Waze : bleu #1a6fe8 comme accent principal (plus de
+   vert/cyan électrique). */
 
 :root {
   --fond: #05080e;
@@ -11,14 +12,14 @@
   --texte-att: rgba(230, 238, 249, 0.66);
   --texte-faible: rgba(230, 238, 249, 0.45);
   --bordure: rgba(255, 255, 255, 0.09);
-  --vert: #22e5a0;
-  --vert-clair: #6ff2c4;
+  --vert: #1a6fe8;
+  --vert-clair: #6fb3ff;
   --cyan: #4fe0ff;
   --violet: #c46bff;
   --orange: #ffcf70;
   --rouge: #ff7a90;
   --jaune: #ffd23f;
-  --vert-vif: #4dffb8;
+  --vert-vif: #4da8ff;
   --violet-texte: #d199ff;
   --meta: #a8f0d8;
   --rouge-texte: #ff9aaa;
@@ -55,14 +56,14 @@
   --texte-att: rgba(16, 24, 38, 0.74);
   --texte-faible: rgba(16, 24, 38, 0.62);
   --bordure: rgba(16, 24, 38, 0.12);
-  --vert: #12c78b;
-  --vert-clair: #067a55;
-  --cyan: #0a7fa3;
+  --vert: #1a6fe8;
+  --vert-clair: #0b4fb3;
+  --cyan: #0a5fb0;
   --violet: #8a2fd1;
   --orange: #a86200;
   --rouge: #c8243f;
   --jaune: #7a5c00;
-  --vert-vif: #067a55;
+  --vert-vif: #0b4fb3;
   --violet-texte: #7b22c2;
   --meta: #0b6b4c;
   --rouge-texte: #b01f38;
@@ -85,9 +86,9 @@
 :root[data-theme="clair"] .ev-barre-recherche,
 :root[data-theme="clair"] .ev-chip { box-shadow: 0 4px 14px rgba(16, 24, 38, 0.18); }
 :root[data-theme="clair"] .ev-barre-recherche { background: #ffffff; }
-:root[data-theme="clair"] .ev-chip.actif { color: #ffffff; background: #0f9d6e; border-color: #0f9d6e; }
-:root[data-theme="clair"] .ev-segments button.active { color: #ffffff; background: #0f9d6e; }
-:root[data-theme="clair"] .ev-btn-principal { color: #ffffff; background: linear-gradient(90deg, #0fa874, #0a8fb3); }
+:root[data-theme="clair"] .ev-chip.actif { color: #ffffff; background: #1a6fe8; border-color: #1a6fe8; }
+:root[data-theme="clair"] .ev-segments button.active { color: #ffffff; background: #1a6fe8; }
+:root[data-theme="clair"] .ev-btn-principal { color: #ffffff; background: linear-gradient(90deg, #1a6fe8, #0b4fb3); }
 :root[data-theme="clair"] .ev-urgence-entete { color: #b01f38; }
 :root[data-theme="clair"] .ev-alerte { color: var(--rouge-texte); }
 :root[data-theme="clair"] .ev-nav-alerte { color: #fff; }
@@ -97,7 +98,7 @@
 .hidden { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--fond);
   color: var(--texte);
   -webkit-text-size-adjust: 100%;
@@ -366,7 +367,7 @@ textarea.ev-input { resize: vertical; }
   padding: 15px;
   border: none;
   border-radius: 14px;
-  background: linear-gradient(90deg, #22e5a0, #00d4f0);
+  background: linear-gradient(90deg, #1a6fe8, #4fe0ff);
   color: #03201a;
   font-size: 16px;
   font-weight: 800;
@@ -398,7 +399,7 @@ textarea.ev-input { resize: vertical; }
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
-  background: linear-gradient(90deg, #22e5a0, #00e5ff, #22e5a0);
+  background: linear-gradient(90deg, #1a6fe8, #4fe0ff, #1a6fe8);
   background-size: 200% auto;
   color: #05130e;
   animation: badgeBrillance 3s linear infinite;
@@ -565,7 +566,7 @@ textarea.ev-input { resize: vertical; }
 .ev-frise-valeur { font-size: 16px; font-weight: 800; color: var(--vert-clair); }
 .ev-frise-piste { position: relative; height: 12px; margin: 16px 8px 4px; border-radius: 999px; background: var(--piste); touch-action: none; cursor: pointer; }
 .ev-frise-piste::before { content: ""; position: absolute; inset: -16px 0; }
-.ev-frise-remplissage { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #22e5a0, #6ff2c4); pointer-events: none; }
+.ev-frise-remplissage { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #1a6fe8, #6fb3ff); pointer-events: none; }
 .ev-frise-arrets { position: absolute; inset: 0; pointer-events: none; }
 .ev-charge-timeline-stop { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; background: var(--bloc); border: 2px solid var(--cyan); display: flex; align-items: center; justify-content: center; font-size: 12px; pointer-events: auto; cursor: pointer; z-index: 2; }
 .ev-frise-curseur { position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); width: 24px; height: 24px; border-radius: 50%; background: var(--cyan); border: 3px solid #fff; box-shadow: 0 0 14px rgba(0, 229, 255, 0.9); pointer-events: none; z-index: 3; }
