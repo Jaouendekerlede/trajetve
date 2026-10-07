@@ -39,7 +39,7 @@ import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-v
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { enrichirBornes, ageEtatsDynamiques, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
-import { demarrerNavigation, etatDiagnostic, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
+import { demarrerNavigation, etatDiagnostic, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue, basculerVoix, majIconeVoixGlobale } from "./navigation.js";
 import { ageTexte } from "./reprise.js";
 import { cablerDiagnostic } from "./ui-diagnostic.js";
 import { estimerPreparation, preparerHorsLigne, guidagePrepare, bilanPreparation, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
@@ -358,6 +358,8 @@ function cablerNavigation() {
   });
   $("ev-cles-manquantes").addEventListener("click", () => ouvrirBloc("ev-bloc-cles"));
   $("ev-filtres-ouvrir-btn").addEventListener("click", () => ouvrirBloc("ev-bloc-recherche"));
+  $("ev-voix-global-btn").addEventListener("click", () => basculerVoix());
+  majIconeVoixGlobale();
   $("ev-recherche-rapide").addEventListener("click", () => {
     afficherVue("trajet");
     setTimeout(() => $("ev-destination-input").focus(), 320);
@@ -2677,6 +2679,7 @@ function cablerProfil() {
     }
     rendreProfil();
     majBandeauCles();
+    majIconeVoixGlobale();
     toast("✅ Profil et réglages enregistrés");
     if (!avaitCleOcm && getApiKeys().openChargeMap) {
       derniereZone = null;
