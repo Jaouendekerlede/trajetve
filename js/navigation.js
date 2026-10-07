@@ -470,9 +470,10 @@ function majEcran() {
   const kmh = Math.round((pos.vitesse || 0) * 3.6);
   const limite = route.limites[etat.idx];
   $("ev-nav-vitesse").innerHTML = `<strong>${kmh}</strong><span>km/h</span>`;
-  $("ev-nav-vitesse").classList.toggle("exces", !!limite && kmh > limite + 3);
-  $("ev-nav-limite").textContent = limite || "";
-  $("ev-nav-limite").classList.toggle("hidden", !limite);
+  const etatVitesse = !limite ? "" : kmh > limite + 3 ? "rouge" : kmh >= limite - 5 ? "orange" : "vert";
+  $("ev-nav-vitesse").dataset.etatVitesse = etatVitesse;
+  $("ev-nav-vitesse").classList.toggle("exces", etatVitesse === "rouge");
+  $("ev-nav-limite").textContent = limite || "–";
   surveillerVitesse(kmh, limite);
   if (document.body.classList.contains("ev-hud")) majHud(kmh, limite);
 

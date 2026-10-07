@@ -354,7 +354,7 @@ function cablerNavigation() {
     const l = e.target.closest(".ev-menu-ligne");
     if (!l) return;
     if (l.dataset.bloc) ouvrirBloc(l.dataset.bloc);
-    else ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
+    else if (l.dataset.vue) ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
   });
   $("ev-cles-manquantes").addEventListener("click", () => ouvrirBloc("ev-bloc-cles"));
   $("ev-recherche-rapide").addEventListener("click", () => {
