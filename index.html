@@ -51,15 +51,7 @@
     </button>
   </div>
   <div class="ev-chips" id="ev-filtres">
-    <button class="ev-chip" type="button" data-filtre="rapide">⚡ Rapide</button>
-    <button class="ev-chip" type="button" data-filtre="cb">💳 Carte bancaire</button>
-    <button class="ev-chip" type="button" data-filtre="payable" title="Bornes où tes moyens de paiement passent (Menu › Payer aux bornes)">✅ Je peux payer</button>
-    <button class="ev-chip" type="button" data-filtre="compatible">🔌 Mes prises</button>
-    <button class="ev-chip" type="button" data-filtre="h24">🕐 24h/24</button>
-    <button class="ev-chip" type="button" data-filtre="gratuit">🎁 Gratuit</button>
-    <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
-    <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
-    <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
+    <button class="ev-chip" type="button" id="ev-filtres-ouvrir-btn" title="Filtrer les bornes affichées sur la carte">🔍 Filtrer les bornes</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
   <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
@@ -413,6 +405,21 @@
           <label class="ev-check"><input type="checkbox" id="ev-recherche-cb-checkbox"> 💳 Uniquement celles qui acceptent la carte bancaire</label>
           <button id="ev-recherche-run-btn" class="ev-btn-principal" type="button">Afficher sur la carte</button>
           <div id="ev-recherche-etat" class="ev-hint"></div>
+        </div>
+        <div class="ev-champ-titre" style="margin-top:16px"><strong>Filtres rapides (s'appliquent tout de suite sur la carte)</strong></div>
+        <div class="ev-chips">
+          <button class="ev-chip" type="button" data-filtre="rapide">⚡ Rapide</button>
+          <button class="ev-chip" type="button" data-filtre="cb">💳 Carte bancaire</button>
+          <button class="ev-chip" type="button" data-filtre="payable" title="Bornes où tes moyens de paiement passent (Menu › Payer aux bornes)">✅ Je peux payer</button>
+          <button class="ev-chip" type="button" data-filtre="compatible">🔌 Mes prises</button>
+          <button class="ev-chip" type="button" data-filtre="h24">🕐 24h/24</button>
+          <button class="ev-chip" type="button" data-filtre="gratuit">🎁 Gratuit</button>
+        </div>
+        <div class="ev-champ-titre" style="margin-top:16px"><strong>Affichage sur la carte</strong></div>
+        <div class="ev-chips">
+          <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
+          <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
+          <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
         </div>
       </div>
 
@@ -814,7 +821,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 101 : petite voiture animée sur la présentation d'ouverture, zoom de démarrage comme GPS</div>
+      <div class="ev-hint ev-lien-centre">Version 102 : carte dégagée (filtres déplacés dans Rechercher des bornes)</div>
     </div>
   </div>
 </section>

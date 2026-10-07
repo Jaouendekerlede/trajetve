@@ -357,6 +357,7 @@ function cablerNavigation() {
     else if (l.dataset.vue) ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
   });
   $("ev-cles-manquantes").addEventListener("click", () => ouvrirBloc("ev-bloc-cles"));
+  $("ev-filtres-ouvrir-btn").addEventListener("click", () => ouvrirBloc("ev-bloc-recherche"));
   $("ev-recherche-rapide").addEventListener("click", () => {
     afficherVue("trajet");
     setTimeout(() => $("ev-destination-input").focus(), 320);
@@ -769,6 +770,12 @@ function cablerCarte() {
     lancerTrajet();
   });
 
+  function majBoutonFiltres() {
+    const n = filtres.size;
+    $("ev-filtres-ouvrir-btn").textContent = n ? `🔍 Filtrer les bornes (${n})` : "🔍 Filtrer les bornes";
+    $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
+  }
+  majBoutonFiltres();
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
     chip.addEventListener("click", () => {
@@ -777,6 +784,7 @@ function cablerCarte() {
       else filtres.add(f);
       chip.classList.toggle("actif", filtres.has(f));
       sauverReglages({ filtres_carte: [...filtres] });
+      majBoutonFiltres();
       renderBornes();
       if (vueCourante !== "bornes" && vueCourante !== "resultat") afficherVue("bornes", { etat: "mi", historique: false });
     });
