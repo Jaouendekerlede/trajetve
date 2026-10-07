@@ -594,7 +594,7 @@ function fondParDefaut() {
 
 function appliquerTheme() {
   const reglages = lireReglages();
-  const choix = reglages.theme || "sombre";
+  const choix = reglages.theme || "clair";
   const theme = themeResolu(choix);
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.contraste = reglages.contraste_fort ? "fort" : "normal";
