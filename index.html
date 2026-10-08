@@ -60,6 +60,10 @@
 <!-- Boutons flottants sur la carte -->
 <div class="ev-fabs">
   <button id="ev-urgence-btn" class="ev-fab ev-fab-urgence" type="button" title="Mode urgence : bornes les plus proches"><span class="ev-fab-sos">SOS</span></button>
+  <!-- Couper/remettre la voix : au-dessus des icônes de carte, comme Waze.
+       Accessible aussi pendant le guidage (ev-nav-voix-btn, même réglage) --
+       demande explicite de l'utilisateur. -->
+  <button id="ev-voix-global-btn" class="ev-fab" type="button" title="Couper / remettre la voix"></button>
   <button id="ev-fond-btn" class="ev-fab" type="button" title="Changer le fond de carte"></button>
   <button id="ev-carte3d-btn" class="ev-fab ev-fab-texte" type="button" title="Carte en 3D / 2D">3D</button>
   <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser" data-icone="localiser"></button>
@@ -821,7 +825,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 103 : bouton son accessible sur tous les écrans</div>
+      <div class="ev-hint ev-lien-centre">Version 104 : bouton son repositionné à droite, au-dessus des icônes (comme Waze)</div>
     </div>
   </div>
 </section>
@@ -831,11 +835,6 @@
   <button type="button" class="ev-nav-btn actif" data-vue="bornes"><span>🗺️</span>Carte</button>
   <button type="button" class="ev-nav-btn" data-vue="trajet"><span>🧭</span>Trajet</button>
   <button type="button" class="ev-nav-btn" data-vue="menu"><span>☰</span>Menu</button>
-  <!-- Couper/remettre la voix : accessible à tout moment, sur tous les
-       écrans (y compris pendant le guidage) -- demande explicite de
-       l'utilisateur. Case à part (pas un onglet d'écran) dans la même
-       barre, toujours visible. -->
-  <button id="ev-voix-global-btn" class="ev-nav-btn ev-nav-voix" type="button" title="Couper / remettre la voix"></button>
 </nav>
 
 <!-- Mode urgence -->
@@ -880,6 +879,7 @@
   </div>
 
   <div class="ev-nav-boutons">
+    <button id="ev-nav-voix-btn" class="ev-fab" type="button" title="Couper / remettre la voix"></button>
     <button id="ev-nav-micro-btn" class="ev-fab" type="button" title="Commande vocale" data-icone="micro"></button>
     <button id="ev-nav-3d-btn" class="ev-fab ev-fab-texte" type="button" title="Vue 3D / 2D">3D</button>
     <button id="ev-nav-barree-btn" class="ev-fab" type="button" title="Route barrée devant : chercher un autre chemin" data-icone="barriere"></button>

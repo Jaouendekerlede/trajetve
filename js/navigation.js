@@ -1754,11 +1754,13 @@ export function basculerVoix(valeurForcee) {
 }
 
 export function majIconeVoixGlobale() {
-  const b = $("ev-voix-global-btn");
-  if (!b) return;
   const actif = voixActivee();
-  b.innerHTML = icone(actif ? "son" : "muet");
-  b.classList.toggle("muet", !actif);
+  for (const id of ["ev-voix-global-btn", "ev-nav-voix-btn"]) {
+    const b = $(id);
+    if (!b) continue;
+    b.innerHTML = icone(actif ? "son" : "muet");
+    b.classList.toggle("muet", !actif);
+  }
 }
 
 // ── Démarrage / arrêt ───────────────────────────────────────────────────────
@@ -1771,6 +1773,7 @@ function cablerBoutons() {
   $("ev-nav-stop-btn").addEventListener("click", () => {
     if (confirm("Arrêter la navigation ?")) arreterNavigation();
   });
+  $("ev-nav-voix-btn").addEventListener("click", () => basculerVoix());
   $("ev-nav-orientation-btn").addEventListener("click", () => {
     etat.sensDeMarche = !etat.sensDeMarche;
     majBoutonOrientation();
