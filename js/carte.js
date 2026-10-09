@@ -772,16 +772,22 @@ export function afficherPosition(lat, lon, precision) {
   c3d.exploPosition(lat, lon);
 }
 
-// Cercle « jusqu'où je peux aller » autour d'un point (rayonKm nul : l'effacer).
+// « Jusqu'où je peux aller » autour d'un point (rayonKm nul : l'effacer).
+// `limites` ([lon, lat][], optionnel) : vrai contour routier (TomTom
+// Reachable Range, respecte les limitations de vitesse réelles) -- sans
+// lui, repli sur un simple cercle à vol d'oiseau (approximation).
 let cercleAutonomie = null;
-export function afficherAutonomie(lat, lon, rayonKm) {
+export function afficherAutonomie(lat, lon, rayonKm, limites = null) {
   if (cercleAutonomie) {
     carte.removeLayer(cercleAutonomie);
     cercleAutonomie = null;
   }
   c3d.exploAutonomie(rayonKm ? { lat, lon, rayonKm } : null);
   if (!rayonKm) return;
-  cercleAutonomie = L.circle([lat, lon], { radius: rayonKm * 1000, color: "#22e5a0", weight: 2.5, dashArray: "8 8", fillColor: "#22e5a0", fillOpacity: 0.06, interactive: false }).addTo(carte);
+  const style = { color: "#22e5a0", weight: 2.5, dashArray: "8 8", fillColor: "#22e5a0", fillOpacity: 0.08, interactive: false };
+  cercleAutonomie = limites?.length
+    ? L.polygon(limites.map(([lo, la]) => [la, lo]), style).addTo(carte)
+    : L.circle([lat, lon], { ...style, radius: rayonKm * 1000 }).addTo(carte);
   if (!explo3D) carte.fitBounds(cercleAutonomie.getBounds(), { padding: [20, 20] });
 }
 

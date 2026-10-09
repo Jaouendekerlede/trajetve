@@ -6,7 +6,7 @@
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
 import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
 import { planifierTrajet, simulerVitesseMax, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
-import { diagnostiquerCleTomTom } from "./tomtom.js";
+import { diagnostiquerCleTomTom, calculerZoneAtteignable } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
 import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage } from "./carte.js";
@@ -2934,6 +2934,23 @@ async function basculerAutonomie() {
   const centre = pos.erreur ? centreVisible() : pos;
   autonomieAffichee = true;
   chip.classList.add("actif");
+
+  // Vrai contour routier (respecte les limitations de vitesse réelles,
+  // comme le calcul détaillé d'un trajet) si une clé TomTom est
+  // disponible ; sinon, repli sur le cercle à vol d'oiseau habituel.
+  const energieKwh = (p.capacite_kwh * (charge - marge)) / 100;
+  const { tomtom } = getApiKeys();
+  if (tomtom) {
+    toast("🔋 Calcul de la zone atteignable (vraies routes et limitations)…");
+    const courbeVitesse = [30, 50, 70, 90, 110, 130].map((v) => [v, conso * facteurVitesse(p, v)]);
+    const zone = await calculerZoneAtteignable(tomtom, centre.lat, centre.lon, energieKwh, p, courbeVitesse);
+    if (zone.ok) {
+      afficherAutonomie(centre.lat, centre.lon, kmRoute * PART_VOL_OISEAU, zone.limites);
+      toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : zone atteignable par la route, limitations de vitesse réelles comprises.`);
+      return;
+    }
+    console.warn("[AUTONOMIE] Zone atteignable TomTom indisponible, repli sur le cercle approximatif :", zone.erreur);
+  }
   afficherAutonomie(centre.lat, centre.lon, kmRoute * PART_VOL_OISEAU);
   toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : environ ${nombre(kmRoute)} km de route${pos.erreur ? ", autour du centre de la carte" : ""}. Niveau de batterie réglable dans Trajet.`);
 }
