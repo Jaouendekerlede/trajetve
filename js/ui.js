@@ -1893,6 +1893,14 @@ function renderProfilTrajet(p) {
   }
   $("ev-profil-stats").innerHTML = stats.join("");
 
+  // Répartition par limitation réelle (80, 110, 130...) -- preuve concrète
+  // et vérifiable que le calcul suit les vraies limitations du trajet,
+  // tronçon par tronçon, et pas une vitesse moyenne unique. Demande
+  // explicite du 2026-10-09 (trajet Saint-Nazaire -> Auray via La Roche-
+  // Bernard : 80 km/h puis 110 km/h).
+  const repartition = s.repartition_vitesses?.length
+    ? ` Vitesses rencontrées : ${s.repartition_vitesses.map((r) => `${r.limite_kmh} km/h sur ${nombre(r.km)} km`).join(", ")}.`
+    : "";
   const notes =
     p.modele === "detaille"
       ? [
@@ -1901,7 +1909,7 @@ function renderProfilTrajet(p) {
           pt.meteo_ok ? "météo à l'heure de passage" : "réglage saisonnier du profil",
         ]
       : ["Consommation constante (mode JARVIS) — coche « Calcul détaillé » dans les options avancées pour tenir compte de la vitesse et du relief"];
-  $("ev-profil-note").textContent = `ℹ️ ${notes.join(", ")}. Estimation : la conduite réelle peut s'en écarter.`;
+  $("ev-profil-note").textContent = `ℹ️ ${notes.join(", ")}. Estimation : la conduite réelle peut s'en écarter.${repartition}`;
   afficherVueCourbe();
 }
 

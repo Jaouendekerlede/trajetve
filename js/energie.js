@@ -73,7 +73,12 @@ function profilVitesse(coords, cumKm, sections, summary) {
 
   const cumSec = [0];
   for (let i = 0; i < n; i++) cumSec.push(cumSec[i] + ((cumKm[i + 1] - cumKm[i]) / Math.max(vitesse[i], 1)) * 3600);
-  return { vitesse, tunnel, cumSec };
+  // `lim` (la limitation réelle, pas la vitesse de croisière simulée) est
+  // renvoyée pour construire la répartition par limitation affichée à
+  // l'utilisateur -- preuve concrète que le calcul suit bien les vraies
+  // limitations du trajet (80 ici, 110 là...), pas une vitesse moyenne
+  // unique. Demande explicite du 2026-10-09.
+  return { vitesse, tunnel, cumSec, lim };
 }
 
 // ── Échantillonnage régulier du tracé ───────────────────────────────────────
@@ -301,7 +306,7 @@ export async function construireProfilEnergie(itin, profil, options) {
   const echelle = itin.distance_km / Math.max(1e-6, cumBrut[cumBrut.length - 1]);
   const cumKm = cumBrut.map((d) => d * echelle);
 
-  const { vitesse, tunnel, cumSec: cumSecLibre } = profilVitesse(coords, cumKm, itin._sections || [], itin._summary || {});
+  const { vitesse, tunnel, cumSec: cumSecLibre, lim } = profilVitesse(coords, cumKm, itin._sections || [], itin._summary || {});
   // Simulation « et si je roulais moins vite ? » : la vitesse est plafonnée,
   // le temps de route s'allonge d'autant (secondes_en_plus).
   let cumSec = cumSecLibre;
@@ -331,9 +336,12 @@ export async function construireProfilEnergie(itin, profil, options) {
   const segments = [];
   const km = [points[0].km];
   const ecum = [0];
+  const kmParLimite = new Map();
   for (let j = 0; j < points.length - 1; j++) {
     const a = points[j];
     const b = points[j + 1];
+    const limiteArrondie = Math.round((lim[a.index] ?? 0) / 10) * 10;
+    if (limiteArrondie > 0) kmParLimite.set(limiteArrondie, (kmParLimite.get(limiteArrondie) || 0) + (b.km - a.km));
     const dKm = b.km - a.km;
     const dureeS = Math.max(1, b.t_s - a.t_s);
     const vKmh = (dKm / dureeS) * 3600;
@@ -407,6 +415,12 @@ export async function construireProfilEnergie(itin, profil, options) {
       temperature_max: temps.length ? Math.max(...temps) : null,
       km_sous_la_pluie: meteoOk ? kmPluie : null,
       vent_face_moyen_kmh: ventFaceMoyen,
+      // Distance parcourue par limitation réelle (80, 110, 130...), triée du
+      // plus rapide au plus lent -- preuve visible que le calcul suit les
+      // vraies limitations du trajet plutôt qu'une vitesse moyenne unique.
+      repartition_vitesses: [...kmParLimite.entries()]
+        .map(([limite_kmh, km]) => ({ limite_kmh, km }))
+        .sort((x, y) => y.limite_kmh - x.limite_kmh),
     },
   };
 }
