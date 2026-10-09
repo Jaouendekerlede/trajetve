@@ -23,7 +23,7 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
-import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement } from "./paiement.js";
+import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
@@ -918,7 +918,12 @@ function ficheBorneHtml(b, ctx) {
   if (prises) html += `<div class="ev-carte-bloc"><h3>🔌 Prises</h3>${prises}${o?.cable_attache === "oui" ? hint("Câble Type 2 attaché à la borne.") : ""}</div>`;
 
   const facilite = facilitePaiement(b, lireMoyens(lireReglages()));
-  let paiement = ligneInfo("Avec tes moyens de paiement", `<strong>${{ sur: "✅", probable: "🟡", incertain: "❓" }[facilite.niveau]} ${escapeHtml(facilite.texte)}</strong>`);
+  const acceptes = moyensAcceptesListe(b);
+  let paiement = ligneInfo(
+    "Cartes/badges acceptés ici",
+    `<ul class="ev-liste-paiement">${acceptes.map((a) => `<li>${a.niveau === "sur" ? "✅" : "🟡"} ${escapeHtml(a.texte)}</li>`).join("")}</ul>`,
+  );
+  paiement += ligneInfo("Avec tes moyens de paiement", `<strong>${{ sur: "✅", probable: "🟡", incertain: "❓" }[facilite.niveau]} ${escapeHtml(facilite.texte)}</strong>`);
   paiement += ligneInfo("Carte bancaire", `<strong class="ev-cb-texte ${cb.classe}">${escapeHtml(cb.long)}</strong>`);
   if (o) {
     paiement += ligneInfo("Sans abonnement (à l'acte)", OUI_NON[o.paiement_acte]);

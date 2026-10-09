@@ -30,6 +30,31 @@ export function reseauDeLaBorne(borne) {
   return RESEAUX_PAIEMENT.find((r) => r.motif.test(texte)) || null;
 }
 
+// Liste objective de ce qui fonctionne généralement ici, SANS tenir compte
+// de ce que l'utilisateur possède (contrairement à facilitePaiement) --
+// répond directement à "quelle carte/appli est acceptée sur cette borne ?"
+// (ex: Ionity, Chargemap, Total...), demande explicite du 2026-10-09.
+// [{ niveau: "sur" | "probable", texte }], jamais vide.
+export function moyensAcceptesListe(borne) {
+  const o = borne.officiel && !borne.officiel.indisponible ? borne.officiel : null;
+  const reseau = reseauDeLaBorne(borne);
+  const lignes = [];
+  if (o?.gratuit === "oui") lignes.push({ niveau: "sur", texte: "Gratuit : aucun moyen de paiement nécessaire." });
+  if (reseau) lignes.push({ niveau: "sur", texte: `Carte ou appli ${reseau.nom} (réseau propre à cette borne).` });
+  if (o?.paiement_cb === "oui") lignes.push({ niveau: "sur", texte: "Carte bancaire sans contact." });
+  else if (o?.paiement_cb === "partiel") lignes.push({ niveau: "probable", texte: "Carte bancaire sur une partie des points seulement." });
+  else if (!o && borne.paiement_cb_probable) lignes.push({ niveau: "probable", texte: "Carte bancaire probable (non confirmé par une source officielle)." });
+  // Les Superchargeurs Tesla ne prennent pas les badges externes.
+  if (reseau?.id !== "tesla") lignes.push({ niveau: "probable", texte: "Badge multi-réseaux (Chargemap Pass, Freshmile, Shell Recharge…)." });
+  if (!lignes.length) {
+    lignes.push({
+      niveau: "probable",
+      texte: reseau ? `Carte/appli ${reseau.nom}, ou badge multi-réseaux -- à vérifier sur place.` : "Non confirmé : prévois l'appli du réseau ou le QR code affiché sur la borne.",
+    });
+  }
+  return lignes;
+}
+
 // { niveau: "sur" | "probable" | "incertain", texte }
 export function facilitePaiement(borne, moyens) {
   const o = borne.officiel && !borne.officiel.indisponible ? borne.officiel : null;

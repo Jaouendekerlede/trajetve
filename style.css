@@ -511,10 +511,11 @@ textarea.ev-input { resize: vertical; }
 .ev-prise strong { font-size: 13.5px; }
 .ev-prise span { font-size: 12px; color: var(--texte-att); }
 .ev-prise .ev-prise-kw { font-size: 17px; font-weight: 800; color: var(--vert-clair); }
-.ev-ligne-info { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--separateur); font-size: 13.5px; }
+.ev-ligne-info { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--separateur); font-size: 13.5px; }
 .ev-ligne-info:last-child { border-bottom: none; }
-.ev-ligne-info .label { color: var(--texte-att); }
+.ev-ligne-info .label { color: var(--texte-att); flex: 0 0 auto; }
 .ev-ligne-info .value { text-align: right; }
+.ev-liste-paiement { list-style: none; margin: 0; padding: 0; text-align: left; display: flex; flex-direction: column; gap: 4px; }
 .ev-cb-texte.ok { color: var(--vert-vif); }
 .ev-cb-texte.warn { color: var(--orange); }
 .ev-cb-texte.non { color: var(--rouge); }
