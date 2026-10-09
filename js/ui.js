@@ -785,7 +785,7 @@ function cablerCarte() {
 
   function majBoutonFiltres() {
     const n = filtres.size;
-    $("ev-filtres-ouvrir-btn").textContent = n ? `🔍 Filtrer les bornes (${n})` : "🔍 Filtrer les bornes";
+    $("ev-filtres-ouvrir-btn").textContent = n ? `📍 Chercher un lieu / filtrer (${n})` : "📍 Chercher un lieu / filtrer";
     $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
   }
   majBoutonFiltres();
