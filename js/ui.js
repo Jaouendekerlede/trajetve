@@ -39,7 +39,7 @@ import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-v
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
 import { enrichirBornes, ageEtatsDynamiques, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
-import { demarrerNavigation, etatDiagnostic, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue } from "./navigation.js";
+import { demarrerNavigation, etatDiagnostic, navigationActive, retourNavigationEnCours, traceRestante, navigationInterrompue, oublierNavigationInterrompue, basculerVoix, majIconeVoixGlobale } from "./navigation.js";
 import { ageTexte } from "./reprise.js";
 import { cablerDiagnostic } from "./ui-diagnostic.js";
 import { estimerPreparation, preparerHorsLigne, guidagePrepare, bilanPreparation, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
@@ -354,9 +354,12 @@ function cablerNavigation() {
     const l = e.target.closest(".ev-menu-ligne");
     if (!l) return;
     if (l.dataset.bloc) ouvrirBloc(l.dataset.bloc);
-    else ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
+    else if (l.dataset.vue) ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
   });
   $("ev-cles-manquantes").addEventListener("click", () => ouvrirBloc("ev-bloc-cles"));
+  $("ev-filtres-ouvrir-btn").addEventListener("click", () => ouvrirBloc("ev-bloc-recherche"));
+  $("ev-voix-global-btn").addEventListener("click", () => basculerVoix());
+  majIconeVoixGlobale();
   $("ev-recherche-rapide").addEventListener("click", () => {
     afficherVue("trajet");
     setTimeout(() => $("ev-destination-input").focus(), 320);
@@ -594,7 +597,7 @@ function fondParDefaut() {
 
 function appliquerTheme() {
   const reglages = lireReglages();
-  const choix = reglages.theme || "sombre";
+  const choix = reglages.theme || "clair";
   const theme = themeResolu(choix);
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.contraste = reglages.contraste_fort ? "fort" : "normal";
@@ -769,6 +772,12 @@ function cablerCarte() {
     lancerTrajet();
   });
 
+  function majBoutonFiltres() {
+    const n = filtres.size;
+    $("ev-filtres-ouvrir-btn").textContent = n ? `🔍 Filtrer les bornes (${n})` : "🔍 Filtrer les bornes";
+    $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
+  }
+  majBoutonFiltres();
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
     chip.addEventListener("click", () => {
@@ -777,6 +786,7 @@ function cablerCarte() {
       else filtres.add(f);
       chip.classList.toggle("actif", filtres.has(f));
       sauverReglages({ filtres_carte: [...filtres] });
+      majBoutonFiltres();
       renderBornes();
       if (vueCourante !== "bornes" && vueCourante !== "resultat") afficherVue("bornes", { etat: "mi", historique: false });
     });
@@ -791,6 +801,9 @@ function cablerCarte() {
   cablerListe($("ev-bornes-liste"), (b) => ouvrirBorne(b));
 }
 
+// Zoom à l'ouverture et sur « Me localiser » : même valeur que GPS (rue par rue).
+const ZOOM_LOCALISATION = 17;
+
 async function localiser() {
   toast("📍 Recherche de ta position…");
   const pos = await resoudreLieu("ma position");
@@ -799,7 +812,7 @@ async function localiser() {
     return false;
   }
   afficherPosition(pos.lat, pos.lon, pos.precision);
-  centrer(pos.lat, pos.lon, Math.max(zoomActuel(), 13.5));
+  centrer(pos.lat, pos.lon, Math.max(zoomActuel(), ZOOM_LOCALISATION));
   toast(Number.isFinite(pos.precision) ? `📍 Position trouvée (précision ±${Math.round(pos.precision)} m).` : "📍 Position trouvée.");
   return true;
 }
@@ -808,14 +821,14 @@ async function positionDeDepart() {
   const pos = await resoudreLieu("ma position");
   if (!pos.erreur) {
     afficherPosition(pos.lat, pos.lon, pos.precision);
-    centrer(pos.lat, pos.lon, 13.5);
+    centrer(pos.lat, pos.lon, ZOOM_LOCALISATION);
     return;
   }
   const domicile = lireReglages().adresse_domicile;
   if (domicile) {
     const lieu = await resoudreLieu("chez moi", domicile);
     if (!lieu.erreur) {
-      centrer(lieu.lat, lieu.lon, 13);
+      centrer(lieu.lat, lieu.lon, ZOOM_LOCALISATION);
       return;
     }
   }
@@ -2671,6 +2684,7 @@ function cablerProfil() {
     }
     rendreProfil();
     majBandeauCles();
+    majIconeVoixGlobale();
     toast("✅ Profil et réglages enregistrés");
     if (!avaitCleOcm && getApiKeys().openChargeMap) {
       derniereZone = null;

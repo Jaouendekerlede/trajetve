@@ -1,6 +1,7 @@
 /* Trajet VE -- appli "carte d'abord" (carte plein écran, panneau
    coulissant, barre de navigation), aux couleurs du panneau Trajet VE de
-   JARVIS : fond nuit, vert électrique #22e5a0, cyan #00e5ff. */
+   JARVIS : fond nuit, couleurs façon Waze : bleu #1a6fe8 comme accent principal (plus de
+   vert/cyan électrique). */
 
 :root {
   --fond: #05080e;
@@ -11,14 +12,14 @@
   --texte-att: rgba(230, 238, 249, 0.66);
   --texte-faible: rgba(230, 238, 249, 0.45);
   --bordure: rgba(255, 255, 255, 0.09);
-  --vert: #22e5a0;
-  --vert-clair: #6ff2c4;
+  --vert: #1a6fe8;
+  --vert-clair: #6fb3ff;
   --cyan: #4fe0ff;
   --violet: #c46bff;
   --orange: #ffcf70;
   --rouge: #ff7a90;
   --jaune: #ffd23f;
-  --vert-vif: #4dffb8;
+  --vert-vif: #4da8ff;
   --violet-texte: #d199ff;
   --meta: #a8f0d8;
   --rouge-texte: #ff9aaa;
@@ -55,14 +56,14 @@
   --texte-att: rgba(16, 24, 38, 0.74);
   --texte-faible: rgba(16, 24, 38, 0.62);
   --bordure: rgba(16, 24, 38, 0.12);
-  --vert: #12c78b;
-  --vert-clair: #067a55;
-  --cyan: #0a7fa3;
+  --vert: #1a6fe8;
+  --vert-clair: #0b4fb3;
+  --cyan: #0a5fb0;
   --violet: #8a2fd1;
   --orange: #a86200;
   --rouge: #c8243f;
   --jaune: #7a5c00;
-  --vert-vif: #067a55;
+  --vert-vif: #0b4fb3;
   --violet-texte: #7b22c2;
   --meta: #0b6b4c;
   --rouge-texte: #b01f38;
@@ -85,9 +86,9 @@
 :root[data-theme="clair"] .ev-barre-recherche,
 :root[data-theme="clair"] .ev-chip { box-shadow: 0 4px 14px rgba(16, 24, 38, 0.18); }
 :root[data-theme="clair"] .ev-barre-recherche { background: #ffffff; }
-:root[data-theme="clair"] .ev-chip.actif { color: #ffffff; background: #0f9d6e; border-color: #0f9d6e; }
-:root[data-theme="clair"] .ev-segments button.active { color: #ffffff; background: #0f9d6e; }
-:root[data-theme="clair"] .ev-btn-principal { color: #ffffff; background: linear-gradient(90deg, #0fa874, #0a8fb3); }
+:root[data-theme="clair"] .ev-chip.actif { color: #ffffff; background: #1a6fe8; border-color: #1a6fe8; }
+:root[data-theme="clair"] .ev-segments button.active { color: #ffffff; background: #1a6fe8; }
+:root[data-theme="clair"] .ev-btn-principal { color: #ffffff; background: linear-gradient(90deg, #1a6fe8, #0b4fb3); }
 :root[data-theme="clair"] .ev-urgence-entete { color: #b01f38; }
 :root[data-theme="clair"] .ev-alerte { color: var(--rouge-texte); }
 :root[data-theme="clair"] .ev-nav-alerte { color: #fff; }
@@ -97,7 +98,7 @@
 .hidden { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--fond);
   color: var(--texte);
   -webkit-text-size-adjust: 100%;
@@ -261,6 +262,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .ev-diagnostic { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; padding: 10px 12px; border-radius: 12px; background: var(--voile); border: 1px solid var(--bordure); }
 .ev-fab-texte { font-size: 15px; font-weight: 900; color: var(--texte); }
 .ev-fab.actif { border-color: var(--vert); color: var(--vert-vif); }
+.ev-fab.muet { border-color: #ef4444; color: #ef4444; }
 /* Étiquette du curseur « où serai-je ? » sur la carte 3D */
 .ev-curseur-3d { position: relative; }
 .ev-curseur-3d-texte { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 8px; border-radius: 8px; background: var(--chip); color: var(--texte); font-size: 12px; font-weight: 700; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
@@ -366,7 +368,7 @@ textarea.ev-input { resize: vertical; }
   padding: 15px;
   border: none;
   border-radius: 14px;
-  background: linear-gradient(90deg, #22e5a0, #00d4f0);
+  background: linear-gradient(90deg, #1a6fe8, #4fe0ff);
   color: #03201a;
   font-size: 16px;
   font-weight: 800;
@@ -398,7 +400,7 @@ textarea.ev-input { resize: vertical; }
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
-  background: linear-gradient(90deg, #22e5a0, #00e5ff, #22e5a0);
+  background: linear-gradient(90deg, #1a6fe8, #4fe0ff, #1a6fe8);
   background-size: 200% auto;
   color: #05130e;
   animation: badgeBrillance 3s linear infinite;
@@ -566,7 +568,7 @@ textarea.ev-input { resize: vertical; }
 .ev-frise-valeur { font-size: 16px; font-weight: 800; color: var(--vert-clair); }
 .ev-frise-piste { position: relative; height: 12px; margin: 16px 8px 4px; border-radius: 999px; background: var(--piste); touch-action: none; cursor: pointer; }
 .ev-frise-piste::before { content: ""; position: absolute; inset: -16px 0; }
-.ev-frise-remplissage { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #22e5a0, #6ff2c4); pointer-events: none; }
+.ev-frise-remplissage { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #1a6fe8, #6fb3ff); pointer-events: none; }
 .ev-frise-arrets { position: absolute; inset: 0; pointer-events: none; }
 .ev-charge-timeline-stop { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; background: var(--bloc); border: 2px solid var(--cyan); display: flex; align-items: center; justify-content: center; font-size: 12px; pointer-events: auto; cursor: pointer; z-index: 2; }
 .ev-frise-curseur { position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); width: 24px; height: 24px; border-radius: 50%; background: var(--cyan); border: 3px solid #fff; box-shadow: 0 0 14px rgba(0, 229, 255, 0.9); pointer-events: none; z-index: 3; }
@@ -663,7 +665,7 @@ body.ev-bandeau-compact .ev-nav-ensuite { order: 1; margin: -10px 0 0 14px; padd
 body.ev-bandeau-compact .ev-nav-alerte { order: 2; padding: 7px 12px; font-size: 13.5px; }
 body.ev-bandeau-compact .ev-nav-danger { order: 3; padding: 4px 10px; font-size: 13.5px; }
 body.ev-bandeau-compact .ev-nav-voies { order: 4; }
-body.ev-bandeau-compact .ev-nav-vue-voies { order: 5; align-self: flex-start; width: 160px; padding: 6px; border-radius: 12px; }
+body.ev-bandeau-compact .ev-nav-vue-voies { order: 5; align-self: flex-start; width: 140px; padding: 6px; border-radius: 12px; }
 body.ev-bandeau-compact .ev-nav-vue-voies-instruction { font-size: 10px; }
 body.ev-bandeau-compact .ev-nav-vue-voies-distance { font-size: 14px; margin-bottom: 0; }
 body.ev-bandeau-compact .ev-nav-borne { order: 6; align-self: flex-start; max-width: 100%; padding: 5px 10px; border-radius: 12px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(20, 28, 40, 0.82); color: #e8eef7; }
@@ -690,6 +692,8 @@ body.ev-bandeau-compact .ev-nav-aires { gap: 4px; }
 .ev-nav-vitesse-bloc { position: absolute; left: 12px; bottom: calc(108px + var(--securite-bas)); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .ev-nav-limite { width: 54px; height: 54px; border-radius: 50%; background: #fff; border: 6px solid #e0162b; color: #111; font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); }
 .ev-nav-vitesse { width: 66px; height: 66px; border-radius: 50%; background: var(--bloc); border: 2px solid var(--bordure-forte); display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55); }
+.ev-nav-vitesse[data-etat-vitesse="vert"] { box-shadow: 0 0 0 4px #22c55e; }
+.ev-nav-vitesse[data-etat-vitesse="orange"] { box-shadow: 0 0 0 4px #f97316; }
 .ev-nav-vitesse strong { font-size: 24px; font-weight: 900; line-height: 1; }
 .ev-nav-vitesse span { font-size: 10px; color: var(--texte-att); }
 .ev-nav-vitesse.exces { background: #b3122a; border-color: #ff5c7a; }
@@ -834,11 +838,11 @@ body.ev-mode-navigation .ev-maj { display: none; }
 /* Zone de danger (radars) : bandeau orange sous la manœuvre. */
 .ev-nav-danger { align-self: flex-start; padding: 8px 14px; border-radius: 12px; background: #e8590c; color: #fff; font-size: 17px; font-weight: 800; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
 /* Fenêtre des voies (comme Sygic), à droite sous le bandeau. */
-.ev-nav-vue-voies { align-self: flex-end; width: 170px; padding: 8px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 16px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
+.ev-nav-vue-voies { align-self: flex-end; width: 140px; padding: 7px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 14px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
 .ev-nav-vue-voies svg { display: block; width: 100%; height: auto; }
 .ev-nav-vue-voies-instruction { color: #fff; font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-align: center; text-transform: uppercase; }
 .ev-nav-vue-voies-distance { color: #fff; font-size: 20px; font-weight: 900; text-align: center; margin: 2px 0; }
-body.ev-mode-voiture .ev-nav-vue-voies { width: 190px; }
+body.ev-mode-voiture .ev-nav-vue-voies { width: 160px; }
 body.ev-mode-voiture .ev-nav-vue-voies-instruction { font-size: 13px; }
 /* Routes coupées à éviter (Trajet > options) et visée sur la carte */
 .ev-zones-evitees { display: flex; flex-direction: column; gap: 6px; }
@@ -1084,13 +1088,21 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 /* ── Menu : rubriques rangées par groupe, une page par rubrique ───────── */
 .ev-menu-titre { margin: 6px 4px -4px; font-size: 12px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: var(--texte-att); }
 .ev-menu-groupe { display: flex; flex-direction: column; background: var(--bloc); border: 1px solid var(--bordure); border-radius: 16px; overflow: hidden; }
-.ev-menu-ligne { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; min-height: 60px; padding: 8px 14px; background: none; border: none; border-bottom: 1px solid var(--bordure); color: var(--texte); font: inherit; text-align: left; cursor: pointer; }
+.ev-menu-ligne { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 12px; min-height: 60px; padding: 8px 14px; background: none; border: none; border-bottom: 1px solid var(--bordure); color: var(--texte); font: inherit; text-align: left; cursor: pointer; }
 .ev-menu-ligne:last-child { border-bottom: none; }
 .ev-menu-ligne:active { background: var(--bloc-2); }
 .ev-menu-ligne::after { content: "›"; font-size: 24px; line-height: 1; color: var(--texte-faible); }
-.ev-menu-icone { font-size: 22px; text-align: center; }
+/* Rond de couleur pleine + icône blanche, comme la liste Paramètres de Waze
+   (l'icône reste un emoji dans le code ; .ev-menu-glyphe le rend blanc,
+   séparément du fond pour ne pas aussi le blanchir). */
+.ev-menu-icone { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #3b82f6; font-size: 17px; }
+.ev-menu-glyphe { filter: brightness(0) invert(1); }
 .ev-menu-nom { display: block; font-size: 15.5px; font-weight: 700; }
 .ev-menu-detail { display: block; margin-top: 2px; font-size: 12.5px; color: var(--texte-att); }
+.ev-menu-switch { width: 46px; height: 27px; border-radius: 999px; background: #cbd5e1; position: relative; flex-shrink: 0; transition: background .18s; }
+.ev-menu-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 23px; height: 23px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 35%); transition: transform .18s; }
+.ev-menu-toggle[data-actif="true"] .ev-menu-switch { background: #1a6fe8; }
+.ev-menu-toggle[data-actif="true"] .ev-menu-switch::after { transform: translateX(19px); }
 .ev-hors-rubrique { display: none !important; }
 .ev-retour-menu { flex-shrink: 0; padding: 8px 12px 8px 0; font-size: 15px; }
 .ev-vue-entete:has(.ev-retour-menu:not(.hidden)) { justify-content: flex-start; }

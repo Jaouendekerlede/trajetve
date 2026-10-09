@@ -470,9 +470,10 @@ function majEcran() {
   const kmh = Math.round((pos.vitesse || 0) * 3.6);
   const limite = route.limites[etat.idx];
   $("ev-nav-vitesse").innerHTML = `<strong>${kmh}</strong><span>km/h</span>`;
-  $("ev-nav-vitesse").classList.toggle("exces", !!limite && kmh > limite + 3);
-  $("ev-nav-limite").textContent = limite || "";
-  $("ev-nav-limite").classList.toggle("hidden", !limite);
+  const etatVitesse = !limite ? "" : kmh > limite + 3 ? "rouge" : kmh >= limite - 5 ? "orange" : "vert";
+  $("ev-nav-vitesse").dataset.etatVitesse = etatVitesse;
+  $("ev-nav-vitesse").classList.toggle("exces", etatVitesse === "rouge");
+  $("ev-nav-limite").textContent = limite || "–";
   surveillerVitesse(kmh, limite);
   if (document.body.classList.contains("ev-hud")) majHud(kmh, limite);
 
@@ -1732,6 +1733,36 @@ function surVisibilite() {
   else sauverNavigation();
 }
 
+// ── Voix : réglage persistant, bouton accessible depuis tous les écrans ────
+
+// Hors guidage, l'état fait foi est le réglage enregistré ; pendant le
+// guidage, etat.voix (initialisé depuis ce même réglage) peut diverger
+// temporairement (commande vocale, bouton), d'où la priorité à etat ici.
+export function voixActivee() {
+  return etat ? etat.voix : lireReglages().voix_guidage !== false;
+}
+
+export function basculerVoix(valeurForcee) {
+  const nouveau = valeurForcee ?? !voixActivee();
+  sauverReglages({ voix_guidage: nouveau });
+  if (etat) {
+    etat.voix = nouveau;
+    if (!nouveau) speechSynthesis.cancel();
+  }
+  majIconeVoixGlobale();
+  return nouveau;
+}
+
+export function majIconeVoixGlobale() {
+  const actif = voixActivee();
+  for (const id of ["ev-voix-global-btn", "ev-nav-voix-btn"]) {
+    const b = $(id);
+    if (!b) continue;
+    b.innerHTML = icone(actif ? "son" : "muet");
+    b.classList.toggle("muet", !actif);
+  }
+}
+
 // ── Démarrage / arrêt ───────────────────────────────────────────────────────
 
 let cable = false;
@@ -1742,11 +1773,7 @@ function cablerBoutons() {
   $("ev-nav-stop-btn").addEventListener("click", () => {
     if (confirm("Arrêter la navigation ?")) arreterNavigation();
   });
-  $("ev-nav-voix-btn").addEventListener("click", () => {
-    etat.voix = !etat.voix;
-    $("ev-nav-voix-btn").innerHTML = icone(etat.voix ? "son" : "muet");
-    if (!etat.voix) speechSynthesis.cancel();
-  });
+  $("ev-nav-voix-btn").addEventListener("click", () => basculerVoix());
   $("ev-nav-orientation-btn").addEventListener("click", () => {
     etat.sensDeMarche = !etat.sensDeMarche;
     majBoutonOrientation();
@@ -2414,8 +2441,7 @@ async function commandeVocale() {
   const arret = etat.arretsRestants[0];
   switch (c.action) {
     case "voix":
-      etat.voix = c.valeur;
-      $("ev-nav-voix-btn").innerHTML = icone(etat.voix ? "son" : "muet");
+      basculerVoix(c.valeur);
       if (etat.voix) parler("Voix activée.", true);
       break;
     case "barree":
@@ -2858,7 +2884,7 @@ export async function demarrerNavigation(plan, { options = {}, demo = false, cha
   $("ev-nav-etape-borne").classList.add("hidden");
   $("ev-nav-batterie-panneau").classList.add("hidden");
   $("ev-nav-recentrer-btn").classList.add("hidden");
-  $("ev-nav-voix-btn").innerHTML = icone(etat.voix ? "son" : "muet");
+  majIconeVoixGlobale();
   majBoutonOrientation();
   $("ev-nav-fleche").textContent = "⏳";
   $("ev-nav-rue").classList.add("hidden");

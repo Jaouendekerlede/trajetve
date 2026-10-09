@@ -203,7 +203,7 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
   const ll = coords.map(([lon, lat]) => L.latLng(lat, lon));
   pointsRoute = ll;
   indiceDecoupe = -1;
-  const restant = { color: fondCourant() === "plan" ? "#1a6fe8" : "#22e5a0", weight: 9, opacity: 0.95, interactive: false };
+  const restant = { color: "#7c3aed", weight: 9, opacity: 0.95, interactive: false };
   const parcouru = { color: "#6b7385", weight: 9, opacity: 0.9, interactive: false };
   L.polyline(ll, { color: "#062a1e", weight: 14, opacity: 0.55, interactive: false }).addTo(coucheNav);
   ligneRestante = L.polyline(ll, restant).addTo(coucheNav);
@@ -674,7 +674,7 @@ function afficherTrajet2D(data, onClicArret) {
   placerCurseur2D(undefined, undefined);
   if (!data?.coords?.length) return;
 
-  const aller = L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#22e5a0", weight: 6, opacity: 0.9 }).addTo(coucheTrajet);
+  const aller = L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#7c3aed", weight: 6, opacity: 0.9 }).addTo(coucheTrajet);
   // Ralentissements et bouchons par-dessus le tracé.
   for (const b of data.bouchons || []) {
     const morceau = data.coords.slice(b.debut, b.fin + 1).map(([lon, lat]) => [lat, lon]);
