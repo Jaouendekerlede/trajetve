@@ -7,6 +7,7 @@
 
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel, retirerDernierRadarPersonnel, listerBornesPersonnelles, ajouterBornePersonnelle, retirerDerniereBornePersonnelle } from "./storage.js";
+import { signalerBornePartage } from "./relais.js";
 import { toast } from "./ui-commun.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
@@ -1158,6 +1159,11 @@ export function signalerBorneIci({ puissance_kw = 0, connecteur = "", note = "" 
   vue.montrerBornes(true);
   parler("Borne enregistrée. Elle apparaîtra sur vos prochains trajets.", true);
   toast("🔌 Borne enregistrée.");
+  // Partage avec les autres utilisateurs de TrajetVE (relais facultatif,
+  // voir relais.js) -- sans effet si non configuré. Demande explicite du
+  // 2026-10-09 : une borne manquante signalée restait connue seulement du
+  // téléphone qui l'avait signalée.
+  signalerBornePartage(etat.pos.lat, etat.pos.lon, "manquante", { puissance_kw, connecteur, commentaire: note });
   return { ok: true };
 }
 

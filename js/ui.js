@@ -24,6 +24,7 @@ import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
+import { relaisConfigure, lireEtatVehiculeRelais, signalerBornePartage, signalementsPartagesProches } from "./relais.js";
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
@@ -912,6 +913,10 @@ function ficheBorneHtml(b, ctx) {
   html += panneJusqua
     ? `<div class="ev-alerte">⚠️ Tu as signalé cette borne en panne : elle n'est plus proposée dans tes trajets jusqu'au ${new Date(panneJusqua).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}. <button id="ev-borne-panne-btn" class="ev-lien" type="button">✅ Elle remarche</button></div>`
     : `<button id="ev-borne-panne-btn" class="ev-lien" type="button">⚠️ Signaler cette borne en panne (${JOURS_BORNE_EN_PANNE} jours)</button>`;
+  // Signalements des AUTRES utilisateurs (relais partagé, voir relais.js) --
+  // rempli de façon asynchrone juste après l'affichage de la fiche, pas ici
+  // (synchrone). Demande explicite du 2026-10-09.
+  html += `<div id="ev-borne-signalements-partages"></div>`;
 
   if (ctx) {
     html += `<div class="ev-carte-bloc"><h3>🔋 Cet arrêt dans ton trajet</h3>
@@ -1011,8 +1016,28 @@ function remplirFiche(b, ctx) {
   $("ev-borne-panne-btn")?.addEventListener("click", () => {
     const signalee = basculerBorneEnPanne(nom, b.lat, b.lon);
     toast(signalee ? `⚠️ Borne écartée de tes trajets pendant ${JOURS_BORNE_EN_PANNE} jours` : "✅ Borne de nouveau proposée dans tes trajets");
+    signalerBornePartage(b.lat, b.lon, signalee ? "panne" : "retabli", { nom });
     remplirFiche(b, ctx);
   });
+  afficherSignalementsPartages(b);
+}
+
+// Signalements des AUTRES utilisateurs à proximité de cette borne (relais
+// partagé, facultatif) -- affichés après coup, sans bloquer le rendu de la
+// fiche (réseau potentiellement lent/absent). Demande explicite du
+// 2026-10-09 : les signalements "en panne" restaient connus seulement du
+// téléphone qui avait signalé.
+async function afficherSignalementsPartages(b) {
+  const zone = $("ev-borne-signalements-partages");
+  if (!zone || !relaisConfigure()) return;
+  const proches = await signalementsPartagesProches(b.lat, b.lon, 1);
+  if (!zone.isConnected) return; // fiche fermée/changée pendant l'attente réseau
+  const ici = proches.filter((s) => Math.abs(s.lat - b.lat) < 0.001 && Math.abs(s.lon - b.lon) < 0.0015);
+  if (!ici.length) return;
+  const dernier = ici[ici.length - 1];
+  if (dernier.type === "panne") {
+    zone.innerHTML = `<div class="ev-alerte">⚠️ Signalée en panne par un autre utilisateur de TrajetVE le ${new Date(dernier.ts).toLocaleDateString("fr-FR")}${dernier.commentaire ? ` : ${escapeHtml(dernier.commentaire)}` : ""}.</div>`;
+  }
 }
 
 function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer = false } = {}) {
@@ -1120,6 +1145,19 @@ function cablerFormulaire() {
       appliquerPresetMode(mode);
     }),
   );
+  $("ev-relais-batterie-btn").addEventListener("click", async () => {
+    if (!relaisConfigure()) return toast("Configure l'URL du relais dans 🚗 Profil pour utiliser ce bouton (facultatif).");
+    const btn = $("ev-relais-batterie-btn");
+    btn.disabled = true;
+    btn.textContent = "🔗 Lecture en cours…";
+    const etat = await lireEtatVehiculeRelais();
+    btn.disabled = false;
+    btn.textContent = "🔗 Récupérer la batterie réelle (Bluelink)";
+    if (!etat || !Number.isFinite(etat.batterie_pct)) return toast("⚠️ Batterie indisponible : JARVIS doit avoir publié un état récent (moins de 15 min).");
+    $("ev-charge-pct-input").value = Math.round(etat.batterie_pct);
+    $("ev-charge-pct-input").dispatchEvent(new Event("input", { bubbles: true }));
+    toast(`🔋 Batterie réelle récupérée : ${Math.round(etat.batterie_pct)} %`);
+  });
   $("ev-depart-gps-btn").addEventListener("click", () => ($("ev-depart-input").value = "Ma position"));
   $("ev-depart-clear-btn").addEventListener("click", () => {
     $("ev-depart-input").value = "";
@@ -2510,6 +2548,7 @@ function rendreReglagesProfil() {
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
   $("ev-cle-ocm").value = openChargeMap || "";
+  $("ev-relais-url").value = reglages.relais_url || "";
 
   const types = typesDeCharge(profil);
   for (const option of $("ev-calc-type-select").options) {
@@ -2693,6 +2732,7 @@ function cablerProfil() {
       zones_danger: $("ev-reglage-zones-danger").checked,
       pause_mi_parcours: $("ev-reglage-pause-mi-parcours").checked,
       mode_eco: $("ev-reglage-mode-eco").checked,
+      relais_url: $("ev-relais-url").value.trim(),
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });

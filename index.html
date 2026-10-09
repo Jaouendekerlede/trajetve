@@ -148,6 +148,7 @@
           <input type="range" min="1" max="100" value="100" id="ev-charge-pct-input" class="ev-curseur">
           <span id="ev-charge-km" class="ev-km-estime"></span>
         </label>
+        <button type="button" id="ev-relais-batterie-btn" class="ev-lien">🔗 Récupérer la batterie réelle (Bluelink)</button>
         <div class="ev-charge-mode-row">
           <button type="button" class="ev-charge-mode-btn" data-mode="rapide">⚡<span>Rapide</span></button>
           <button type="button" class="ev-charge-mode-btn" data-mode="economique">💶<span>Éco</span></button>
@@ -636,6 +637,10 @@
             <button type="button" id="ev-cle-ocm-voir" class="ev-mini-btn" aria-label="Afficher la clé">👁️</button>
           </span>
         </label>
+        <label class="ev-champ">URL du relais TrajetVE (facultatif) — <a href="https://github.com/Jaouendekerlede/trajetve" target="_blank" rel="noopener">voir TrajetVE-Relais/LISEZ-MOI.md</a>
+          <input type="text" id="ev-relais-url" class="ev-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://trajetve-relais.xxxx.workers.dev">
+        </label>
+        <div class="ev-hint">Laisser vide si vous n'avez pas déployé ce petit serveur partagé : batterie réelle (Bluelink/JARVIS) et signalements de bornes partagés entre vos appareils.</div>
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
@@ -825,7 +830,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 107 : le fournisseur affiché en premier est la déclaration officielle (enseigne, pas Open Charge Map), pour éviter des marques différentes selon le site</div>
+      <div class="ev-hint ev-lien-centre">Version 108 : relais optionnel (batterie Bluelink via JARVIS, signalements de bornes partagés entre appareils) — voir 🚗 Profil</div>
     </div>
   </div>
 </section>
