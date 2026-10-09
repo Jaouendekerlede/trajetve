@@ -374,6 +374,16 @@ function officielValide(b) {
   return b.officiel && !b.officiel.indisponible ? b.officiel : null;
 }
 
+// Le "fournisseur" affiché en premier doit être le plus fiable : l'enseigne
+// officielle (déclaration IRVE, le nom public affiché sur la borne) prime
+// sur l'opérateur officiel, qui prime sur l'opérateur Open Charge Map
+// (communautaire, parfois périmé) -- auparavant c'était l'inverse, d'où des
+// marques différentes selon le site consulté pour la même borne. Demande
+// explicite du 2026-10-09.
+function operateurAffichage(b, o = officielValide(b)) {
+  return o?.enseigne || o?.operateur || b.operateur || null;
+}
+
 function etatCb(b) {
   const o = officielValide(b);
   if (o) {
@@ -446,7 +456,7 @@ function ligneBorneHtml(b, i, suffixeDistance = "") {
   const kw = puissanceBorne(b);
   const o = officielValide(b);
   const points = o?.nombre_points || b.nombre_points;
-  const operateur = b.operateur || o?.operateur;
+  const operateur = operateurAffichage(b, o);
   const sous = [operateur || "Opérateur inconnu", b.distance_km != null ? `${nombre(b.distance_km, 1)} km${suffixeDistance}` : "", points ? `${points} pts` : ""]
     .filter(Boolean)
     .join(" · ");
@@ -876,7 +886,7 @@ function ficheBorneHtml(b, ctx) {
       <div class="ev-borne-puissance ${classePuissance(kw)}">${kw || "?"}<small>kW max</small></div>
       <div>
         <div class="ev-fiche-titre">${escapeHtml(nom)}</div>
-        <div class="ev-fiche-sous">${badgeOperateur(b.operateur || o?.operateur)}${escapeHtml([b.operateur || o?.operateur, b.adresse || o?.adresse].filter(Boolean).join(" · "))}</div>
+        <div class="ev-fiche-sous">${badgeOperateur(operateurAffichage(b, o))}${escapeHtml([operateurAffichage(b, o), b.adresse || o?.adresse].filter(Boolean).join(" · "))}</div>
       </div>
     </div>
     <div class="ev-badges">
