@@ -52,6 +52,7 @@
   </div>
   <div class="ev-chips" id="ev-filtres">
     <button class="ev-chip" type="button" id="ev-filtres-ouvrir-btn" title="Chercher un lieu (adresse, ville...) et filtrer les bornes affichées">📍 Chercher un lieu / filtrer</button>
+    <button class="ev-chip" type="button" id="ev-scan-borne-ouvrir-btn" title="Scanner le QR code d'une borne pour préparer la recharge">📷 Scanner une borne</button>
     <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
@@ -831,7 +832,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 111 : la zone « 🔋 Autonomie » suit maintenant le vrai réseau routier et ses limitations de vitesse (avec une clé TomTom), au lieu d'un simple cercle à vol d'oiseau</div>
+      <div class="ev-hint ev-lien-centre">Version 112 : nouveau bouton « 📷 Scanner une borne » -- lit le QR code d'une borne et prépare la recharge (véhicule, batterie, infos de la borne si connue) avant d'ouvrir le site du réseau</div>
     </div>
   </div>
 </section>
@@ -1031,6 +1032,16 @@
       </ul>
     </details>
     <div class="ev-hint">Numéros : 112 (urgences), 15 (SAMU), 17 (police), 18 (pompiers), 114 (par SMS).</div>
+  </div>
+</div>
+
+<!-- ══ Scan d'une borne (QR code) ══ -->
+<div id="ev-scan-borne" class="ev-scan-borne hidden" role="dialog" aria-label="Scanner une borne">
+  <div class="ev-scan-carte">
+    <div class="ev-sos-tete"><strong>📷 Scanner une borne</strong><button id="ev-scan-borne-fermer" type="button" class="ev-fermer" aria-label="Fermer">✕</button></div>
+    <video id="ev-scan-video" class="ev-scan-video" muted playsinline></video>
+    <div id="ev-scan-borne-statut" class="ev-hint">Visez le QR code affiché sur la borne.</div>
+    <div id="ev-scan-borne-resultat" class="ev-scan-resultat hidden"></div>
   </div>
 </div>
 <button id="ev-urgence-bornes-interne" type="button" class="hidden" aria-hidden="true"></button>

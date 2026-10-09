@@ -36,6 +36,7 @@ import { cablerDrive } from "./ui-drive.js";
 import { icone, iconeFond } from "./icones.js";
 import { appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { ouvrirSOS, cablerSOS } from "./ui-sos.js";
+import { cablerScanBorne } from "./ui-scan-borne.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -708,6 +709,7 @@ function cablerCarte() {
   cablerVoitureGaree();
   cablerStats();
   cablerSOS();
+  cablerScanBorne();
   cablerDiagnostic();
   // Liste d'essais sur la route : cases mémorisées sur ce téléphone.
   const essais = (() => {
