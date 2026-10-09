@@ -52,6 +52,7 @@
   </div>
   <div class="ev-chips" id="ev-filtres">
     <button class="ev-chip" type="button" id="ev-filtres-ouvrir-btn" title="Chercher un lieu (adresse, ville...) et filtrer les bornes affichées">📍 Chercher un lieu / filtrer</button>
+    <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
   <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
@@ -424,8 +425,8 @@
         <div class="ev-chips">
           <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
           <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
-          <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
         </div>
+        <div class="ev-hint">🔋 Autonomie : maintenant accessible directement en haut de la carte.</div>
       </div>
 
       <div class="ev-carte-bloc" id="ev-bloc-calculateur">
@@ -830,7 +831,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 109 : le bouton de recherche sur la carte s'appelle maintenant « Chercher un lieu / filtrer » — il permet déjà de taper une adresse et voir les bornes autour</div>
+      <div class="ev-hint ev-lien-centre">Version 110 : le bouton « 🔋 Autonomie » (jusqu'où je peux aller avec la batterie) est maintenant directement en haut de la carte, plus besoin d'ouvrir le panneau de recherche</div>
     </div>
   </div>
 </section>
