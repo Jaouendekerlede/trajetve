@@ -664,6 +664,10 @@ function majZoneDanger() {
 // chaque radar (fixe officiel OU signalé soi-même), chacun une seule fois.
 // Demande explicite de l'utilisateur le 2026-09-27.
 const SEUILS_APPROCHE_RADAR_M = [200, 100, 50];
+// Pictogramme du bandeau plein écran assorti au symbole de la carte (même
+// code que iconeRadar()/couleurRadar() dans icones.js) -- demande du
+// 2026-10-10.
+const EMOJI_TYPE_RADAR = { ETFR: "🚦", ETPN: "🚧", ETVM: "⏱️" };
 
 function verifierApprocheRadar() {
   const flashEl = $("ev-nav-radar-flash");
@@ -681,7 +685,8 @@ function verifierApprocheRadar() {
     .sort((a, b) => a.d - b.d)[0];
   if (prochain) {
     const nom = LABELS_TYPE_RADAR[prochain.r.type] || "Radar";
-    flashEl.textContent = `📷 ${nom.charAt(0).toUpperCase()}${nom.slice(1)} — ${Math.round(Math.max(0, prochain.d))} m`;
+    const pictogramme = EMOJI_TYPE_RADAR[prochain.r.type] || "📷";
+    flashEl.textContent = `${pictogramme} ${nom.charAt(0).toUpperCase()}${nom.slice(1)} — ${Math.round(Math.max(0, prochain.d))} m`;
     flashEl.classList.remove("hidden");
   } else {
     flashEl.classList.add("hidden");

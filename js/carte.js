@@ -13,7 +13,7 @@ import { getApiKeys } from "./config.js";
 import { lireReglages } from "./storage.js";
 import * as c3d from "./carte3d.js";
 import { svgVoiture } from "./icones-voiture.js";
-import { icone } from "./icones.js";
+import { icone, iconeRadar, couleurRadar } from "./icones.js";
 
 let explo3D = false;
 let surDeplacement = null;
@@ -220,11 +220,15 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
 // Radars (officiels OSM ou signalés soi-même) sur le tracé : un symbole de
 // radar plutôt qu'une épingle générique -- demande explicite de
 // l'utilisateur le 2026-09-27. Ajoutés à coucheNav (donc effacés avec le
-// reste au prochain dessinerRouteNavigation -- à rappeler ensuite).
+// reste au prochain dessinerRouteNavigation -- à rappeler ensuite). Symbole
+// et couleur varient selon le type (feu rouge, passage à niveau, vitesse
+// moyenne) -- demande du 2026-10-10.
 export function dessinerRadars(radars) {
   for (const m of marqueursRadars) m.remove();
-  const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
-  marqueursRadars = (radars || []).map((r) => L.marker([r.lat, r.lon], { icon: pastille(28, "rgba(255,70,60,.95)", symbole), zIndexOffset: 4500, interactive: false }).addTo(coucheNav));
+  marqueursRadars = (radars || []).map((r) => {
+    const symbole = `<span style="color:#fff;display:flex">${icone(iconeRadar(r.type), 16)}</span>`;
+    return L.marker([r.lat, r.lon], { icon: pastille(28, couleurRadar(r.type), symbole), zIndexOffset: 4500, interactive: false }).addTo(coucheNav);
+  });
 }
 
 // Feux tricolores sur le tracé (OpenStreetMap) : demande du 2026-10-03, déjà

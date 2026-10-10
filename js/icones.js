@@ -15,7 +15,32 @@ const TRAITS = {
   // Radar routier (caméra sur pied) : symbole propre à la place d'une
   // épingle générique -- demande explicite de l'utilisateur.
   radar: '<rect x="5" y="3" width="14" height="10" rx="2"/><circle cx="12" cy="8" r="3"/><path d="M12 13v8"/><path d="M8 21h8"/>',
+  // Variantes par type de radar (demande du 2026-10-10) : un feu tricolore
+  // (radar de feu rouge), une barrière (radar de passage à niveau) et un
+  // compteur (radar de vitesse moyenne, qui contrôle sur une distance et
+  // non à un point précis) -- les autres types restent sur le symbole
+  // générique "radar" ci-dessus, trop proches visuellement pour être
+  // distingués utilement (fixe, fixe nouvelle génération, urbain, discriminant).
+  "radar-feu": '<rect x="7" y="2" width="10" height="18" rx="3"/><circle cx="12" cy="7" r="1.6" fill="currentColor"/><circle cx="12" cy="11" r="1.6"/><circle cx="12" cy="15" r="1.6"/><path d="M12 20v2"/>',
+  "radar-pn": '<rect x="2" y="7" width="20" height="6" rx="1"/><path d="M6 7 2 13M12 7l-4 6M18 7l-4 6M22 7l-4 6"/><path d="M5 13v7M19 13v7"/>',
+  "radar-vm": '<path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16 16 10"/><circle cx="12" cy="16" r="1.5" fill="currentColor"/><path d="M4 20h16"/>',
 };
+
+// Code officiel du radar (ETF, ETFR...) -> nom du symbole à afficher.
+export function iconeRadar(type) {
+  if (type === "ETFR") return "radar-feu";
+  if (type === "ETPN") return "radar-pn";
+  if (type === "ETVM") return "radar-vm";
+  return "radar";
+}
+
+// Couleur de la pastille, assortie au symbole -- même code que ci-dessus.
+export function couleurRadar(type) {
+  if (type === "ETFR") return "rgba(255,152,0,.95)";
+  if (type === "ETPN") return "rgba(255,206,43,.95)";
+  if (type === "ETVM") return "rgba(155,81,224,.95)";
+  return "rgba(255,70,60,.95)";
+}
 
 export function icone(nom, taille = 24) {
   return `<svg class="ev-icone" viewBox="0 0 24 24" width="${taille}" height="${taille}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TRAITS[nom] || ""}</svg>`;

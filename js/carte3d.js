@@ -11,7 +11,7 @@ import { haversineKm, densifier, recalerSurRoutes, pointSurLigne, lisser } from 
 import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 import { svgVoiture } from "./icones-voiture.js";
-import { icone } from "./icones.js";
+import { icone, iconeRadar, couleurRadar } from "./icones.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
 const DELAI_CHARGEMENT_MS = 30000;
@@ -1163,11 +1163,14 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
 
 // Radars (officiels OSM ou signalés soi-même) sur le tracé : un symbole de
 // radar plutôt qu'une épingle générique -- demande explicite de
-// l'utilisateur le 2026-09-27.
+// l'utilisateur le 2026-09-27. Symbole et couleur varient selon le type
+// (feu rouge, passage à niveau, vitesse moyenne) -- demande du 2026-10-10.
 export function dessinerRadars(radars) {
   for (const m of marqueursRadars) m.remove();
-  const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
-  marqueursRadars = (radars || []).map((r) => new maplibregl.Marker({ element: pastille(28, "rgba(255,70,60,.95)", symbole) }).setLngLat([r.lon, r.lat]).addTo(carte));
+  marqueursRadars = (radars || []).map((r) => {
+    const symbole = `<span style="color:#fff;display:flex">${icone(iconeRadar(r.type), 16)}</span>`;
+    return new maplibregl.Marker({ element: pastille(28, couleurRadar(r.type), symbole) }).setLngLat([r.lon, r.lat]).addTo(carte);
+  });
 }
 
 // Feux tricolores sur le tracé (OpenStreetMap), pendant du 2D : demande du
