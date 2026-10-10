@@ -837,6 +837,28 @@ body.ev-mode-navigation .ev-maj { display: none; }
 
 /* Zone de danger (radars) : bandeau orange sous la manœuvre. */
 .ev-nav-danger { align-self: flex-start; padding: 8px 14px; border-radius: 12px; background: #e8590c; color: #fff; font-size: 17px; font-weight: 800; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
+/* Alerte radar bien plus marquee que la zone de danger ci-dessus (demande
+   explicite du 2026-10-10 : "il faut que ca flashe bien") -- pleine largeur,
+   tres grande, clignote vraiment (couleur ET taille), uniquement pendant
+   l'approche rapprochee (200/100/50 m, voir verifierApprocheRadar). */
+.ev-nav-radar-flash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+  text-align: center;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  animation: ev-radar-flash 0.6s infinite;
+}
+@keyframes ev-radar-flash {
+  0%, 100% { background: #d32f2f; transform: scale(1); }
+  50% { background: #ff8f00; transform: scale(1.035); }
+}
 /* Fenêtre des voies (comme Sygic), à droite sous le bandeau. */
 .ev-nav-vue-voies { align-self: flex-end; width: 140px; padding: 7px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 14px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
 .ev-nav-vue-voies svg { display: block; width: 100%; height: auto; }

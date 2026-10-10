@@ -666,7 +666,27 @@ function majZoneDanger() {
 const SEUILS_APPROCHE_RADAR_M = [200, 100, 50];
 
 function verifierApprocheRadar() {
-  if (!etat.prefs.dangers || etat.aLaBorne) return;
+  const flashEl = $("ev-nav-radar-flash");
+  if (!etat.prefs.dangers || etat.aLaBorne) {
+    flashEl.classList.add("hidden");
+    return;
+  }
+  // Alerte visuelle pleine page, clignotante, pendant toute la fenêtre
+  // 0-200 m -- pas seulement au moment de l'annonce vocale (SEUILS_APPROCHE_
+  // RADAR_M ci-dessous), pour rester visible tout du long de l'approche,
+  // demande explicite du 2026-10-10 ("il faut que ça flashe bien").
+  const prochain = (etat.route.radarsSurTrace || [])
+    .map((r) => ({ r, d: r.offset - etat.offset }))
+    .filter((x) => x.d >= -20 && x.d <= 200)
+    .sort((a, b) => a.d - b.d)[0];
+  if (prochain) {
+    const nom = LABELS_TYPE_RADAR[prochain.r.type] || "Radar";
+    flashEl.textContent = `📷 ${nom.charAt(0).toUpperCase()}${nom.slice(1)} — ${Math.round(Math.max(0, prochain.d))} m`;
+    flashEl.classList.remove("hidden");
+  } else {
+    flashEl.classList.add("hidden");
+  }
+
   for (const r of etat.route.radarsSurTrace || []) {
     const d = r.offset - etat.offset;
     if (d < 0 || d > 200) continue;
