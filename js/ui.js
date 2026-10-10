@@ -1972,7 +1972,7 @@ function renderProfilTrajet(p) {
   // explicite du 2026-10-09 (trajet Saint-Nazaire -> Auray via La Roche-
   // Bernard : 80 km/h puis 110 km/h).
   const repartition = s.repartition_vitesses?.length
-    ? ` Vitesses rencontrées : ${s.repartition_vitesses.map((r) => `${r.limite_kmh} km/h sur ${nombre(r.km)} km`).join(", ")}.`
+    ? ` Vitesses rencontrées : ${s.repartition_vitesses.map((r) => `${r.limite_kmh} km/h sur ${nombre(r.km)} km (≈${nombre(r.energie_kwh)} kWh, soit ${nombre(r.conso_kwh100)} kWh/100 km)`).join(", ")}.`
     : "";
   const notes =
     p.modele === "detaille"

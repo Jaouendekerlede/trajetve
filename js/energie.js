@@ -337,6 +337,7 @@ export async function construireProfilEnergie(itin, profil, options) {
   const km = [points[0].km];
   const ecum = [0];
   const kmParLimite = new Map();
+  const energieParLimite = new Map();
   for (let j = 0; j < points.length - 1; j++) {
     const a = points[j];
     const b = points[j + 1];
@@ -361,6 +362,7 @@ export async function construireProfilEnergie(itin, profil, options) {
     }
 
     const energie = energieSegmentKwh(dKm, alt[j + 1] - alt[j], vKmh, temperature, pluie, ventFace, masse) * calibrage * multSaison * multLourde;
+    if (limiteArrondie > 0) energieParLimite.set(limiteArrondie, (energieParLimite.get(limiteArrondie) || 0) + energie);
     segments.push({
       km_debut: a.km,
       km_fin: b.km,
@@ -418,8 +420,14 @@ export async function construireProfilEnergie(itin, profil, options) {
       // Distance parcourue par limitation réelle (80, 110, 130...), triée du
       // plus rapide au plus lent -- preuve visible que le calcul suit les
       // vraies limitations du trajet plutôt qu'une vitesse moyenne unique.
+      // energie_kwh et conso_kwh100 par tronçon (demande explicite du
+      // 2026-10-10) : approximation de la consommation propre à chaque type
+      // de route (80/110/130...), pas seulement la distance parcourue.
       repartition_vitesses: [...kmParLimite.entries()]
-        .map(([limite_kmh, km]) => ({ limite_kmh, km }))
+        .map(([limite_kmh, km]) => {
+          const energie_kwh = energieParLimite.get(limite_kmh) || 0;
+          return { limite_kmh, km, energie_kwh, conso_kwh100: km > 0 ? (energie_kwh / km) * 100 : 0 };
+        })
         .sort((x, y) => y.limite_kmh - x.limite_kmh),
     },
   };
