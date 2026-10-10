@@ -8,7 +8,7 @@ import { resoudreLieu, estMaPosition, pointADistanceSurTrace, haversineKm } from
 import { calculerItineraireTomTom } from "./tomtom.js";
 import { echangeursDuTrajet } from "./panneau-nav.js";
 import { calculerTrajetElectrique, formaterMinutes, consommationEffectiveKwh100km, kmSurTrace } from "./planner.js";
-import { construireProfilEnergie, fonctionsEnergie, fonctionsEnergieConstante } from "./energie.js";
+import { construireProfilEnergie, fonctionsEnergie, fonctionsEnergieConstante, descriptionTemperature } from "./energie.js";
 import { enrichirBornes, stationsOfficiellesZone, fusionnerBornes } from "./irve.js";
 import { rechercherBornesProches, rechercherBornesZone, borneCompatible } from "./ocm.js";
 
@@ -269,6 +269,33 @@ async function planifierSurItineraire(itin, chargePct, opts) {
     },
   });
   if (meteoInfo) resultat.meteo_info = meteoInfo;
+
+  // Météo/température à chaque arrêt ET à l'arrivée (pas seulement au
+  // départ) -- demande explicite de l'utilisateur 2026-10-10, pour savoir à
+  // quoi s'attendre en descendant brancher la voiture, pas juste la météo
+  // du point de départ. Réutilise les échantillons déjà calculés par le
+  // modèle détaillé (segments de profilEnergie), aucun nouvel appel réseau.
+  if (detaille && profilEnergie?.segments?.length) {
+    const segmentAuKm = (km) => {
+      const segs = profilEnergie.segments;
+      let meilleur = segs[0];
+      for (const s of segs) {
+        if (km >= s.km_debut && km <= s.km_fin) return s;
+        if (Math.abs((s.km_debut + s.km_fin) / 2 - km) < Math.abs((meilleur.km_debut + meilleur.km_fin) / 2 - km)) meilleur = s;
+      }
+      return meilleur;
+    };
+    const meteoAuKm = (km) => {
+      const s = segmentAuKm(km);
+      if (s.temperature == null) return null;
+      return { temperature_c: Math.round(s.temperature), pluie: s.pluie > 0.2, vent_kmh: s.vent_kmh != null ? Math.round(s.vent_kmh) : null, ...descriptionTemperature(s.temperature) };
+    };
+    for (const arret of resultat.arrets || []) arret.meteo = meteoAuKm(arret.km_depuis_depart);
+    if (resultat.ok) {
+      resultat.meteo_arrivee = meteoAuKm(itin.distance_km);
+      resultat.meteo_trajet_depart = meteoAuKm(0);
+    }
+  }
   // Route réelle passant par les bornes prévues (celle que suivra la
   // navigation) : plus longue que le trajet direct si une borne est de
   // l'autre côté de l'autoroute. On le mesure pour le dire -- mais

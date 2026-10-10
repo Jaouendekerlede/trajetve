@@ -1513,7 +1513,7 @@ function etapesHtml(p) {
       <div class="ev-etape-rail"><div class="ev-etape-icone">🚗</div></div>
       <div class="ev-etape-corps">
         <div class="ev-etape-titre">Départ · ${escapeHtml(nomCourt(p.from_name))}</div>
-        <div class="ev-etape-sous">${heure(departMs)} · ${batterieHtml(dernierChargeDepartPct)}</div>
+        <div class="ev-etape-sous">${heure(departMs)} · ${batterieHtml(dernierChargeDepartPct)}${p.meteo_trajet_depart ? ` · 🌡️ ${p.meteo_trajet_depart.temperature_c} °C${p.meteo_trajet_depart.pluie ? " 🌧️" : ""}` : ""}</div>
         ${route(0, arrets.length ? arrets[0].km_depuis_depart : p.distance_km)}
       </div>
     </div>`;
@@ -1532,7 +1532,7 @@ function etapesHtml(p) {
           <div class="ev-etape-carte" data-arret="${i}">
             <strong>${a.impose ? "⭐ " : ""}${escapeHtml(a.nom_borne)}</strong>${a.impose ? ` <span class="ev-cb-pill ok">Votre aire</span>` : ""}
             <div class="ev-borne-sous">${badgeOperateur(a.operateur)}${escapeHtml(a.operateur || "")}${a.adresse ? ` · ${escapeHtml(a.adresse)}` : ""}</div>
-            <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
+            <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span>${a.meteo ? `<span>🌡️ ${a.meteo.temperature_c} °C${a.meteo.pluie ? " 🌧️" : ""}</span>` : ""}</div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
             <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique)}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
             ${a.alternatives?.length ? `<div class="ev-hint">🔁 Plan B si elle est prise ou en panne : <strong>${escapeHtml(a.alternatives[0].nom)}</strong> (${escapeHtml(a.alternatives[0].distance_km)} km, ${escapeHtml(a.alternatives[0].puissance_max_kw)} kW)</div>` : ""}
@@ -1548,7 +1548,7 @@ function etapesHtml(p) {
       <div class="ev-etape-rail"><div class="ev-etape-icone">🏁</div></div>
       <div class="ev-etape-corps">
         <div class="ev-etape-titre">Arrivée · ${escapeHtml(nomCourt(p.to_name))}</div>
-        <div class="ev-etape-sous">vers ${heure(pointHoraire(p.distance_km))} · ${batterieHtml(p.pct_batterie_arrivee)}</div>
+        <div class="ev-etape-sous">vers ${heure(pointHoraire(p.distance_km))} · ${batterieHtml(p.pct_batterie_arrivee)}${p.meteo_arrivee ? ` · 🌡️ ${p.meteo_arrivee.temperature_c} °C${p.meteo_arrivee.pluie ? " 🌧️" : ""}` : ""}</div>
       </div>
     </div>`;
   return html;

@@ -216,7 +216,7 @@ function meteoAuPoint(stations, km, instantMs) {
   };
 }
 
-function descriptionTemperature(temp) {
+export function descriptionTemperature(temp) {
   for (const [seuil, mult, description] of PALIERS_TEMPERATURE) if (temp < seuil) return { multiplicateur: mult, description };
   return { multiplicateur: 1.05, description: "chaleur, climatisation" };
 }
