@@ -1192,6 +1192,29 @@ function cablerFormulaire() {
   $("ev-voir-resultat-btn").addEventListener("click", () => {
     if (dernierTrajet) afficherResultat(dernierTrajet);
   });
+  // Enchaine une nouvelle etape depuis l'arrivee REELLE (pas une recharge
+  // supposee) -- demande explicite de l'utilisateur 2026-10-10 (ex: Bordeaux
+  // -> Cenon juste apres l'arrivee, sans recharger entre les deux).
+  $("ev-continuer-trajet-btn").addEventListener("click", () => {
+    if (!dernierTrajet) return;
+    $("ev-depart-input").value = dernierTrajet.to_name || "";
+    $("ev-destination-input").value = "";
+    $("ev-charge-pct-input").value = Math.max(1, Math.round(dernierTrajet.pct_batterie_arrivee ?? 100));
+    afficherVue("trajet");
+    toast(`🔋 Depart repris a ${Math.round(dernierTrajet.pct_batterie_arrivee)} % -- indique la prochaine destination.`);
+    $("ev-destination-input").focus();
+  });
+  // Prepare le trajet retour (lendemain ou plus tard) : inverse juste
+  // depart/destination, la batterie du jour reste au choix de l'utilisateur
+  // (pas d'hypothese de recharge, contrairement a "Avec le retour" qui
+  // calcule les deux sens d'un coup en supposant une recharge immediate).
+  $("ev-trajet-retour-btn").addEventListener("click", () => {
+    if (!dernierTrajet) return;
+    $("ev-depart-input").value = dernierTrajet.to_name || "";
+    $("ev-destination-input").value = dernierTrajet.from_name || "";
+    afficherVue("trajet");
+    toast("↩️ Depart et destination inverses -- regle la batterie du jour et calcule.");
+  });
   $("ev-favori-trajet-btn").addEventListener("click", () => {
     const destination = $("ev-destination-input").value.trim();
     if (!destination) {
