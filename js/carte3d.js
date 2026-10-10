@@ -334,9 +334,13 @@ function ajouterCouchesTrajet() {
   carte.addSource("nav-fleche", { type: "geojson", data: VIDE });
   const trait = ["==", ["geometry-type"], "LineString"];
   const pointe = ["==", ["geometry-type"], "Polygon"];
-  carte.addLayer({ id: "nav-fleche-contour", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "rgba(10,42,92,0.5)", "line-width": largeurMetres(4.2) } }, dessous);
+  // Contour quasi opaque (demande explicite du 2026-10-10 : trop peu visible
+  // à 0.5 d'opacité sur un fond de carte gris clair) -- l'idée reste un
+  // "halo" sombre sous le trait blanc, juste assez marqué pour ressortir
+  // sur n'importe quel fond, clair ou sombre.
+  carte.addLayer({ id: "nav-fleche-contour", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "rgba(10,42,92,0.95)", "line-width": largeurMetres(5.2) } }, dessous);
   carte.addLayer({ id: "nav-fleche-trait", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-opacity": 0.92, "line-width": largeurMetres(2.6) } }, dessous);
-  carte.addLayer({ id: "nav-fleche-pointe", type: "fill", source: "nav-fleche", filter: pointe, paint: { "fill-color": "#ffffff", "fill-opacity": 0.92, "fill-antialias": true } }, dessous);
+  carte.addLayer({ id: "nav-fleche-pointe", type: "fill", source: "nav-fleche", filter: pointe, paint: { "fill-color": "#ffffff", "fill-opacity": 0.92, "fill-outline-color": "rgba(10,42,92,0.95)", "fill-antialias": true } }, dessous);
 }
 
 // Largeur de ligne correspondant à `m` mètres au sol (vers 46° de latitude).
