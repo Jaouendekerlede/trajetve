@@ -116,18 +116,35 @@ let etatsPdc = null;
 let etatsCharges = 0;
 let chargementEtats = null;
 
+// Libellés alignés sur agregerStation() (ajouterPrise) pour rester cohérents
+// partout où un type de prise est affiché à l'utilisateur.
+const LIBELLE_PRISE = { type2: "Type 2", ccs: "Combo CCS", chademo: "CHAdeMO", ef: "Prise domestique E/F" };
+
 function lireEtatsCsv(texte) {
   const lignes = texte.split("\n");
   const entete = lignes[0].split(",");
   const col = (nom) => entete.indexOf(nom);
-  const [cId, cEtat, cOcc, cDate] = [col("id_pdc_itinerance"), col("etat_pdc"), col("occupation_pdc"), col("horodatage")];
+  const [cId, cEtat, cOcc, cDate, cT2, cCcs, cChademo, cEf] = [
+    col("id_pdc_itinerance"), col("etat_pdc"), col("occupation_pdc"), col("horodatage"),
+    col("etat_prise_type_2"), col("etat_prise_type_combo_ccs"), col("etat_prise_type_chademo"), col("etat_prise_type_ef"),
+  ];
   const etats = {};
   const limiteOccupation = Date.now() - OCCUPATION_RECENTE_MS;
   for (let i = 1; i < lignes.length; i++) {
     const v = lignes[i].split(",");
     if (v.length <= cDate) continue;
     const t = Date.parse(v[cDate].replace(" ", "T"));
-    if (v[cEtat] === "hors_service" || (v[cEtat] === "en_service" && t > limiteOccupation)) etats[v[cId]] = { e: v[cEtat], o: v[cOcc], t };
+    if (v[cEtat] === "hors_service" || (v[cEtat] === "en_service" && t > limiteOccupation)) {
+      // Prise(s) en panne individuellement, même quand le point reste
+      // "en_service" dans l'ensemble (une autre prise du même point marche
+      // encore) -- demande explicite du 2026-10-10, détail absent jusqu'ici.
+      let prisesHorsService;
+      if (v[cT2] === "hors_service") (prisesHorsService ??= []).push(LIBELLE_PRISE.type2);
+      if (v[cCcs] === "hors_service") (prisesHorsService ??= []).push(LIBELLE_PRISE.ccs);
+      if (v[cChademo] === "hors_service") (prisesHorsService ??= []).push(LIBELLE_PRISE.chademo);
+      if (v[cEf] === "hors_service") (prisesHorsService ??= []).push(LIBELLE_PRISE.ef);
+      etats[v[cId]] = { e: v[cEtat], o: v[cOcc], t, p: prisesHorsService };
+    }
   }
   return etats;
 }
@@ -178,6 +195,7 @@ export function etatStation(officiel) {
   let occupes = 0;
   let dateSignalement = 0;
   let dateOccupation = 0;
+  const prisesPartielles = new Set();
   const limite = Date.now() - OCCUPATION_RECENTE_MS;
   for (const id of ids) {
     const e = etatsPdc[id];
@@ -189,6 +207,9 @@ export function etatStation(officiel) {
       if (e.o === "libre") libres++;
       else if (e.o === "occupe" || e.o === "reserve") occupes++;
       if (e.o === "libre" || e.o === "occupe" || e.o === "reserve") dateOccupation = Math.max(dateOccupation, e.t);
+      // Point globalement "en service" mais une de ses prises est en panne
+      // (ex: Combo CCS cassé, Type 2 encore utilisable sur le même point).
+      if (e.p?.length) for (const p of e.p) prisesPartielles.add(p);
     }
   }
   if (!horsService && !libres && !occupes) return null;
@@ -203,6 +224,7 @@ export function etatStation(officiel) {
     signalement_ancien: !!dateSignalement && Date.now() - dateSignalement > SIGNALEMENT_ANCIEN_MS,
     // Heure de la dernière occupation connue (toujours de moins d'une heure).
     date_occupation: dateOccupation || null,
+    prises_en_panne: prisesPartielles.size ? [...prisesPartielles] : null,
   };
 }
 

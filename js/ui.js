@@ -434,11 +434,15 @@ function pastilleEtat(etat) {
     : "";
   const minutes = etat.date_occupation ? Math.max(0, Math.round((Date.now() - etat.date_occupation) / 60000)) : null;
   const age = minutes === null ? "< 1 h" : minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
+  // Une prise precise en panne sur un point par ailleurs "en service" (une
+  // autre prise du meme point marche encore) -- info distincte du statut
+  // global ci-dessous, affichee en plus, pas a la place.
+  const partielle = etat.prises_en_panne?.length ? `<span class="ev-cb-pill warn">⚠️ ${escapeHtml(etat.prises_en_panne.join(", "))} en panne</span>` : "";
   if (etat.tous_hors_service) return `<span class="ev-cb-pill ${etat.signalement_ancien ? "warn" : "non"}">⛔ Hors service${date}</span>`;
-  if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>`;
-  if (etat.libres) return `<span class="ev-cb-pill ok">✅ ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>`;
-  if (etat.occupes) return `<span class="ev-cb-pill warn">⏳ Occupée (${age})</span>`;
-  return "";
+  if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>${partielle}`;
+  if (etat.libres) return `<span class="ev-cb-pill ok">✅ ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>${partielle}`;
+  if (etat.occupes) return `<span class="ev-cb-pill warn">⏳ Occupée (${age})</span>${partielle}`;
+  return partielle;
 }
 
 function pastillesBorne(b) {
