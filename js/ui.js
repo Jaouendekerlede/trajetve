@@ -2551,6 +2551,8 @@ function rendreReglagesProfil() {
   $("ev-cle-tomtom").value = tomtom || "";
   $("ev-cle-ocm").value = openChargeMap || "";
   $("ev-relais-url").value = reglages.relais_url || "";
+  $("ev-alerte-batterie-activee").checked = reglages.alerte_batterie_activee !== false;
+  $("ev-alerte-batterie-seuil").value = reglages.alerte_batterie_seuil_pct ?? 20;
 
   const types = typesDeCharge(profil);
   for (const option of $("ev-calc-type-select").options) {
@@ -2735,6 +2737,8 @@ function cablerProfil() {
       pause_mi_parcours: $("ev-reglage-pause-mi-parcours").checked,
       mode_eco: $("ev-reglage-mode-eco").checked,
       relais_url: $("ev-relais-url").value.trim(),
+      alerte_batterie_activee: $("ev-alerte-batterie-activee").checked,
+      alerte_batterie_seuil_pct: Math.min(90, Math.max(5, Number($("ev-alerte-batterie-seuil").value) || 20)),
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });

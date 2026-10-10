@@ -218,7 +218,7 @@ export function sauverPrefs(prefs) {
   }
 }
 
-const REGLAGES_PAR_DEFAUT = { adresse_domicile: "", annonce_vocale: true };
+const REGLAGES_PAR_DEFAUT = { adresse_domicile: "", annonce_vocale: true, alerte_batterie_activee: true, alerte_batterie_seuil_pct: 20 };
 
 export function lireReglages() {
   return { ...REGLAGES_PAR_DEFAUT, ...lireJson(STORAGE_KEYS.reglages, {}) };

@@ -643,6 +643,10 @@
           <input type="text" id="ev-relais-url" class="ev-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://trajetve-relais.xxxx.workers.dev">
         </label>
         <div class="ev-hint">Laisser vide si vous n'avez pas déployé ce petit serveur partagé : batterie réelle (Bluelink/JARVIS) et signalements de bornes partagés entre vos appareils.</div>
+        <label class="ev-champ"><input type="checkbox" id="ev-alerte-batterie-activee"> Alerte si la batterie (réelle, via le relais) descend sous un seuil</label>
+        <label class="ev-champ">Seuil d'alerte (%)
+          <input type="number" id="ev-alerte-batterie-seuil" class="ev-input" min="5" max="90" step="5" placeholder="20">
+        </label>
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
@@ -832,7 +836,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 112 : nouveau bouton « 📷 Scanner une borne » -- lit le QR code d'une borne et prépare la recharge (véhicule, batterie, infos de la borne si connue) avant d'ouvrir le site du réseau</div>
+      <div class="ev-hint ev-lien-centre">Version 113 : alerte automatique si la batterie réelle (via le relais) descend sous un seuil choisi dans Profil</div>
     </div>
   </div>
 </section>
