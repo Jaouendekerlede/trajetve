@@ -6,7 +6,7 @@
 
 import { haversineKm } from "./geo.js";
 import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
-import { avecMemoire } from "./util.js";
+import { avecMemoire, fetchAvecRetry } from "./util.js";
 
 const MOTIF_PRIX_KWH = /(\d+(?:[.,]\d+)?)\s*(?:€|eur)\s*\/?\s*kwh/i;
 
@@ -55,7 +55,7 @@ async function requeteOpenChargeMapReseau(apiKey, lat, lon, rayonKm, maxResultat
   if (apiKey) params.set("key", apiKey);
 
   try {
-    const resp = await fetch(`https://api.openchargemap.io/v3/poi/?${params.toString()}`);
+    const resp = await fetchAvecRetry(`https://api.openchargemap.io/v3/poi/?${params.toString()}`);
     if (resp.status === 403) {
       console.warn("[OCM] HTTP 403 : clé API manquante ou invalide.");
       return { ok: false, bornes: [], erreur: "cle_manquante" };

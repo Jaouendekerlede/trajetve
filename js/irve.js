@@ -7,7 +7,7 @@
 import { haversineKm } from "./geo.js";
 import { extrairePrixKwh } from "./ocm.js";
 import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
-import { avecMemoire } from "./util.js";
+import { avecMemoire, fetchAvecRetry } from "./util.js";
 
 const API = "https://tabular-api.data.gouv.fr/api/resources/eb76d20a-8501-400e-b336-d85724de5435/data/";
 const RAYON_RECHERCHE_M = 150;
@@ -170,7 +170,7 @@ export function chargerEtatsDynamiques() {
         etatsCharges = Number(garde.headers.get("x-date"));
         return etatsPdc;
       }
-      const resp = await fetch(URL_ETATS);
+      const resp = await fetchAvecRetry(URL_ETATS);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       etatsPdc = lireEtatsCsv(await resp.text());
       etatsCharges = Date.now();
@@ -253,7 +253,7 @@ export async function infosOfficiellesBorne(lat, lon, indices = {}) {
       page_size: "50",
     });
     try {
-      const resp = await fetch(`${API}?${params}`);
+      const resp = await fetchAvecRetry(`${API}?${params}`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const lignes = (await resp.json()).data || [];
       const stations = new Map();
@@ -313,7 +313,7 @@ async function page(params, numero, taille) {
   const p = new URLSearchParams(params);
   p.set("page", String(numero));
   p.set("page_size", String(taille));
-  const resp = await fetch(`${API}?${p}`);
+  const resp = await fetchAvecRetry(`${API}?${p}`);
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
 }
