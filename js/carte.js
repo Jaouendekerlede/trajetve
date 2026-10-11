@@ -506,7 +506,7 @@ function iconeBorne(b) {
     iconSize: [36, 46],
     iconAnchor: [18, 44],
     tooltipAnchor: [0, -40],
-    html: `<div class="ev-pin ${classePuissance(kw)}${b === selection ? " selection" : ""}"><span>${kw || "?"}</span>${cbConfirmee(b) ? '<b class="ev-pin-cb">CB</b>' : ""}${etat ? `<i class="ev-pin-etat ${etat}"></i>` : ""}</div>`,
+    html: `<div class="ev-pin ${classePuissance(kw)}${b === selection ? " selection" : ""}"><span>${kw || "?"}</span>${cbConfirmee(b) ? '<b class="ev-pin-cb">💳</b>' : ""}${etat ? `<i class="ev-pin-etat ${etat}"></i>` : ""}</div>`,
   });
 }
 
