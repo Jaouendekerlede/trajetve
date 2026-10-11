@@ -911,7 +911,6 @@ function ficheBorneHtml(b, ctx) {
       ${pastilleEtat(b.etat_dynamique) || (o ? `<span class="ev-cb-pill neutre">❔ Occupation en temps réel inconnue</span>` : "")}
       <span class="ev-cb-pill ${cb.classe}">${cb.court}</span>
       ${points ? `<span class="ev-cb-pill neutre">🔌 ${escapeHtml(points)} point${points > 1 ? "s" : ""}</span>` : ""}
-      ${o?.horaires ? `<span class="ev-cb-pill neutre">🕐 ${escapeHtml(o.horaires)}</span>` : ""}
       ${b.statut ? `<span class="ev-cb-pill ${statutOk ? "ok" : "warn"}">${statutOk ? "✅ En service (déclaré)" : `⚠️ ${escapeHtml(b.statut)}`}</span>` : ""}
       ${o?.gratuit === "oui" ? `<span class="ev-cb-pill ok">🎁 Gratuit</span>` : ""}
     </div>
@@ -1007,7 +1006,6 @@ function ficheBorneHtml(b, ctx) {
       ligneInfo("Restriction de gabarit", escapeHtml(o.restriction_gabarit)) +
       ligneInfo("Emplacement", escapeHtml(o.implantation)) +
       ligneInfo("Adresse déclarée", escapeHtml(o.adresse));
-    html += `<div class="ev-carte-bloc"><h3>🕐 Accès</h3><div>${acces}</div></div>`;
 
     const contact = o.contact ? (o.contact.includes("@") ? `<a href="mailto:${escapeHtml(o.contact)}">${escapeHtml(o.contact)}</a>` : escapeHtml(o.contact)) : "";
     const operateur =
@@ -1019,11 +1017,20 @@ function ficheBorneHtml(b, ctx) {
       ligneInfo("Remarques", escapeHtml(o.observations)) +
       (o.date_mise_en_service ? ligneInfo("Mise en service", dateFr(o.date_mise_en_service)) : "") +
       (o.date_maj ? ligneInfo("Mise à jour officielle", dateFr(o.date_maj)) : "");
-    html += `<div class="ev-carte-bloc"><h3>🏢 Opérateur</h3><div>${operateur}</div></div>`;
-    html += hint(
-      `Source : Base nationale officielle des bornes (IRVE, data.gouv.fr), déclarée par l'opérateur — station « ${o.nom_station || o.id_station} » à ${o.distance_m} m.` +
-        (o.points_consultes < o.nombre_points ? ` Détail établi sur ${o.points_consultes} des ${o.nombre_points} points.` : ""),
-    );
+
+    // Repliées par défaut : adresse/horaires/opérateur sont déjà dans
+    // l'en-tête ou utiles seulement de temps en temps (PMR, gabarit,
+    // contact...) -- la fiche s'alourdissait à mesure que l'appli
+    // s'enrichissait. Demande explicite de l'utilisateur le 2026-10-11.
+    html += `<details class="ev-details">
+      <summary>ℹ️ Plus de détails (accès, opérateur, source)</summary>
+      <div class="ev-carte-bloc"><h3>🕐 Accès</h3><div>${acces}</div></div>
+      <div class="ev-carte-bloc"><h3>🏢 Opérateur</h3><div>${operateur}</div></div>
+      ${hint(
+        `Source : Base nationale officielle des bornes (IRVE, data.gouv.fr), déclarée par l'opérateur — station « ${o.nom_station || o.id_station} » à ${o.distance_m} m.` +
+          (o.points_consultes < o.nombre_points ? ` Détail établi sur ${o.points_consultes} des ${o.nombre_points} points.` : ""),
+      )}
+    </details>`;
   } else if (b.officiel === undefined) {
     html += hint("🔎 Recherche des informations officielles (paiement CB, tarifs, horaires, accès)…");
   } else if (b.officiel?.indisponible) {
