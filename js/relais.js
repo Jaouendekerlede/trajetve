@@ -41,9 +41,12 @@ export async function lireEtatVehiculeRelais() {
   }
 }
 
-// type : "panne" | "retabli" | "manquante". Best-effort : le signalement
-// local (storage.js) est déjà fait avant cet appel, celui-ci n'est qu'un
-// partage en plus, jamais bloquant.
+// type : "panne" | "retabli" | "manquante" (déjà fait en local avant cet
+// appel, celui-ci n'est qu'un partage en plus) ou "libre" | "occupee"
+// (occupation confirmée sur place, sans équivalent local -- demande
+// explicite de l'utilisateur le 2026-10-11, pour compenser les opérateurs
+// qui ne transmettent pas leur état officiel). Toujours best-effort, jamais
+// bloquant.
 export async function signalerBornePartage(lat, lon, type, extra = {}) {
   const base = urlRelais();
   if (!base) return;

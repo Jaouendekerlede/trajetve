@@ -935,6 +935,19 @@ function ficheBorneHtml(b, ctx) {
   html += panneJusqua
     ? `<div class="ev-alerte">⚠️ Tu as signalé cette borne en panne : elle n'est plus proposée dans tes trajets jusqu'au ${new Date(panneJusqua).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}. <button id="ev-borne-panne-btn" class="ev-lien" type="button">✅ Elle remarche</button></div>`
     : `<button id="ev-borne-panne-btn" class="ev-lien" type="button">⚠️ Signaler cette borne en panne (${JOURS_BORNE_EN_PANNE} jours)</button>`;
+  // Occupation confirmée sur place, partagée avec les autres utilisateurs de
+  // TrajetVE via le relais (voir relais.js) -- complète l'occupation
+  // officielle quand l'opérateur ne la transmet pas. Visible seulement si un
+  // relais est configuré : sans ça, les boutons ne serviraient à rien.
+  // Demande explicite de l'utilisateur le 2026-10-11.
+  if (relaisConfigure()) {
+    html += `
+    <div class="ev-hint">Tu es sur place ? Dis-nous si elle est libre :</div>
+    <div class="ev-actions-rangee">
+      <button id="ev-borne-confirme-libre-btn" class="ev-action" type="button"><span>✅</span>Libre</button>
+      <button id="ev-borne-confirme-occupee-btn" class="ev-action" type="button"><span>⏳</span>Occupée</button>
+    </div>`;
+  }
   // Signalements des AUTRES utilisateurs (relais partagé, voir relais.js) --
   // rempli de façon asynchrone juste après l'affichage de la fiche, pas ici
   // (synchrone). Demande explicite du 2026-10-09.
@@ -1041,6 +1054,14 @@ function remplirFiche(b, ctx) {
     signalerBornePartage(b.lat, b.lon, signalee ? "panne" : "retabli", { nom });
     remplirFiche(b, ctx);
   });
+  $("ev-borne-confirme-libre-btn")?.addEventListener("click", () => {
+    toast("✅ Merci, c'est partagé avec les autres utilisateurs de TrajetVE.");
+    signalerBornePartage(b.lat, b.lon, "libre", { nom });
+  });
+  $("ev-borne-confirme-occupee-btn")?.addEventListener("click", () => {
+    toast("⏳ Merci, c'est partagé avec les autres utilisateurs de TrajetVE.");
+    signalerBornePartage(b.lat, b.lon, "occupee", { nom });
+  });
   afficherSignalementsPartages(b);
 }
 
@@ -1049,6 +1070,11 @@ function remplirFiche(b, ctx) {
 // fiche (réseau potentiellement lent/absent). Demande explicite du
 // 2026-10-09 : les signalements "en panne" restaient connus seulement du
 // téléphone qui avait signalé.
+// Une confirmation d'occupation vieille de plusieurs heures n'a plus de
+// valeur (la place a pu changer de mains) -- même fenêtre que l'occupation
+// officielle (OCCUPATION_RECENTE_MS, irve.js) pour rester cohérent.
+const OCCUPATION_PARTAGEE_RECENTE_MS = 3600 * 1000;
+
 async function afficherSignalementsPartages(b) {
   const zone = $("ev-borne-signalements-partages");
   if (!zone || !relaisConfigure()) return;
@@ -1056,10 +1082,17 @@ async function afficherSignalementsPartages(b) {
   if (!zone.isConnected) return; // fiche fermée/changée pendant l'attente réseau
   const ici = proches.filter((s) => Math.abs(s.lat - b.lat) < 0.001 && Math.abs(s.lon - b.lon) < 0.0015);
   if (!ici.length) return;
+  const lignes = [];
   const dernier = ici[ici.length - 1];
   if (dernier.type === "panne") {
-    zone.innerHTML = `<div class="ev-alerte">⚠️ Signalée en panne par un autre utilisateur de TrajetVE le ${new Date(dernier.ts).toLocaleDateString("fr-FR")}${dernier.commentaire ? ` : ${escapeHtml(dernier.commentaire)}` : ""}.</div>`;
+    lignes.push(`<div class="ev-alerte">⚠️ Signalée en panne par un autre utilisateur de TrajetVE le ${new Date(dernier.ts).toLocaleDateString("fr-FR")}${dernier.commentaire ? ` : ${escapeHtml(dernier.commentaire)}` : ""}.</div>`);
   }
+  const dernierOccupation = [...ici].reverse().find((s) => s.type === "libre" || s.type === "occupee");
+  if (dernierOccupation && Date.now() - dernierOccupation.ts < OCCUPATION_PARTAGEE_RECENTE_MS) {
+    const libre = dernierOccupation.type === "libre";
+    lignes.push(`<div class="ev-cb-pill ${libre ? "ok" : "warn"}">👤 ${libre ? "Libre" : "Occupée"} (confirmé par un utilisateur ${ageTexte(Date.now() - dernierOccupation.ts)})</div>`);
+  }
+  zone.innerHTML = lignes.join("");
 }
 
 function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer = false } = {}) {
