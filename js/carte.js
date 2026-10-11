@@ -460,6 +460,20 @@ function cbConfirmee(b) {
   return cb === "oui" || cb === "partiel";
 }
 
+// Pastille « feu » sur l'épingle, pour voir d'un coup d'œil sans ouvrir la
+// fiche -- demande explicite de l'utilisateur le 2026-10-11 (occupation en
+// temps réel trop discrète dans la fiche). Vert = au moins une place libre,
+// orange = toutes les places (restantes) occupées, rouge = hors service.
+// Rien si l'état n'est pas connu (pas de fausse information).
+function couleurEtatBorne(b) {
+  const e = b.etat_dynamique;
+  if (!e) return null;
+  if (e.tous_hors_service) return "rouge";
+  if (!e.libres && e.occupes) return "orange";
+  if (e.libres) return "vert";
+  return null;
+}
+
 // Bornes proches regroupées en un rond « nombre » quand elles se
 // chevaucheraient ; séparées à partir du zoom 16. Sans l'extension (réseau),
 // simple couche sans regroupement.
@@ -486,12 +500,13 @@ function creerCoucheBornes() {
 
 function iconeBorne(b) {
   const kw = puissanceBorne(b);
+  const etat = couleurEtatBorne(b);
   return L.divIcon({
     className: "",
     iconSize: [36, 46],
     iconAnchor: [18, 44],
     tooltipAnchor: [0, -40],
-    html: `<div class="ev-pin ${classePuissance(kw)}${b === selection ? " selection" : ""}"><span>${kw || "?"}</span>${cbConfirmee(b) ? '<b class="ev-pin-cb">CB</b>' : ""}</div>`,
+    html: `<div class="ev-pin ${classePuissance(kw)}${b === selection ? " selection" : ""}"><span>${kw || "?"}</span>${cbConfirmee(b) ? '<b class="ev-pin-cb">CB</b>' : ""}${etat ? `<i class="ev-pin-etat ${etat}"></i>` : ""}</div>`,
   });
 }
 
