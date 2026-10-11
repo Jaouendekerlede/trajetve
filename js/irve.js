@@ -35,7 +35,19 @@ function telephone(t) {
   return brut ? { affichage: brut.replace(/[-.]/g, " "), lien: `tel:${brut.replace(/[^\d+]/g, "")}` } : null;
 }
 
-function agregerStation(lignes, distanceM) {
+function agregerStation(lignesBrutes, distanceM) {
+  // La base officielle renvoie parfois la même ligne plusieurs fois pour un
+  // même point de charge (doublon côté source) -- sans ce tri, "nombre de
+  // points" et l'occupation comptaient chaque point en double (ex : 3
+  // bornes réelles affichées comme 6) -- signalé par l'utilisateur le
+  // 2026-10-11 (Intermarché Saint-Nazaire : 3 bornes sur place, 6 affichées).
+  const vus = new Set();
+  const lignes = lignesBrutes.filter((l) => {
+    const id = texteUtile(l.id_pdc_itinerance) || l;
+    if (vus.has(id)) return false;
+    vus.add(id);
+    return true;
+  });
   const l0 = lignes[0];
   const prises = {};
   const ajouterPrise = (cle, libelle, ligne) => {
