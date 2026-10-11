@@ -8,7 +8,8 @@ import { haversineKm } from "./geo.js";
 import { extrairePrixKwh } from "./ocm.js";
 import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
 import { avecMemoire, fetchAvecRetry } from "./util.js";
-import { noterFiabiliteOperateur } from "./storage.js";
+import { noterFiabiliteOperateur, listerFiabiliteOperateurs } from "./storage.js";
+import { publierFiabiliteOperateurs } from "./relais.js";
 
 const API = "https://tabular-api.data.gouv.fr/api/resources/eb76d20a-8501-400e-b336-d85724de5435/data/";
 const RAYON_RECHERCHE_M = 150;
@@ -494,6 +495,9 @@ export async function enrichirBornes(bornes, { attendreEtats = false } = {}) {
     if (attendreEtats && officiel?.operateur) {
       const e = b.etat_dynamique;
       noterFiabiliteOperateur(officiel.operateur, e?.libres || e?.occupes ? "frais" : e?.libres_anciens || e?.occupes_anciens ? "ancien" : "aucune");
+      // Partagée avec JARVIS via le relais (voir relais.js) -- limitée en
+      // fréquence là-bas, pas besoin de s'en soucier ici.
+      publierFiabiliteOperateurs(listerFiabiliteOperateurs());
     }
   }
   return bornes;

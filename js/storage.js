@@ -607,6 +607,14 @@ export function fiabiliteOperateur(operateur) {
   return lireJson(STORAGE_KEYS.fiabiliteOperateurs, {})[nom.toLowerCase()] || null;
 }
 
+// Instantané complet, pour le publier sur le relais partagé (voir relais.js
+// publierFiabiliteOperateurs) -- jarvis_ev_charge_runtime.py le lit pour
+// profiter de ce que TrajetVE a observé sur le terrain. Demande explicite
+// de l'utilisateur le 2026-10-11.
+export function listerFiabiliteOperateurs() {
+  return lireJson(STORAGE_KEYS.fiabiliteOperateurs, {});
+}
+
 // true seulement avec assez d'historique pour être significatif (pas après
 // une seule borne mal lotie).
 export function operateurPeuFiable(operateur) {

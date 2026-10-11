@@ -83,6 +83,32 @@ export async function signalerBornePartage(lat, lon, type, extra = {}) {
   }
 }
 
+// Fiabilité des opérateurs (quels opérateurs transmettent vraiment leur
+// occupation en temps réel, voir storage.js noterFiabiliteOperateur) --
+// publiée sur le relais au fil de l'eau, pour que
+// jarvis_ev_charge_runtime.py en profite aussi. Limité à une fois toutes
+// les 5 min (une nouvelle observation à chaque borne consultée suffirait
+// sinon à spammer le relais). Toujours best-effort. Demande explicite de
+// l'utilisateur le 2026-10-11.
+const DELAI_MIN_PUBLICATION_FIABILITE_MS = 5 * 60000;
+let dernierePublicationFiabilite = 0;
+
+export async function publierFiabiliteOperateurs(donnees) {
+  const base = urlRelais();
+  if (!base || Date.now() - dernierePublicationFiabilite < DELAI_MIN_PUBLICATION_FIABILITE_MS) return;
+  dernierePublicationFiabilite = Date.now();
+  try {
+    await fetch(`${base}/fiabilite-operateurs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(donnees),
+      signal: avecDelai(),
+    });
+  } catch {
+    // Sans conséquence : la base locale reste à jour de toute façon.
+  }
+}
+
 let cache = { cle: "", ts: 0, donnees: [] };
 const DUREE_CACHE_MS = 5 * 60000;
 

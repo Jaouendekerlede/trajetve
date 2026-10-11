@@ -4,7 +4,7 @@ import { installerFetch, installerLocalStorage } from "./aide.mjs";
 
 installerLocalStorage();
 const { sauverReglages } = await import("../js/storage.js");
-const { trajetSuggereParJarvis } = await import("../js/relais.js");
+const { trajetSuggereParJarvis, publierFiabiliteOperateurs } = await import("../js/relais.js");
 
 sauverReglages({ relais_url: "https://relais.test" });
 
@@ -28,4 +28,13 @@ test("trajet suggéré par JARVIS : rien si le relais ne répond pas (sans plant
 test("trajet suggéré par JARVIS : rien sans destination publiée", async () => {
   installerFetch(() => ({ statut: 404, json: { ok: false, erreur: "aucun trajet suggéré" } }));
   assert.equal(await trajetSuggereParJarvis(), null);
+});
+
+test("fiabilité des opérateurs : publiée sur le relais, puis bridée (5 min) pour ne pas le spammer", async () => {
+  const appels = installerFetch(() => ({ json: { ok: true } }));
+  await publierFiabiliteOperateurs({ "power dot": { frais: 3, ancien: 0, aucune: 0 } });
+  await publierFiabiliteOperateurs({ "power dot": { frais: 4, ancien: 0, aucune: 0 } }); // juste après : ignoré
+  const appelsFiabilite = appels.filter((a) => a.url.includes("/fiabilite-operateurs"));
+  assert.equal(appelsFiabilite.length, 1, "le deuxième appel immédiat est filtré");
+  assert.equal(JSON.parse(appelsFiabilite[0].options.body)["power dot"].frais, 3);
 });
