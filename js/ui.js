@@ -442,6 +442,17 @@ function pastilleEtat(etat) {
   if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>${partielle}`;
   if (etat.libres) return `<span class="ev-cb-pill ok">✅ ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>${partielle}`;
   if (etat.occupes) return `<span class="ev-cb-pill warn">⏳ Occupée (${age})</span>${partielle}`;
+  // Rien de frais (opérateur qui republie rarement, ex. Power Dot) : le
+  // dernier état connu reste plus utile qu'un silence complet, à condition
+  // de dire clairement son âge -- demande explicite de l'utilisateur le
+  // 2026-10-11 (une station visitée sur place, 0 donnée récente du tout).
+  if (etat.libres_anciens || etat.occupes_anciens) {
+    const ancien = etat.age_ancien_ms ? ageTexte(etat.age_ancien_ms) : "ancien";
+    const texte = etat.libres_anciens
+      ? `${etat.libres_anciens} libre${etat.libres_anciens > 1 ? "s" : ""}`
+      : `${etat.occupes_anciens} occupée${etat.occupes_anciens > 1 ? "s" : ""}`;
+    return `<span class="ev-cb-pill neutre">🕓 Dernière info : ${texte} (${ancien}, à vérifier)</span>${partielle}`;
+  }
   return partielle;
 }
 

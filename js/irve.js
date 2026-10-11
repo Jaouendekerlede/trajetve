@@ -141,12 +141,17 @@ function lireEtatsCsv(texte) {
     col("etat_prise_type_2"), col("etat_prise_type_combo_ccs"), col("etat_prise_type_chademo"), col("etat_prise_type_ef"),
   ];
   const etats = {};
-  const limiteOccupation = Date.now() - OCCUPATION_RECENTE_MS;
   for (let i = 1; i < lignes.length; i++) {
     const v = lignes[i].split(",");
     if (v.length <= cDate) continue;
     const t = Date.parse(v[cDate].replace(" ", "T"));
-    if (v[cEtat] === "hors_service" || (v[cEtat] === "en_service" && t > limiteOccupation)) {
+    // On garde aussi l'occupation ancienne (pas seulement < 1 h) : certains
+    // opérateurs republient rarement (ex. Power Dot, vu jusqu'à 5 h sans
+    // nouvelle donnée) -- sans ça, etatStation() n'a jamais rien à montrer
+    // pour ces bornes-là. etatStation() décide ensuite si c'est assez frais
+    // pour compter comme « maintenant » ou seulement comme dernier repère.
+    // Demande explicite de l'utilisateur le 2026-10-11.
+    if (v[cEtat] === "hors_service" || v[cEtat] === "en_service") {
       // Prise(s) en panne individuellement, même quand le point reste
       // "en_service" dans l'ensemble (une autre prise du même point marche
       // encore) -- demande explicite du 2026-10-10, détail absent jusqu'ici.
@@ -197,16 +202,20 @@ export function chargerEtatsDynamiques() {
   return chargementEtats;
 }
 
-// Synthèse pour une station officielle : points hors service, et points
-// libres si l'information est récente.
+// Synthèse pour une station officielle : points hors service, occupation
+// récente (< 1 h, comptée normalement), et à défaut dernier état connu plus
+// ancien (compté à part, affiché seulement en l'absence de donnée fraîche).
 export function etatStation(officiel) {
   const ids = officiel?.ids_pdc;
   if (!etatsPdc || !ids?.length) return null;
   let horsService = 0;
   let libres = 0;
   let occupes = 0;
+  let libresAnciens = 0;
+  let occupesAnciens = 0;
   let dateSignalement = 0;
   let dateOccupation = 0;
+  let dateAncienne = 0;
   const prisesPartielles = new Set();
   const limite = Date.now() - OCCUPATION_RECENTE_MS;
   for (const id of ids) {
@@ -215,22 +224,40 @@ export function etatStation(officiel) {
     if (e.e === "hors_service") {
       horsService++;
       dateSignalement = Math.max(dateSignalement, e.t || 0);
-    } else if (e.e === "en_service" && e.t > limite) {
-      if (e.o === "libre") libres++;
-      else if (e.o === "occupe" || e.o === "reserve") occupes++;
-      if (e.o === "libre" || e.o === "occupe" || e.o === "reserve") dateOccupation = Math.max(dateOccupation, e.t);
+      continue;
+    }
+    if (e.e !== "en_service") continue;
+    const libre = e.o === "libre";
+    const occupe = e.o === "occupe" || e.o === "reserve";
+    if (!libre && !occupe) continue;
+    if (e.t > limite) {
+      if (libre) libres++;
+      else occupes++;
+      dateOccupation = Math.max(dateOccupation, e.t);
       // Point globalement "en service" mais une de ses prises est en panne
       // (ex: Combo CCS cassé, Type 2 encore utilisable sur le même point).
       if (e.p?.length) for (const p of e.p) prisesPartielles.add(p);
+    } else {
+      // Dernier état connu, trop ancien pour compter comme « maintenant »,
+      // mais toujours mieux qu'un silence complet -- certains opérateurs
+      // (ex. Power Dot) republient rarement. Affiché seulement si rien de
+      // plus frais n'existe (voir pastilleEtat côté affichage). Demande
+      // explicite de l'utilisateur le 2026-10-11.
+      if (libre) libresAnciens++;
+      else occupesAnciens++;
+      dateAncienne = Math.max(dateAncienne, e.t);
     }
   }
-  if (!horsService && !libres && !occupes) return null;
+  if (!horsService && !libres && !occupes && !libresAnciens && !occupesAnciens) return null;
   return {
     total: ids.length,
     hors_service: horsService,
     tous_hors_service: horsService === ids.length,
     libres,
     occupes,
+    libres_anciens: libresAnciens,
+    occupes_anciens: occupesAnciens,
+    age_ancien_ms: dateAncienne ? Date.now() - dateAncienne : null,
     date_signalement: dateSignalement || null,
     // Panne déclarée il y a longtemps : l'information elle-même est douteuse.
     signalement_ancien: !!dateSignalement && Date.now() - dateSignalement > SIGNALEMENT_ANCIEN_MS,
