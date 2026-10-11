@@ -199,7 +199,6 @@ export function quitterNavigation() {
 
 export function dessinerRouteNavigation(coords, arrets, destination) {
   coucheNav.clearLayers();
-  coucheFleche = null;
   const ll = coords.map(([lon, lat]) => L.latLng(lat, lon));
   pointsRoute = ll;
   indiceDecoupe = -1;
@@ -259,20 +258,6 @@ function poserFeuxProches(position) {
   marqueursFeux = feuxNav
     .filter((f) => carte.distance(centreFeux, [f.lat, f.lon]) < RAYON_FEUX_M)
     .map((f) => L.marker([f.lat, f.lon], { icon: pastille(24, "rgba(40,40,45,.92)", symbole), zIndexOffset: 4400, interactive: false }).addTo(coucheNav));
-}
-
-// Flèche blanche du prochain virage sur le tracé (null : l'effacer).
-let coucheFleche = null;
-export function dessinerFlecheManoeuvre(fleche) {
-  coucheFleche?.remove();
-  coucheFleche = null;
-  if (!fleche || !coucheNav) return;
-  const ll = (pts) => pts.map(([lon, lat]) => [lat, lon]);
-  coucheFleche = L.layerGroup([
-    L.polyline(ll(fleche.ligne), { color: "#0a2a5c", opacity: 0.5, weight: 10, lineCap: "round", lineJoin: "round", interactive: false }),
-    L.polyline(ll(fleche.ligne), { color: "#ffffff", opacity: 0.92, weight: 6, lineCap: "round", lineJoin: "round", interactive: false }),
-    L.polygon(ll(fleche.pointe), { stroke: false, fillColor: "#ffffff", fillOpacity: 0.92, interactive: false }),
-  ]).addTo(coucheNav);
 }
 
 export function majProgressionNavigation(coords, indice, lat, lon) {

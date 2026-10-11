@@ -373,14 +373,27 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
   // Borne d'axe rapide (nom d'aire, d'autoroute ou « direction … ») située à
   // gauche du sens de marche, à quelques centaines de mètres au plus.
   let cumulTrace = null;
-  function estDeLAutreSens(b) {
-    if (!NOM_AXE_RAPIDE.test(`${b.nom || ""} ${b.adresse || ""}`)) return false;
+  function cumuls() {
     if (!cumulTrace) {
       cumulTrace = [0];
       for (let i = 1; i < coords.length; i++) cumulTrace.push(cumulTrace[i - 1] + haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]) * 1000);
     }
-    const p = projeterSurTrace(b.lat, b.lon, coords, cumulTrace);
+    return cumulTrace;
+  }
+  function estDeLAutreSens(b) {
+    if (!NOM_AXE_RAPIDE.test(`${b.nom || ""} ${b.adresse || ""}`)) return false;
+    const p = projeterSurTrace(b.lat, b.lon, coords, cumuls());
     return !!p.gauche && p.d >= ECART_AUTRE_SENS_M[0] && p.d <= ECART_AUTRE_SENS_M[1];
+  }
+  // Coordonnée aberrante (donnée source mal géocodée -- IRVE déclaré par
+  // l'opérateur, ou entrée OpenChargeMap corrompue) : une borne à des
+  // dizaines de km du tracé lui-même, même si proche en ligne droite du
+  // point de recherche, finit parfois en pleine mer -- signalé par
+  // l'utilisateur le 2026-10-11 (borne affichée dans la baie de Biscaye).
+  // Un vrai détour pour une borne rapide dépasse rarement quelques km.
+  const ECART_MAX_TRACE_BORNE_M = 20000;
+  function coordonneesAberrantes(b) {
+    return projeterSurTrace(b.lat, b.lon, coords, cumuls()).d > ECART_MAX_TRACE_BORNE_M;
   }
 
   // Bornes compatibles, enrichies et notées autour d'un point du tracé ;
@@ -407,6 +420,7 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
     if (puissanceMinKw > 0) candidates = candidates.filter((b) => (b.puissance_max_kw || 0) >= puissanceMinKw);
     // Bornes signalées en panne par l'utilisateur : ni arrêt, ni plan B.
     if (options.estExclue) candidates = candidates.filter((b) => !options.estExclue(b));
+    candidates = candidates.filter((b) => !coordonneesAberrantes(b));
     if (!candidates.length) return { erreur: `Aucune borne compatible (connecteur/puissance) trouvée à proximité du km ${Math.round(km)}.` };
     if (options.enrichirBornes) await options.enrichirBornes(candidates);
     for (const b of candidates) b._score_info = calculerScoreBorne(b, profil, mode, !!options.preferCb);

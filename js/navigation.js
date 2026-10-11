@@ -32,7 +32,7 @@ export { traceRestante, dessinVoies } from "./nav-outils.js";
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe, LABELS_TYPE_RADAR } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
 import { zonesDeDanger, radarsSurTrace, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
-import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre } from "./geo.js";
+import { haversineKm, carresSurTrace, traceTraverseCarres } from "./geo.js";
 import { formaterMinutes, calculerTempsCharge } from "./planner.js";
 import { escapeHtml, lienAPied, estNuit } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
@@ -149,18 +149,6 @@ function pictoCarrefour(instr) {
   return instr.svgCarrefour;
 }
 
-// Flèche blanche sur la carte, à l'approche du virage.
-const DISTANCE_FLECHE_CARTE_M = 700;
-
-function majFlecheCarte(instr, distance) {
-  const cible = instr && distance < DISTANCE_FLECHE_CARTE_M && !etat.aLaBorne && !etat.arrive && !/WAYPOINT|ARRIVE/.test(instr.manoeuvre) ? instr : null;
-  if (cible === etat.flecheCarte) return;
-  etat.flecheCarte = cible;
-  // Rond-point : la flèche fait le tour jusqu'à la bonne sortie.
-  const apresM = cible?.offsetSortie ? cible.offsetSortie - cible.offset + 35 : 40;
-  vue.dessinerFlecheManoeuvre(cible ? flecheManoeuvre(etat.route.coords, etat.route.cum, cible.offset, { apresM }) : null);
-}
-
 function parler(texte, prioritaire = false) {
   if (!etat?.voix || !texte || !("speechSynthesis" in window)) return;
   if (prioritaire) speechSynthesis.cancel();
@@ -215,7 +203,6 @@ function installerRoute(route) {
   etat.annoncesBornes = new Set();
   // Le mode démo repart de la position actuelle sur le nouveau tracé.
   etat.demoOffset = null;
-  etat.flecheCarte = undefined;
   route.zonesDanger = etat.radars ? zonesDeDanger(etat.radars, route.coords, route.cum, route.limites) : [];
   route.radarsSurTrace = etat.radars ? radarsSurTrace(etat.radars, route.coords, route.cum) : [];
   route.feuxSurTrace = etat.feuxConnus.size ? radarsSurTrace([...etat.feuxConnus.values()], route.coords, route.cum) : [];
@@ -451,7 +438,6 @@ function majEcran() {
   if (!$("ev-nav-feuille").classList.contains("hidden")) majFeuilleDeRoute();
   majNotificationGuidage(instr);
   majNuitDouce();
-  majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
   majZoneDanger();
   verifierApprocheRadar();
   majFrise();
@@ -2749,7 +2735,6 @@ function changerVue(nouvelle) {
   vue.quitterNavigation();
   vue = nouvelle;
   vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
-  etat.flecheCarte = undefined;
   if (etat.route) vue.dessinerRouteNavigation(etat.route.coords, etat.arretsRestants, etat.destination);
   etat.posBornes = null;
   rafraichirBornesProches();
