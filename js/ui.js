@@ -1538,7 +1538,7 @@ function etapesHtml(p) {
             <div class="ev-borne-sous">${badgeOperateur(a.operateur)}${escapeHtml(a.operateur || "")}${a.adresse ? ` · ${escapeHtml(a.adresse)}` : ""}</div>
             <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span>${a.meteo ? `<span>🌡️ ${a.meteo.temperature_c} °C${a.meteo.pluie ? " 🌧️" : ""}</span>` : ""}</div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
-            <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique)}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique) || (a.officiel ? `<span class="ev-cb-pill neutre">❔ Occupation en temps réel inconnue</span>` : "")}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
             ${a.alternatives?.length ? `<div class="ev-hint">🔁 Plan B si elle est prise ou en panne : <strong>${escapeHtml(a.alternatives[0].nom)}</strong> (${escapeHtml(a.alternatives[0].distance_km)} km, ${escapeHtml(a.alternatives[0].puissance_max_kw)} kW)</div>` : ""}
             ${a.pct_evite_arret ? `<div class="ev-hint">💡 Charger jusqu'à ${nombre(a.pct_evite_arret.pct)} % ici aurait évité l'arrêt suivant, mais aurait pris ${formaterMinutes(a.pct_evite_arret.cout_min)} de plus au total.</div>` : ""}
           </div>

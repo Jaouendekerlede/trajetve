@@ -402,9 +402,11 @@ export async function calculerTrajetElectrique(ocmApiKey, distanceKm, coords, ch
   // l'opérateur, ou entrée OpenChargeMap corrompue) : une borne à des
   // dizaines de km du tracé lui-même, même si proche en ligne droite du
   // point de recherche, finit parfois en pleine mer -- signalé par
-  // l'utilisateur le 2026-10-11 (borne affichée dans la baie de Biscaye).
+  // l'utilisateur le 2026-10-11 (borne affichée dans la baie de Biscaye,
+  // persistant après un premier correctif à 20 km : Saint-Nazaire est tout
+  // en bordure de côte, resserré à 10 km pour vraiment l'écarter).
   // Un vrai détour pour une borne rapide dépasse rarement quelques km.
-  const ECART_MAX_TRACE_BORNE_M = 20000;
+  const ECART_MAX_TRACE_BORNE_M = 10000;
   function coordonneesAberrantes(b) {
     return projeterSurTrace(b.lat, b.lon, coords, cumuls()).d > ECART_MAX_TRACE_BORNE_M;
   }

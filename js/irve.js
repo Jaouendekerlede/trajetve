@@ -367,7 +367,11 @@ async function stationsOfficiellesZoneReseau(lat, lon, rayonKm, puissanceMin, ma
     }
     const nbPages = Math.min(Math.ceil(Math.min(total, maxLignes) / 50), Math.ceil(maxLignes / 50));
     const pages = await Promise.all(Array.from({ length: nbPages }, (_, i) => page(params, i + 1, 50)));
-    const lignes = pages.flatMap((p) => p.data || []).filter((l) => l.consolidated_latitude != null && l.consolidated_longitude != null);
+    // La base signale elle-même les coordonnées non vérifiées (déclarées par
+    // l'opérateur, jamais recoupées) -- on ne les garde pas : c'est une des
+    // façons dont une borne finit affichée en pleine mer. Signalé par
+    // l'utilisateur le 2026-10-11.
+    const lignes = pages.flatMap((p) => p.data || []).filter((l) => l.consolidated_latitude != null && l.consolidated_longitude != null && l.consolidated_is_lon_lat_correct !== false);
 
     const groupes = new Map();
     for (const l of lignes) {
