@@ -500,6 +500,7 @@ export async function bornesUrgence(lieuDeSecours) {
   if (!recherche.ok) return recherche;
   const connecteurs = obtenirProfilVehicule().connecteurs_acceptes;
   const bornes = recherche.bornes.filter((b) => borneCompatible(b, connecteurs)).slice(0, 3);
-  appliquerAbonnements(await enrichirBornes(bornes));
+  // Urgence : savoir si la borne est vraiment libre compte plus qu'ici qu'ailleurs.
+  appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true }));
   return { ...recherche, bornes };
 }

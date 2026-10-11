@@ -533,7 +533,7 @@ function renderBornes({ carteAussi = true } = {}) {
 async function enrichirProgressivement(bornes, toujoursValide) {
   for (let k = 0; k < bornes.length; k += 6) {
     const groupe = bornes.slice(k, k + 6);
-    appliquerAbonnements(await enrichirBornes(groupe));
+    appliquerAbonnements(await enrichirBornes(groupe, { attendreEtats: true }));
     if (!toujoursValide()) return;
     if (filtres.size) renderBornes();
     else {
@@ -1060,7 +1060,11 @@ function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer =
   $("ev-station-note-input").value = obtenirNoteBorne(nom, b.lat, b.lon);
 
   if (b.officiel === undefined) {
-    enrichirBornes([b]).then(appliquerAbonnements).then(() => {
+    // attendreEtats : sans ça, la fiche affiche parfois « occupation
+    // inconnue » alors que l'info existe bien, juste pas encore reçue (gros
+    // fichier des états en temps réel) -- signalé par l'utilisateur le
+    // 2026-10-11.
+    enrichirBornes([b], { attendreEtats: true }).then(appliquerAbonnements).then(() => {
       if (borneOuverte?.b === b) remplirFiche(b, contexteArret);
       rafraichirBorne(b);
     });
@@ -2157,7 +2161,7 @@ function demanderBornesADistance(minutes) {
     placerCurseur(r.lat, r.lon, `km ${r.distance_cible_km}`);
     const bornes = r.bornes || [];
     afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
-    appliquerAbonnements(await enrichirBornes(bornes));
+    appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true }));
     if (jeton === jetonFrise) afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
   }, 250);
 }
