@@ -24,7 +24,7 @@ import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
 import { RESEAUX_PAIEMENT, BADGES_MULTIRESEAUX, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
-import { relaisConfigure, lireEtatVehiculeRelais, signalerBornePartage, signalementsPartagesProches } from "./relais.js";
+import { relaisConfigure, lireEtatVehiculeRelais, trajetSuggereParJarvis, signalerBornePartage, signalementsPartagesProches } from "./relais.js";
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
@@ -291,6 +291,7 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   if (vue === "trajet") {
     remplirArretsImposes();
     majSuggestionTrajet();
+    majSuggestionJarvis();
   }
   // Appui long sur la carte pour imposer un point de passage : seulement
   // pendant la planification/le résultat (pas pendant la navigation, qui
@@ -2866,6 +2867,27 @@ export function proposerRechargeMaison() {
     texte: `🔌 Trajet ${quand} vers ${nomCourt(t.destination || "").split(",")[0]} (${nombre(t.distance_km)} km) : branchez ce soir en heures creuses pour partir à 100 %.`,
     boutons: [{ libelle: "OK", action: () => {} }],
   });
+}
+
+// « 🗓️ RDV médecin ? » : destination du prochain rendez-vous du jour,
+// publiée par JARVIS au moment du briefing "je pars en voiture" (voir
+// relais.js, jarvis_briefing_runtime.py). N'écrase jamais une destination
+// déjà saisie. Demande explicite de l'utilisateur le 2026-10-11.
+async function majSuggestionJarvis() {
+  const b = $("ev-suggestion-jarvis");
+  if ($("ev-destination-input").value.trim()) {
+    b.classList.add("hidden");
+    return;
+  }
+  const s = await trajetSuggereParJarvis();
+  if (!s) {
+    b.classList.add("hidden");
+    return;
+  }
+  b.dataset.dest = s.destination;
+  const heure = s.heure ? new Date(s.heure).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+  b.textContent = `🗓️ ${s.titre || "Rendez-vous"}${heure ? ` (${heure})` : ""} ?`;
+  b.classList.remove("hidden");
 }
 
 // « 💡 Travail ? » : destination souvent prise à cette heure-ci.

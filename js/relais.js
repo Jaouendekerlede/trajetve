@@ -41,6 +41,27 @@ export async function lireEtatVehiculeRelais() {
   }
 }
 
+// Destination probable publiée par JARVIS (agenda du jour) au moment du
+// briefing "je pars en voiture" -- { destination, titre, heure, maj_ts } ou
+// null si non configuré/indisponible/périmée (le worker l'expire après 4h,
+// mais on revérifie aussi côté appli au cas où la pendule du serveur
+// dérive). Demande explicite de l'utilisateur le 2026-10-11.
+const DUREE_TRAJET_PREVU_MS = 4 * 3600 * 1000;
+
+export async function trajetSuggereParJarvis() {
+  const base = urlRelais();
+  if (!base) return null;
+  try {
+    const r = await fetch(`${base}/trajet-prevu`, { signal: avecDelai() });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d?.ok || !d.destination || Date.now() - (d.maj_ts || 0) > DUREE_TRAJET_PREVU_MS) return null;
+    return d;
+  } catch {
+    return null;
+  }
+}
+
 // type : "panne" | "retabli" | "manquante" (déjà fait en local avant cet
 // appel, celui-ci n'est qu'un partage en plus) ou "libre" | "occupee"
 // (occupation confirmée sur place, sans équivalent local -- demande
