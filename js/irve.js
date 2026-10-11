@@ -8,6 +8,7 @@ import { haversineKm } from "./geo.js";
 import { extrairePrixKwh } from "./ocm.js";
 import { PRIX_KWH_ESTIME_DEFAUT_EUR } from "./config.js";
 import { avecMemoire, fetchAvecRetry } from "./util.js";
+import { noterFiabiliteOperateur } from "./storage.js";
 
 const API = "https://tabular-api.data.gouv.fr/api/resources/eb76d20a-8501-400e-b336-d85724de5435/data/";
 const RAYON_RECHERCHE_M = 150;
@@ -484,6 +485,16 @@ export async function enrichirBornes(bornes, { attendreEtats = false } = {}) {
   );
   // Points hors service (et occupation récente) déclarés par l'opérateur.
   if (attendreEtats) await etats;
-  for (const b of bornes) b.etat_dynamique = etatStation(b.officiel && !b.officiel.indisponible ? b.officiel : null);
+  for (const b of bornes) {
+    const officiel = b.officiel && !b.officiel.indisponible ? b.officiel : null;
+    b.etat_dynamique = etatStation(officiel);
+    // Fiabilité de l'opérateur (voir storage.js) : seulement quand on a
+    // vraiment attendu le fichier des états -- sinon un "rien" ne veut rien
+    // dire (pas encore téléchargé), ça fausserait la statistique.
+    if (attendreEtats && officiel?.operateur) {
+      const e = b.etat_dynamique;
+      noterFiabiliteOperateur(officiel.operateur, e?.libres || e?.occupes ? "frais" : e?.libres_anciens || e?.occupes_anciens ? "ancien" : "aucune");
+    }
+  }
   return bornes;
 }

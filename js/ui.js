@@ -4,7 +4,7 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero, operateurPeuFiable } from "./storage.js";
 import { planifierTrajet, simulerVitesseMax, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom, calculerZoneAtteignable } from "./tomtom.js";
 
@@ -915,6 +915,11 @@ function ficheBorneHtml(b, ctx) {
       ${b.statut ? `<span class="ev-cb-pill ${statutOk ? "ok" : "warn"}">${statutOk ? "✅ En service (déclaré)" : `⚠️ ${escapeHtml(b.statut)}`}</span>` : ""}
       ${o?.gratuit === "oui" ? `<span class="ev-cb-pill ok">🎁 Gratuit</span>` : ""}
     </div>
+    ${
+      o?.operateur && operateurPeuFiable(o.operateur)
+        ? `<div class="ev-hint">⚠️ D'après ce qu'on a observé sur tes trajets, <strong>${escapeHtml(o.operateur)}</strong> transmet rarement l'occupation en temps réel de ses bornes -- prévois un plan B.</div>`
+        : ""
+    }
     <div class="ev-actions-rangee">
       <a class="ev-action" href="${lienGoogleMaps(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🧭</span>Y aller</a>
       <a class="ev-action" href="${lienWaze(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🚗</span>Waze</a>
@@ -1554,6 +1559,11 @@ function etapesHtml(p) {
             <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span>${a.meteo ? `<span>🌡️ ${a.meteo.temperature_c} °C${a.meteo.pluie ? " 🌧️" : ""}</span>` : ""}</div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
             <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique) || (a.officiel ? `<span class="ev-cb-pill neutre">❔ Occupation en temps réel inconnue</span>` : "")}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            ${
+              (a.officiel?.operateur || a.operateur) && operateurPeuFiable(a.officiel?.operateur || a.operateur)
+                ? `<div class="ev-hint">⚠️ ${escapeHtml(a.officiel?.operateur || a.operateur)} transmet rarement l'occupation en temps réel -- vérifie un plan B.</div>`
+                : ""
+            }
             ${a.alternatives?.length ? `<div class="ev-hint">🔁 Plan B si elle est prise ou en panne : <strong>${escapeHtml(a.alternatives[0].nom)}</strong> (${escapeHtml(a.alternatives[0].distance_km)} km, ${escapeHtml(a.alternatives[0].puissance_max_kw)} kW)</div>` : ""}
             ${a.pct_evite_arret ? `<div class="ev-hint">💡 Charger jusqu'à ${nombre(a.pct_evite_arret.pct)} % ici aurait évité l'arrêt suivant, mais aurait pris ${formaterMinutes(a.pct_evite_arret.cout_min)} de plus au total.</div>` : ""}
           </div>

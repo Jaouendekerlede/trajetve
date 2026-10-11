@@ -571,6 +571,51 @@ export function facteurChargeAppris() {
   return Math.round((sessions.reduce((a, b) => a + b, 0) / sessions.length) * 100) / 100;
 }
 
+// ── Fiabilité des opérateurs (occupation en temps réel) ─────────────────────
+// Certains opérateurs ne transmettent presque jamais leur état en temps réel
+// à la base officielle (ex. observé le 2026-10-11 : Power Dot republie assez
+// régulièrement, Electra pas depuis des semaines) -- on le retient en local,
+// borne après borne consultée, pour prévenir avant de compter dessus plutôt
+// que de le découvrir sur place. Demande explicite de l'utilisateur.
+const MAX_OPERATEURS_FIABILITE = 300;
+const MIN_OBSERVATIONS_FIABILITE = 5;
+const SEUIL_FRAICHEUR_FIABLE = 0.15; // < 15 % d'observations fraîches : peu fiable.
+
+// resultat : "frais" (donnée < 1 h), "ancien" (donnée présente mais trop
+// vieille) ou "aucune" (aucune ligne du tout pour cette borne).
+export function noterFiabiliteOperateur(operateur, resultat) {
+  const nom = (operateur || "").trim();
+  if (!nom || !["frais", "ancien", "aucune"].includes(resultat)) return;
+  const cle = nom.toLowerCase();
+  const tous = lireJson(STORAGE_KEYS.fiabiliteOperateurs, {});
+  const entree = tous[cle] || { nom, frais: 0, ancien: 0, aucune: 0, maj: 0 };
+  entree[resultat]++;
+  entree.nom = nom; // dernière orthographe/casse vue
+  entree.maj = Date.now();
+  tous[cle] = entree;
+  const cles = Object.keys(tous);
+  if (cles.length > MAX_OPERATEURS_FIABILITE) {
+    cles.sort((a, b) => tous[a].maj - tous[b].maj);
+    delete tous[cles[0]];
+  }
+  ecrireJson(STORAGE_KEYS.fiabiliteOperateurs, tous);
+}
+
+export function fiabiliteOperateur(operateur) {
+  const nom = (operateur || "").trim();
+  if (!nom) return null;
+  return lireJson(STORAGE_KEYS.fiabiliteOperateurs, {})[nom.toLowerCase()] || null;
+}
+
+// true seulement avec assez d'historique pour être significatif (pas après
+// une seule borne mal lotie).
+export function operateurPeuFiable(operateur) {
+  const e = fiabiliteOperateur(operateur);
+  if (!e) return false;
+  const total = e.frais + e.ancien + e.aucune;
+  return total >= MIN_OBSERVATIONS_FIABILITE && e.frais / total < SEUIL_FRAICHEUR_FIABLE;
+}
+
 // ── Remise à zéro (Profil) ──────────────────────────────────────────────────
 // Efface réglages, favoris, historique, journal, abonnements, trajets et
 // données apprises ; garde la voiture (profil), les clés et la carte de la

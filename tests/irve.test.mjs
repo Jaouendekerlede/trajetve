@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { installerFetch } from "./aide.mjs";
-import { infosOfficiellesBorne } from "../js/irve.js";
+import { installerFetch, installerLocalStorage } from "./aide.mjs";
+import { infosOfficiellesBorne, enrichirBornes } from "../js/irve.js";
+import { operateurPeuFiable, fiabiliteOperateur } from "../js/storage.js";
+
+installerLocalStorage();
 
 // La base officielle renvoie parfois la même ligne deux fois pour un même
 // point de charge -- repéré sur une vraie station (Intermarché Saint-Nazaire,
@@ -32,4 +35,29 @@ test("agregerStation (via infosOfficiellesBorne) : des lignes dupliquées pour l
   assert.equal(o.nombre_points, 3);
   assert.equal(o.ids_pdc.length, 3);
   assert.equal(new Set(o.ids_pdc).size, 3, "pas d'id en double");
+});
+
+test("fiabilité des opérateurs : un opérateur qui ne transmet jamais est repéré après plusieurs bornes, pas après une seule", async () => {
+  const lignes = [{
+    id_station_itinerance: "FRMUETSTATION",
+    id_pdc_itinerance: "FRMUET00001",
+    nom_station: "Borne muette",
+    adresse_station: "1 rue du Silence",
+    nom_operateur: "Operateur Muet",
+    consolidated_latitude: 48.1,
+    consolidated_longitude: -1.6,
+    nbre_pdc: 1,
+    puissance_nominale: 22,
+    prise_type_2: true,
+  }];
+  installerFetch((url) => (url.includes("tabular-api.data.gouv.fr") ? { json: { data: lignes } } : { texte: "id_pdc_itinerance,etat_pdc,occupation_pdc,horodatage\n" }));
+  for (let i = 0; i < 4; i++) {
+    const borne = { lat: 48.1, lon: -1.6, operateur: "Operateur Muet" };
+    await enrichirBornes([borne], { attendreEtats: true });
+  }
+  assert.equal(operateurPeuFiable("Operateur Muet"), false, "pas encore assez d'observations (4 < 5)");
+  const borne5 = { lat: 48.1, lon: -1.6, operateur: "Operateur Muet" };
+  await enrichirBornes([borne5], { attendreEtats: true });
+  assert.equal(fiabiliteOperateur("Operateur Muet").aucune, 5);
+  assert.equal(operateurPeuFiable("Operateur Muet"), true, "5 observations, jamais rien -- repéré");
 });
