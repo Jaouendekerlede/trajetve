@@ -253,6 +253,19 @@ function calculerScoreBorne(borne, profil, mode, preferCb = false) {
     score += pts;
     details.push({ label: `${etat.hors_service} point(s) sur ${etat.total} déclaré(s) hors service`, points: pts });
   }
+  // Occupation en temps réel (déclarée il y a moins d'1 h) : une station où
+  // tous les points libres sont actuellement occupés a de bonnes chances de
+  // l'être encore à l'arrivée -- signalé par l'utilisateur le 2026-10-11
+  // (Intermarché Saint-Nazaire, indiquée par l'appli, les deux bornes
+  // prises sur place). Pénalité moindre qu'une panne : ça peut se libérer.
+  if (etat && !etat.tous_hors_service && !etat.libres && etat.occupes) {
+    score -= 25;
+    details.push({ label: `Les ${etat.occupes} point(s) restants sont actuellement occupés`, points: -25 });
+  } else if (etat?.occupes) {
+    const pts = -Math.min(10, Math.round((etat.occupes / etat.total) * 15));
+    score += pts;
+    details.push({ label: `${etat.occupes} point(s) sur ${etat.total} actuellement occupé(s)`, points: pts });
+  }
 
   if (preferCb) {
     const cb = borne.officiel?.paiement_cb;
