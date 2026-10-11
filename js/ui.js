@@ -23,7 +23,7 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
-import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
+import { RESEAUX_PAIEMENT, BADGES_MULTIRESEAUX, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
 import { relaisConfigure, lireEtatVehiculeRelais, signalerBornePartage, signalementsPartagesProches } from "./relais.js";
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
@@ -2894,9 +2894,14 @@ export function viderChampsTrajet() {
 function rendreMoyensPaiement() {
   const m = lireMoyens(lireReglages());
   const case_ = (attr, coche, texte) => `<label class="ev-check"><input type="checkbox" ${attr}${coche ? " checked" : ""}> ${texte}</label>`;
+  const options =
+    `<option value="">— Aucun —</option>` +
+    BADGES_MULTIRESEAUX.map((b) => `<option value="${b.id}"${m.badgeId === b.id ? " selected" : ""}>${escapeHtml(b.nom)}</option>`).join("") +
+    `<option value="autre"${m.badgeId === "autre" ? " selected" : ""}>Un autre badge multi-réseaux</option>`;
   $("ev-moyens-paiement").innerHTML =
     case_('data-moyen="cb"', m.cb, "💳 Carte bancaire sans contact") +
-    case_('data-moyen="badge"', m.badge, "🪪 Un badge multi-réseaux (Chargemap, Freshmile, Shell Recharge…)") +
+    `<label class="ev-champ"><span class="ev-champ-titre">🪪 Mon badge multi-réseaux</span><select id="ev-moyen-badge" class="ev-input">${options}</select></label>` +
+    `<div class="ev-hint">Les 10 plus répandus en France : il fonctionne presque partout grâce à l'interopérabilité obligatoire entre réseaux publics (seule vraie exception connue : les Superchargeurs Tesla, badge-less). La différence entre eux, c'est surtout le prix.</div>` +
     `<div class="ev-hint">Les applis de réseau où j'ai un compte :</div>` +
     RESEAUX_PAIEMENT.map((r) => case_(`data-reseau="${r.id}"`, m.reseaux.includes(r.id), `📲 ${escapeHtml(r.nom)}`)).join("");
 }
@@ -2906,7 +2911,7 @@ function enregistrerMoyensPaiement() {
   sauverReglages({
     moyens_paiement: {
       cb: zone.querySelector('[data-moyen="cb"]').checked,
-      badge: zone.querySelector('[data-moyen="badge"]').checked,
+      badge_id: zone.querySelector("#ev-moyen-badge").value,
       reseaux: [...zone.querySelectorAll("[data-reseau]:checked")].map((c) => c.dataset.reseau),
     },
   });

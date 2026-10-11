@@ -6,8 +6,16 @@ const { facilitePaiement, lireMoyens, reseauDeLaBorne } = await import("../js/pa
 const borne = (operateur, officiel) => ({ nom: "Borne", operateur, lat: 48, lon: -2, officiel });
 
 test("moyens de paiement : carte bancaire seule par défaut", () => {
-  assert.deepEqual(lireMoyens({}), { cb: true, badge: false, reseaux: [] });
-  assert.deepEqual(lireMoyens({ moyens_paiement: { cb: false, badge: true, reseaux: ["ionity"] } }), { cb: false, badge: true, reseaux: ["ionity"] });
+  assert.deepEqual(lireMoyens({}), { cb: true, badge: false, badgeId: "", badgeNom: "", reseaux: [] });
+  assert.deepEqual(
+    lireMoyens({ moyens_paiement: { cb: false, badge_id: "chargemap", reseaux: ["ionity"] } }),
+    { cb: false, badge: true, badgeId: "chargemap", badgeNom: "Chargemap Pass", reseaux: ["ionity"] },
+  );
+  // Ancien réglage (avant l'ajout du choix précis) : gardé comme "autre badge".
+  assert.deepEqual(
+    lireMoyens({ moyens_paiement: { cb: true, badge: true, reseaux: [] } }),
+    { cb: true, badge: true, badgeId: "autre", badgeNom: "ton badge multi-réseaux", reseaux: [] },
+  );
 });
 
 test("moyens de paiement : ce qui est sûr, probable ou incertain sur une borne", () => {
@@ -17,8 +25,10 @@ test("moyens de paiement : ce qui est sûr, probable ou incertain sur une borne"
   assert.equal(facilitePaiement(borne("Ville de Vannes", { paiement_cb: "non" }), cbSeule).niveau, "incertain");
   assert.equal(facilitePaiement(borne("Ville de Vannes", { paiement_cb: "non", gratuit: "oui" }), cbSeule).niveau, "sur", "gratuite");
 
-  const avecBadge = { cb: true, badge: true, reseaux: [] };
-  assert.equal(facilitePaiement(borne("Ville de Vannes", { paiement_cb: "non" }), avecBadge).niveau, "probable");
+  const avecBadge = { cb: true, badge: true, badgeId: "chargemap", badgeNom: "Chargemap Pass", reseaux: [] };
+  const rBadge = facilitePaiement(borne("Ville de Vannes", { paiement_cb: "non" }), avecBadge);
+  assert.equal(rBadge.niveau, "probable");
+  assert.ok(rBadge.texte.includes("Chargemap Pass"), "nomme le badge choisi, pas un générique");
   assert.equal(facilitePaiement(borne("Tesla Supercharger", { paiement_cb: "non" }), avecBadge).niveau, "incertain", "pas de badge chez Tesla");
 
   const avecTesla = { cb: true, badge: false, reseaux: ["tesla"] };
