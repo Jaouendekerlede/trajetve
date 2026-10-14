@@ -106,21 +106,6 @@ test("route barrée : détecte si le nouveau tracé passe encore par l'endroit",
   assert.equal(traceTraverseCarres([[-1.68, 48.1], [-1.678, 48.1], [-1.678, 48.101], [-1.68, 48.101]], carre), false);
 });
 
-test("flèche de manœuvre : morceau de route autour du virage et pointe dans le sens de sortie", async () => {
-  const { flecheManoeuvre } = await import("../js/geo.js");
-  // Tout droit vers le nord sur 100 m, puis à droite (est) sur 100 m.
-  const coords = [[-1.68, 48.1], [-1.68, 48.1009], [-1.67865, 48.1009]];
-  const cum = [0, 100, 200];
-  const f = flecheManoeuvre(coords, cum, 100);
-  const fin = f.ligne[f.ligne.length - 1];
-  assert.ok(f.ligne.length > 3, "virage arrondi (lissé)");
-  assert.ok(f.ligne[0][1] < 48.1009 && fin[0] > -1.68, "commence avant le virage, finit après");
-  // Pointe : le sommet est à l'est du bout de la ligne.
-  assert.ok(f.pointe[1][0] > fin[0]);
-  assert.ok(f.pointe[0][1] > f.pointe[2][1], "base de la pointe perpendiculaire (nord-sud)");
-  assert.equal(flecheManoeuvre(coords, cum, 400), null, "au-delà de la route");
-});
-
 test("tracé recalé sur la route dessinée (rond-point), sans sauter sur une rue qui croise", async () => {
   const { densifier, recalerSurRoutes } = await import("../js/geo.js");
   // Route dessinée : vers l'est à la latitude 48.1000 ; tracé TomTom 6 m plus au nord.

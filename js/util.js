@@ -19,6 +19,24 @@ export function viderMemoire() {
   MEMOIRE.clear();
 }
 
+// Beaucoup de « Failed to fetch » en mobilité sont une coupure réseau de
+// quelques secondes (tunnel, zone blanche, bascule 4G/Wi-Fi) : un deuxième
+// essai juste après suffit souvent. On ne retente que l'échec réseau du
+// fetch lui-même (pas de réponse du tout) -- jamais une réponse HTTP reçue
+// (429, 500…), où insister aggraverait les choses. Demande explicite de
+// l'utilisateur le 2026-10-11 (bornes TrajetVE indiquées « indisponible »
+// par de simples coupures réseau passagères).
+export async function fetchAvecRetry(url, options, { tentatives = 2, delaiMs = 1200 } = {}) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fetch(url, options);
+    } catch (e) {
+      if (i >= tentatives - 1) throw e;
+      await new Promise((r) => setTimeout(r, delaiMs));
+    }
+  }
+}
+
 // Hauteur du soleil (en degrés) à cet instant et à cet endroit — formules
 // astronomiques simplifiées, précises à quelques minutes près pour le
 // lever et le coucher, ce qui suffit pour basculer la carte nuit / jour.

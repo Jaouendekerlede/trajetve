@@ -54,6 +54,59 @@ export function rendreJournal() {
     );
 }
 
+// Pour Excel en français : point-virgule (la virgule sert de séparateur
+// décimal), nombres avec virgule comme partout ailleurs dans l'appli.
+function champCsv(valeur) {
+  const t = String(valeur ?? "");
+  return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+// Note de frais / suivi perso -- demande explicite de l'utilisateur le
+// 2026-10-11 : les statistiques existaient déjà, rien pour les sortir de
+// l'appli (reimbursement professionnel, comptabilité personnelle...).
+// Partie pure (testable) : construit le texte, sans toucher au DOM.
+export function construireCsvJournal(journal) {
+  const trie = [...journal].sort((a, b) => a.ts - b.ts);
+  const lignes = [
+    ["Date", "Lieu", "Énergie (kWh)", "Coût (€)", "Source"].join(";"),
+    ...trie.map((e) =>
+      [
+        new Date(e.ts).toLocaleDateString("fr-FR"),
+        champCsv(e.lieu || "Recharge"),
+        nombre(e.kwh, 2),
+        nombre(e.cout_eur || 0, 2),
+        e.source === "manuel" ? "Ajout manuel" : "Navigation",
+      ].join(";"),
+    ),
+  ];
+  const b = bilanRecharges(trie);
+  lignes.push(["Total", "", nombre(b.kwh, 2), nombre(b.cout, 2), `${b.n} recharge${b.n > 1 ? "s" : ""}`].join(";"));
+  // BOM UTF-8 : Excel (Windows) affiche sinon les accents mal interprétés.
+  return "﻿" + lignes.join("\r\n");
+}
+
+async function exporterJournalCsv() {
+  const journal = listerJournal();
+  if (!journal.length) return toast("Aucune recharge à exporter pour l'instant.");
+  const csv = construireCsvJournal(journal);
+  const fichier = new File([csv], `trajetve-recharges-${new Date().toISOString().slice(0, 10)}.csv`, { type: "text/csv" });
+  if (navigator.canShare?.({ files: [fichier] })) {
+    try {
+      await navigator.share({ files: [fichier], title: "Mes recharges TrajetVE" });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  const url = URL.createObjectURL(fichier);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fichier.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  toast("📄 Fichier téléchargé");
+}
+
 export function cablerJournal() {
   $("ev-journal-ajouter-btn").addEventListener("click", () => {
     const kwh = nombreOuUndefined($("ev-journal-kwh").value);
@@ -63,4 +116,5 @@ export function cablerJournal() {
     toast("✅ Recharge ajoutée au journal");
     rendreJournal();
   });
+  $("ev-journal-exporter-btn").addEventListener("click", exporterJournalCsv);
 }

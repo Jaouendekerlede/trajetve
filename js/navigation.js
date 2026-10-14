@@ -7,6 +7,7 @@
 
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel, retirerDernierRadarPersonnel, listerBornesPersonnelles, ajouterBornePersonnelle, retirerDerniereBornePersonnelle } from "./storage.js";
+import { signalerBornePartage } from "./relais.js";
 import { toast } from "./ui-commun.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
@@ -31,7 +32,7 @@ export { traceRestante, dessinVoies } from "./nav-outils.js";
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe, LABELS_TYPE_RADAR } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
 import { zonesDeDanger, radarsSurTrace, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
-import { haversineKm, carresSurTrace, traceTraverseCarres, flecheManoeuvre } from "./geo.js";
+import { haversineKm, carresSurTrace, traceTraverseCarres } from "./geo.js";
 import { formaterMinutes, calculerTempsCharge } from "./planner.js";
 import { escapeHtml, lienAPied, estNuit } from "./util.js";
 import { rechercherBornesZone } from "./ocm.js";
@@ -148,18 +149,6 @@ function pictoCarrefour(instr) {
   return instr.svgCarrefour;
 }
 
-// Flèche blanche sur la carte, à l'approche du virage.
-const DISTANCE_FLECHE_CARTE_M = 700;
-
-function majFlecheCarte(instr, distance) {
-  const cible = instr && distance < DISTANCE_FLECHE_CARTE_M && !etat.aLaBorne && !etat.arrive && !/WAYPOINT|ARRIVE/.test(instr.manoeuvre) ? instr : null;
-  if (cible === etat.flecheCarte) return;
-  etat.flecheCarte = cible;
-  // Rond-point : la flèche fait le tour jusqu'à la bonne sortie.
-  const apresM = cible?.offsetSortie ? cible.offsetSortie - cible.offset + 35 : 40;
-  vue.dessinerFlecheManoeuvre(cible ? flecheManoeuvre(etat.route.coords, etat.route.cum, cible.offset, { apresM }) : null);
-}
-
 function parler(texte, prioritaire = false) {
   if (!etat?.voix || !texte || !("speechSynthesis" in window)) return;
   if (prioritaire) speechSynthesis.cancel();
@@ -214,7 +203,6 @@ function installerRoute(route) {
   etat.annoncesBornes = new Set();
   // Le mode démo repart de la position actuelle sur le nouveau tracé.
   etat.demoOffset = null;
-  etat.flecheCarte = undefined;
   route.zonesDanger = etat.radars ? zonesDeDanger(etat.radars, route.coords, route.cum, route.limites) : [];
   route.radarsSurTrace = etat.radars ? radarsSurTrace(etat.radars, route.coords, route.cum) : [];
   route.feuxSurTrace = etat.feuxConnus.size ? radarsSurTrace([...etat.feuxConnus.values()], route.coords, route.cum) : [];
@@ -450,7 +438,6 @@ function majEcran() {
   if (!$("ev-nav-feuille").classList.contains("hidden")) majFeuilleDeRoute();
   majNotificationGuidage(instr);
   majNuitDouce();
-  majFlecheCarte(instr, instr ? instr.offset - etat.offset : Infinity);
   majZoneDanger();
   verifierApprocheRadar();
   majFrise();
@@ -663,9 +650,34 @@ function majZoneDanger() {
 // chaque radar (fixe officiel OU signalé soi-même), chacun une seule fois.
 // Demande explicite de l'utilisateur le 2026-09-27.
 const SEUILS_APPROCHE_RADAR_M = [200, 100, 50];
+// Pictogramme du bandeau plein écran assorti au symbole de la carte (même
+// code que iconeRadar()/couleurRadar() dans icones.js) -- demande du
+// 2026-10-10.
+const EMOJI_TYPE_RADAR = { ETFR: "🚦", ETPN: "🚧", ETVM: "⏱️" };
 
 function verifierApprocheRadar() {
-  if (!etat.prefs.dangers || etat.aLaBorne) return;
+  const flashEl = $("ev-nav-radar-flash");
+  if (!etat.prefs.dangers || etat.aLaBorne) {
+    flashEl.classList.add("hidden");
+    return;
+  }
+  // Alerte visuelle pleine page, clignotante, pendant toute la fenêtre
+  // 0-200 m -- pas seulement au moment de l'annonce vocale (SEUILS_APPROCHE_
+  // RADAR_M ci-dessous), pour rester visible tout du long de l'approche,
+  // demande explicite du 2026-10-10 ("il faut que ça flashe bien").
+  const prochain = (etat.route.radarsSurTrace || [])
+    .map((r) => ({ r, d: r.offset - etat.offset }))
+    .filter((x) => x.d >= -20 && x.d <= 200)
+    .sort((a, b) => a.d - b.d)[0];
+  if (prochain) {
+    const nom = LABELS_TYPE_RADAR[prochain.r.type] || "Radar";
+    const pictogramme = EMOJI_TYPE_RADAR[prochain.r.type] || "📷";
+    flashEl.textContent = `${pictogramme} ${nom.charAt(0).toUpperCase()}${nom.slice(1)} — ${Math.round(Math.max(0, prochain.d))} m`;
+    flashEl.classList.remove("hidden");
+  } else {
+    flashEl.classList.add("hidden");
+  }
+
   for (const r of etat.route.radarsSurTrace || []) {
     const d = r.offset - etat.offset;
     if (d < 0 || d > 200) continue;
@@ -1158,6 +1170,11 @@ export function signalerBorneIci({ puissance_kw = 0, connecteur = "", note = "" 
   vue.montrerBornes(true);
   parler("Borne enregistrée. Elle apparaîtra sur vos prochains trajets.", true);
   toast("🔌 Borne enregistrée.");
+  // Partage avec les autres utilisateurs de TrajetVE (relais facultatif,
+  // voir relais.js) -- sans effet si non configuré. Demande explicite du
+  // 2026-10-09 : une borne manquante signalée restait connue seulement du
+  // téléphone qui l'avait signalée.
+  signalerBornePartage(etat.pos.lat, etat.pos.lon, "manquante", { puissance_kw, connecteur, commentaire: note });
   return { ok: true };
 }
 
@@ -2718,7 +2735,6 @@ function changerVue(nouvelle) {
   vue.quitterNavigation();
   vue = nouvelle;
   vue.entrerNavigation({ onDeplacementManuel: surDeplacementManuel });
-  etat.flecheCarte = undefined;
   if (etat.route) vue.dessinerRouteNavigation(etat.route.coords, etat.arretsRestants, etat.destination);
   etat.posBornes = null;
   rafraichirBornesProches();

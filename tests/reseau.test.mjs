@@ -68,7 +68,13 @@ test("état des bornes : points hors service et occupation récente", async () =
   assert.ok(Date.now() - mixte.date_occupation < 5 * 60000, "heure de l'occupation connue, récente");
   assert.equal(panne.date_occupation, null, "hors service : pas d'occupation à dater");
   assert.equal(typeof panne.signalement_ancien, "boolean");
-  assert.equal(etatStation({ ids_pdc: ["FR4"] }), null, "rien de récent ni de hors service");
+  // FR4 : occupation bien trop ancienne (2020) pour compter comme « maintenant »,
+  // mais gardée comme dernier repère connu plutôt qu'un silence complet.
+  const ancien = etatStation({ ids_pdc: ["FR4"] });
+  assert.equal(ancien.libres, 0);
+  assert.equal(ancien.libres_anciens, 1);
+  assert.ok(ancien.age_ancien_ms > 365 * 86400000, "des années d'écart");
+  assert.equal(etatStation({ ids_pdc: ["FR5"] }), null, "aucune ligne du tout pour cet id");
 });
 
 test("parkings : seuls les parkings utiles au public sont gardés", async () => {

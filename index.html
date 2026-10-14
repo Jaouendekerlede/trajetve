@@ -51,7 +51,9 @@
     </button>
   </div>
   <div class="ev-chips" id="ev-filtres">
-    <button class="ev-chip" type="button" id="ev-filtres-ouvrir-btn" title="Filtrer les bornes affichées sur la carte">🔍 Filtrer les bornes</button>
+    <button class="ev-chip" type="button" id="ev-filtres-ouvrir-btn" title="Chercher un lieu (adresse, ville...) et filtrer les bornes affichées">📍 Chercher un lieu / filtrer</button>
+    <button class="ev-chip" type="button" id="ev-scan-borne-ouvrir-btn" title="Scanner le QR code d'une borne pour préparer la recharge">📷 Scanner une borne</button>
+    <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
   <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
@@ -135,6 +137,7 @@
             <button type="button" class="ev-chip" data-dest="Chez moi">🏠 Chez moi</button>
             <button type="button" class="ev-chip" data-dest="Travail">💼 Travail</button>
             <button type="button" class="ev-chip hidden" id="ev-suggestion-trajet"></button>
+            <button type="button" class="ev-chip hidden" id="ev-suggestion-jarvis" title="Destination suggérée par JARVIS, d'après ton agenda du jour"></button>
           </div>
           <div class="ev-chips hidden" id="ev-points-passage-liste"></div>
           <p class="ev-hint">💡 Pour passer par une ville, écris-la dans « Via ». Un appui long sur la carte ajoute aussi une étape. La flèche ⬆ fait passer une étape avant la précédente.</p>
@@ -148,6 +151,7 @@
           <input type="range" min="1" max="100" value="100" id="ev-charge-pct-input" class="ev-curseur">
           <span id="ev-charge-km" class="ev-km-estime"></span>
         </label>
+        <button type="button" id="ev-relais-batterie-btn" class="ev-lien">🔗 Récupérer la batterie réelle (Bluelink)</button>
         <div class="ev-charge-mode-row">
           <button type="button" class="ev-charge-mode-btn" data-mode="rapide">⚡<span>Rapide</span></button>
           <button type="button" class="ev-charge-mode-btn" data-mode="economique">💶<span>Éco</span></button>
@@ -176,7 +180,7 @@
         <div class="ev-colonne">
           <label class="ev-check"><input type="checkbox" id="ev-preferer-cb-checkbox" checked> 💳 Privilégier les bornes qui acceptent la carte bancaire</label>
           <label class="ev-check"><input type="checkbox" id="ev-modele-detaille-checkbox" checked> 📈 Calcul détaillé : vitesse réelle et relief (décoché : conso constante, comme JARVIS)</label>
-          <label class="ev-check"><input type="checkbox" id="ev-ajuster-meteo-checkbox"> 🌦️ Météo réelle sur le trajet : froid, chaleur, pluie, vent</label>
+          <label class="ev-check"><input type="checkbox" id="ev-ajuster-meteo-checkbox" checked> 🌦️ Météo réelle sur le trajet : froid, chaleur, pluie, vent</label>
           <div class="ev-zones-evitees">
             <div class="ev-hint">🚧 Routes coupées à éviter (travaux connus avant de partir) :</div>
             <div id="ev-zones-evitees-liste"></div>
@@ -236,6 +240,10 @@
       <div id="ev-domicile-box" class="ev-domicile hidden"></div>
       <div id="ev-confiance-box" class="ev-carte-bloc"></div>
 
+      <div class="ev-actions-rangee">
+        <button id="ev-continuer-trajet-btn" class="ev-btn" type="button" title="Repart de l'arrivee actuelle, avec la batterie reelle d'arrivee">➡️ Continuer le trajet</button>
+        <button id="ev-trajet-retour-btn" class="ev-btn" type="button" title="Inverse depart et destination pour preparer le retour">↩️ Trajet retour</button>
+      </div>
       <div id="ev-result-actions" class="ev-actions-rangee">
         <a id="ev-maps-link" class="ev-action" href="#" target="_blank" rel="noopener"><span>🧭</span>Maps</a>
         <button id="ev-partager-btn" class="ev-action" type="button"><span>📤</span>Partager</button>
@@ -352,6 +360,7 @@
         <h3>📒 Journal des recharges</h3>
         <div class="ev-hint">Rempli tout seul en navigation (à « Reprendre la route »), ou à la main ci-dessous.</div>
         <div id="ev-journal-bilan"></div>
+        <button id="ev-journal-exporter-btn" class="ev-btn" type="button">📄 Exporter mes recharges (CSV)</button>
         <details class="ev-details">
           <summary>➕ Ajouter une recharge à la main</summary>
           <div class="ev-grille-2">
@@ -423,8 +432,8 @@
         <div class="ev-chips">
           <button class="ev-chip" type="button" id="ev-parkings-chip" title="Afficher les parkings (OpenStreetMap)">🅿️ Parkings</button>
           <button class="ev-chip" type="button" id="ev-trafic-chip" title="Trafic en couleur sur les routes (TomTom)">🚦 Trafic</button>
-          <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
         </div>
+        <div class="ev-hint">🔋 Autonomie : maintenant accessible directement en haut de la carte.</div>
       </div>
 
       <div class="ev-carte-bloc" id="ev-bloc-calculateur">
@@ -636,6 +645,14 @@
             <button type="button" id="ev-cle-ocm-voir" class="ev-mini-btn" aria-label="Afficher la clé">👁️</button>
           </span>
         </label>
+        <label class="ev-champ">URL du relais TrajetVE (facultatif) — <a href="https://github.com/Jaouendekerlede/trajetve" target="_blank" rel="noopener">voir TrajetVE-Relais/LISEZ-MOI.md</a>
+          <input type="text" id="ev-relais-url" class="ev-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://trajetve-relais.xxxx.workers.dev">
+        </label>
+        <div class="ev-hint">Laisser vide si vous n'avez pas déployé ce petit serveur partagé : batterie réelle (Bluelink/JARVIS) et signalements de bornes partagés entre vos appareils.</div>
+        <label class="ev-champ"><input type="checkbox" id="ev-alerte-batterie-activee"> Alerte si la batterie (réelle, via le relais) descend sous un seuil</label>
+        <label class="ev-champ">Seuil d'alerte (%)
+          <input type="number" id="ev-alerte-batterie-seuil" class="ev-input" min="5" max="90" step="5" placeholder="20">
+        </label>
       </div>
 
       <button id="ev-profil-save-btn" class="ev-btn-principal" type="button">Enregistrer</button>
@@ -825,7 +842,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 104 : bouton son repositionné à droite, au-dessus des icônes (comme Waze)</div>
+      <div class="ev-hint ev-lien-centre">Version 136 : la fiabilité des opérateurs observée ici est partagée avec JARVIS via le relais (son propre calcul de trajet en profite aussi)</div>
     </div>
   </div>
 </section>
@@ -861,6 +878,7 @@
         <div id="ev-nav-ensuite" class="ev-nav-ensuite hidden"></div>
       </div>
     </div>
+    <div id="ev-nav-radar-flash" class="ev-nav-radar-flash hidden" role="alert"></div>
     <div id="ev-nav-voies" class="ev-nav-voies hidden" aria-label="Voies à prendre"></div>
     <div id="ev-nav-danger" class="ev-nav-danger hidden"></div>
     <div id="ev-nav-vue-voies" class="ev-nav-vue-voies hidden" aria-label="Voie à prendre">
@@ -1025,6 +1043,16 @@
       </ul>
     </details>
     <div class="ev-hint">Numéros : 112 (urgences), 15 (SAMU), 17 (police), 18 (pompiers), 114 (par SMS).</div>
+  </div>
+</div>
+
+<!-- ══ Scan d'une borne (QR code) ══ -->
+<div id="ev-scan-borne" class="ev-scan-borne hidden" role="dialog" aria-label="Scanner une borne">
+  <div class="ev-scan-carte">
+    <div class="ev-sos-tete"><strong>📷 Scanner une borne</strong><button id="ev-scan-borne-fermer" type="button" class="ev-fermer" aria-label="Fermer">✕</button></div>
+    <video id="ev-scan-video" class="ev-scan-video" muted playsinline></video>
+    <div id="ev-scan-borne-statut" class="ev-hint">Visez le QR code affiché sur la borne.</div>
+    <div id="ev-scan-borne-resultat" class="ev-scan-resultat hidden"></div>
   </div>
 </div>
 <button id="ev-urgence-bornes-interne" type="button" class="hidden" aria-hidden="true"></button>

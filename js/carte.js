@@ -13,7 +13,7 @@ import { getApiKeys } from "./config.js";
 import { lireReglages } from "./storage.js";
 import * as c3d from "./carte3d.js";
 import { svgVoiture } from "./icones-voiture.js";
-import { icone } from "./icones.js";
+import { icone, iconeRadar, couleurRadar } from "./icones.js";
 
 let explo3D = false;
 let surDeplacement = null;
@@ -199,7 +199,6 @@ export function quitterNavigation() {
 
 export function dessinerRouteNavigation(coords, arrets, destination) {
   coucheNav.clearLayers();
-  coucheFleche = null;
   const ll = coords.map(([lon, lat]) => L.latLng(lat, lon));
   pointsRoute = ll;
   indiceDecoupe = -1;
@@ -220,11 +219,15 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
 // Radars (officiels OSM ou signalés soi-même) sur le tracé : un symbole de
 // radar plutôt qu'une épingle générique -- demande explicite de
 // l'utilisateur le 2026-09-27. Ajoutés à coucheNav (donc effacés avec le
-// reste au prochain dessinerRouteNavigation -- à rappeler ensuite).
+// reste au prochain dessinerRouteNavigation -- à rappeler ensuite). Symbole
+// et couleur varient selon le type (feu rouge, passage à niveau, vitesse
+// moyenne) -- demande du 2026-10-10.
 export function dessinerRadars(radars) {
   for (const m of marqueursRadars) m.remove();
-  const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
-  marqueursRadars = (radars || []).map((r) => L.marker([r.lat, r.lon], { icon: pastille(28, "rgba(255,70,60,.95)", symbole), zIndexOffset: 4500, interactive: false }).addTo(coucheNav));
+  marqueursRadars = (radars || []).map((r) => {
+    const symbole = `<span style="color:#fff;display:flex">${icone(iconeRadar(r.type), 16)}</span>`;
+    return L.marker([r.lat, r.lon], { icon: pastille(28, couleurRadar(r.type), symbole), zIndexOffset: 4500, interactive: false }).addTo(coucheNav);
+  });
 }
 
 // Feux tricolores sur le tracé (OpenStreetMap) : demande du 2026-10-03, déjà
@@ -255,20 +258,6 @@ function poserFeuxProches(position) {
   marqueursFeux = feuxNav
     .filter((f) => carte.distance(centreFeux, [f.lat, f.lon]) < RAYON_FEUX_M)
     .map((f) => L.marker([f.lat, f.lon], { icon: pastille(24, "rgba(40,40,45,.92)", symbole), zIndexOffset: 4400, interactive: false }).addTo(coucheNav));
-}
-
-// Flèche blanche du prochain virage sur le tracé (null : l'effacer).
-let coucheFleche = null;
-export function dessinerFlecheManoeuvre(fleche) {
-  coucheFleche?.remove();
-  coucheFleche = null;
-  if (!fleche || !coucheNav) return;
-  const ll = (pts) => pts.map(([lon, lat]) => [lat, lon]);
-  coucheFleche = L.layerGroup([
-    L.polyline(ll(fleche.ligne), { color: "#0a2a5c", opacity: 0.5, weight: 10, lineCap: "round", lineJoin: "round", interactive: false }),
-    L.polyline(ll(fleche.ligne), { color: "#ffffff", opacity: 0.92, weight: 6, lineCap: "round", lineJoin: "round", interactive: false }),
-    L.polygon(ll(fleche.pointe), { stroke: false, fillColor: "#ffffff", fillOpacity: 0.92, interactive: false }),
-  ]).addTo(coucheNav);
 }
 
 export function majProgressionNavigation(coords, indice, lat, lon) {
@@ -471,6 +460,20 @@ function cbConfirmee(b) {
   return cb === "oui" || cb === "partiel";
 }
 
+// Pastille « feu » sur l'épingle, pour voir d'un coup d'œil sans ouvrir la
+// fiche -- demande explicite de l'utilisateur le 2026-10-11 (occupation en
+// temps réel trop discrète dans la fiche). Vert = au moins une place libre,
+// orange = toutes les places (restantes) occupées, rouge = hors service.
+// Rien si l'état n'est pas connu (pas de fausse information).
+function couleurEtatBorne(b) {
+  const e = b.etat_dynamique;
+  if (!e) return null;
+  if (e.tous_hors_service) return "rouge";
+  if (!e.libres && e.occupes) return "orange";
+  if (e.libres) return "vert";
+  return null;
+}
+
 // Bornes proches regroupées en un rond « nombre » quand elles se
 // chevaucheraient ; séparées à partir du zoom 16. Sans l'extension (réseau),
 // simple couche sans regroupement.
@@ -497,12 +500,13 @@ function creerCoucheBornes() {
 
 function iconeBorne(b) {
   const kw = puissanceBorne(b);
+  const etat = couleurEtatBorne(b);
   return L.divIcon({
     className: "",
     iconSize: [36, 46],
     iconAnchor: [18, 44],
     tooltipAnchor: [0, -40],
-    html: `<div class="ev-pin ${classePuissance(kw)}${b === selection ? " selection" : ""}"><span>${kw || "?"}</span>${cbConfirmee(b) ? '<b class="ev-pin-cb">CB</b>' : ""}</div>`,
+    html: `<div class="ev-pin ${classePuissance(kw)}${b === selection ? " selection" : ""}"><span>${kw || "?"}</span>${cbConfirmee(b) ? '<b class="ev-pin-cb">💳</b>' : ""}${etat ? `<i class="ev-pin-etat ${etat}"></i>` : ""}</div>`,
   });
 }
 
@@ -772,16 +776,22 @@ export function afficherPosition(lat, lon, precision) {
   c3d.exploPosition(lat, lon);
 }
 
-// Cercle « jusqu'où je peux aller » autour d'un point (rayonKm nul : l'effacer).
+// « Jusqu'où je peux aller » autour d'un point (rayonKm nul : l'effacer).
+// `limites` ([lon, lat][], optionnel) : vrai contour routier (TomTom
+// Reachable Range, respecte les limitations de vitesse réelles) -- sans
+// lui, repli sur un simple cercle à vol d'oiseau (approximation).
 let cercleAutonomie = null;
-export function afficherAutonomie(lat, lon, rayonKm) {
+export function afficherAutonomie(lat, lon, rayonKm, limites = null) {
   if (cercleAutonomie) {
     carte.removeLayer(cercleAutonomie);
     cercleAutonomie = null;
   }
   c3d.exploAutonomie(rayonKm ? { lat, lon, rayonKm } : null);
   if (!rayonKm) return;
-  cercleAutonomie = L.circle([lat, lon], { radius: rayonKm * 1000, color: "#22e5a0", weight: 2.5, dashArray: "8 8", fillColor: "#22e5a0", fillOpacity: 0.06, interactive: false }).addTo(carte);
+  const style = { color: "#22e5a0", weight: 2.5, dashArray: "8 8", fillColor: "#22e5a0", fillOpacity: 0.08, interactive: false };
+  cercleAutonomie = limites?.length
+    ? L.polygon(limites.map(([lo, la]) => [la, lo]), style).addTo(carte)
+    : L.circle([lat, lon], { ...style, radius: rayonKm * 1000 }).addTo(carte);
   if (!explo3D) carte.fitBounds(cercleAutonomie.getBounds(), { padding: [20, 20] });
 }
 

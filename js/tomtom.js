@@ -185,3 +185,33 @@ export function appelsTomTomDuJour() {
     return 0;
   }
 }
+
+// Zone réellement atteignable (polygone suivant le vrai réseau routier et
+// ses limitations de vitesse), pas un cercle à vol d'oiseau : l'API TomTom
+// prend en paramètre une courbe vitesse -> consommation, qu'on construit à
+// partir du même modèle physique que le trajet détaillé (facteurVitesse)
+// pour rester cohérent avec le reste de l'appli. Demande explicite de
+// Jean-Luc le 2026-10-09 ("en gardant l'esprit du code de la route").
+export async function calculerZoneAtteignable(apiKey, lat, lon, energieKwh, profil, courbeVitesse) {
+  if (!apiKey) return { erreur: "cle_manquante" };
+  const courbe = courbeVitesse.map(([v, kwh100]) => `${v},${kwh100.toFixed(2)}`).join(":");
+  const params = new URLSearchParams({
+    key: apiKey,
+    energyBudgetInkWh: energieKwh.toFixed(2),
+    constantSpeedConsumptionInkWhPerHundredkm: courbe,
+    vehicleEngineType: "electric",
+    traffic: "true",
+  });
+  try {
+    if (typeof localStorage !== "undefined") compterAppelTomTom();
+    const resp = await fetch(`https://api.tomtom.com/routing/1/calculateReachableRange/${lat},${lon}/json?${params}`);
+    if (!resp.ok) return { erreur: `http_${resp.status}` };
+    const data = await resp.json();
+    const frontiere = data.reachableRange?.boundary;
+    if (!frontiere?.length) return { erreur: "reponse_vide" };
+    return { ok: true, limites: frontiere.map((p) => [p.longitude, p.latitude]) };
+  } catch (e) {
+    console.warn("[TOMTOM] Zone atteignable impossible", e);
+    return { erreur: "reseau" };
+  }
+}

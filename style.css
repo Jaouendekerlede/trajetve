@@ -144,20 +144,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .ev-pin.acc { background: var(--p-acc); color: var(--p-acc); }
 .ev-pin.lent { background: #8ea3c9; color: #8ea3c9; }
 .ev-pin.selection { transform: rotate(-45deg) scale(1.3); box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35), 0 0 22px currentColor; }
+/* Carte bancaire acceptée : bien visible d'un coup d'œil sur la carte,
+   demande explicite de l'utilisateur le 2026-10-11 (le petit "CB" d'avant
+   passait inaperçu). */
 .ev-pin-cb {
   position: absolute;
-  top: -7px;
-  right: -9px;
+  top: -10px;
+  right: -12px;
   transform: rotate(45deg);
-  background: #fff;
-  color: #07784f;
-  font-size: 8px;
-  font-weight: 900;
+  background: var(--vert);
+  color: #fff;
+  font-size: 13px;
   line-height: 1;
-  padding: 2px 3px;
-  border-radius: 5px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.55);
 }
+/* Feu d'occupation (vert/orange/rouge) sur l'épingle -- absent si inconnue. */
+.ev-pin-etat {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  transform: rotate(45deg);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.ev-pin-etat.vert { background: var(--vert-vif); }
+.ev-pin-etat.orange { background: var(--orange); }
+.ev-pin-etat.rouge { background: var(--rouge); }
 /* Étiquette de batterie à côté d'un arrêt de recharge */
 .ev-etiquette-arret { display: inline-block; white-space: nowrap; padding: 2px 7px; border-radius: 8px; background: var(--chip); color: var(--texte); border: 1px solid rgba(79, 224, 255, 0.6); font-size: 11.5px; font-weight: 800; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
 .ev-etiquette-arret-3d { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); }
@@ -513,10 +535,11 @@ textarea.ev-input { resize: vertical; }
 .ev-prise strong { font-size: 13.5px; }
 .ev-prise span { font-size: 12px; color: var(--texte-att); }
 .ev-prise .ev-prise-kw { font-size: 17px; font-weight: 800; color: var(--vert-clair); }
-.ev-ligne-info { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--separateur); font-size: 13.5px; }
+.ev-ligne-info { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--separateur); font-size: 13.5px; }
 .ev-ligne-info:last-child { border-bottom: none; }
-.ev-ligne-info .label { color: var(--texte-att); }
+.ev-ligne-info .label { color: var(--texte-att); flex: 0 0 auto; }
 .ev-ligne-info .value { text-align: right; }
+.ev-liste-paiement { list-style: none; margin: 0; padding: 0; text-align: left; display: flex; flex-direction: column; gap: 4px; }
 .ev-cb-texte.ok { color: var(--vert-vif); }
 .ev-cb-texte.warn { color: var(--orange); }
 .ev-cb-texte.non { color: var(--rouge); }
@@ -836,6 +859,28 @@ body.ev-mode-navigation .ev-maj { display: none; }
 
 /* Zone de danger (radars) : bandeau orange sous la manœuvre. */
 .ev-nav-danger { align-self: flex-start; padding: 8px 14px; border-radius: 12px; background: #e8590c; color: #fff; font-size: 17px; font-weight: 800; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
+/* Alerte radar bien plus marquee que la zone de danger ci-dessus (demande
+   explicite du 2026-10-10 : "il faut que ca flashe bien") -- pleine largeur,
+   tres grande, clignote vraiment (couleur ET taille), uniquement pendant
+   l'approche rapprochee (200/100/50 m, voir verifierApprocheRadar). */
+.ev-nav-radar-flash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+  text-align: center;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  animation: ev-radar-flash 0.6s infinite;
+}
+@keyframes ev-radar-flash {
+  0%, 100% { background: #d32f2f; transform: scale(1); }
+  50% { background: #ff8f00; transform: scale(1.035); }
+}
 /* Fenêtre des voies (comme Sygic), à droite sous le bandeau. */
 .ev-nav-vue-voies { align-self: flex-end; width: 140px; padding: 7px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 14px; background: linear-gradient(#1b2433, #2a3344); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); }
 .ev-nav-vue-voies svg { display: block; width: 100%; height: auto; }
@@ -1050,6 +1095,12 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 .ev-sos-ligne small { font-weight: 600; color: var(--texte-att); font-size: 12.5px; }
 .ev-sos-appel { display: block; text-align: center; padding: 14px; border-radius: 14px; background: #d32f2f; color: #fff; font-size: 20px; font-weight: 900; text-decoration: none; }
 .ev-menu-sos { border-color: #d32f2f !important; }
+
+/* Scan d'une borne (QR code) : même principe de feuille que le SOS. */
+.ev-scan-borne { position: fixed; inset: 0; z-index: 6000; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.55); }
+.ev-scan-carte { width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 14px 16px calc(16px + var(--securite-bas)); border-radius: 20px 20px 0 0; background: var(--panneau); border-top: 3px solid var(--vert); display: flex; flex-direction: column; gap: 10px; }
+.ev-scan-video { width: 100%; aspect-ratio: 3 / 4; max-height: 50vh; object-fit: cover; border-radius: 14px; background: #000; }
+.ev-scan-resultat { display: flex; flex-direction: column; gap: 8px; }
 
 /* Présentation à l'ouverture */
 .ev-presentation { position: fixed; inset: 0; z-index: 9000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; background: linear-gradient(160deg, #0b1220, #12324a); color: #fff; transition: opacity 0.5s; }

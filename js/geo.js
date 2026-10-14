@@ -184,41 +184,6 @@ export function traceTraverseCarres(coords, carres) {
   return false;
 }
 
-// Flèche de manœuvre dessinée sur la route (comme les GPS) : le tracé de
-// `avantM` avant à `apresM` après le point de la manœuvre (offset, m), et
-// une pointe triangulaire au bout. Renvoie { ligne, pointe } en [lon, lat].
-export function flecheManoeuvre(coords, cum, offset, { avantM = 35, apresM = 28, pointeM = 8, demiLargeurM = 5 } = {}) {
-  const total = cum[cum.length - 1];
-  if (coords.length < 2 || !(total > 0)) return null;
-  const debut = Math.max(0, offset - avantM);
-  const fin = Math.min(total, offset + apresM);
-  if (fin - debut < 5) return null;
-  const point = (d) => {
-    let i = 0;
-    while (i < cum.length - 2 && cum[i + 1] < d) i++;
-    const t = cum[i + 1] > cum[i] ? Math.max(0, Math.min(1, (d - cum[i]) / (cum[i + 1] - cum[i]))) : 0;
-    return [coords[i][0] + t * (coords[i + 1][0] - coords[i][0]), coords[i][1] + t * (coords[i + 1][1] - coords[i][1])];
-  };
-  const ligne = [point(debut)];
-  for (let i = 0; i < cum.length; i++) if (cum[i] > debut && cum[i] < fin) ligne.push(coords[i]);
-  ligne.push(point(fin));
-  // Coins arrondis : une flèche qui épouse la route, sans angles.
-  const lissee = lisser(ligne);
-  // Direction du dernier morceau (au moins 3 m, pour un sens fiable).
-  const [lonF, latF] = ligne[ligne.length - 1];
-  const [lonP, latP] = point(Math.max(debut, fin - 3));
-  const kx = 111320 * Math.cos((latF * Math.PI) / 180);
-  const ky = 110540;
-  let dx = (lonF - lonP) * kx;
-  let dy = (latF - latP) * ky;
-  const n = Math.hypot(dx, dy) || 1;
-  dx /= n;
-  dy /= n;
-  const versLonLat = (x, y) => [lonF + x / kx, latF + y / ky];
-  const pointe = [versLonLat(-dy * demiLargeurM, dx * demiLargeurM), versLonLat(dx * pointeM, dy * pointeM), versLonLat(dy * demiLargeurM, -dx * demiLargeurM)];
-  return { ligne: lissee, pointe };
-}
-
 // Sortie réelle d'un rond-point, d'après le tracé : dans l'anneau on tourne
 // à gauche (sens giratoire), et on en sort en tournant à droite. Renvoie
 // { offset, angle } (angle de sortie en degrés par rapport à l'arrivée,

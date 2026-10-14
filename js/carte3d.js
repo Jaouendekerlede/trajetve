@@ -11,7 +11,7 @@ import { haversineKm, densifier, recalerSurRoutes, pointSurLigne, lisser } from 
 import { classePuissance, puissanceBorne, htmlIconeParking, couleurBouchon, texteBatterieArret, decalageNavGauche } from "./carte.js";
 import { lireRefusTomTom } from "./tomtom.js";
 import { svgVoiture } from "./icones-voiture.js";
-import { icone } from "./icones.js";
+import { icone, iconeRadar, couleurRadar } from "./icones.js";
 
 const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl";
 const DELAI_CHARGEMENT_MS = 30000;
@@ -66,7 +66,6 @@ let cumRoute = null;
 // Dernier tracé de navigation : à redessiner si la carte est recréée en
 // route (changement de fond au coucher du soleil, par exemple).
 let traceNav = null;
-let flecheNav = null;
 let surDeplacementManuel = null;
 let coucheBatiments = null;
 let nomFournisseur = "";
@@ -329,44 +328,6 @@ function ajouterCouchesTrajet() {
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-width": ["interpolate", ["linear"], ["zoom"], 10, 5, 17, 14], "line-gradient": DEGRADE_RESTANT },
   }, dessous);
-  // Flèche blanche du prochain virage, posée sur le tracé (largeur en
-  // mètres, comme sa pointe, pour garder les proportions à tout zoom).
-  carte.addSource("nav-fleche", { type: "geojson", data: VIDE });
-  const trait = ["==", ["geometry-type"], "LineString"];
-  const pointe = ["==", ["geometry-type"], "Polygon"];
-  carte.addLayer({ id: "nav-fleche-contour", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "rgba(10,42,92,0.5)", "line-width": largeurMetres(4.2) } }, dessous);
-  carte.addLayer({ id: "nav-fleche-trait", type: "line", source: "nav-fleche", filter: trait, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-opacity": 0.92, "line-width": largeurMetres(2.6) } }, dessous);
-  carte.addLayer({ id: "nav-fleche-pointe", type: "fill", source: "nav-fleche", filter: pointe, paint: { "fill-color": "#ffffff", "fill-opacity": 0.92, "fill-antialias": true } }, dessous);
-}
-
-// Largeur de ligne correspondant à `m` mètres au sol (vers 46° de latitude).
-function largeurMetres(m) {
-  const pixelsParMetreZoom0 = 512 / (40075016 * Math.cos((46 * Math.PI) / 180));
-  return ["interpolate", ["exponential", 2], ["zoom"], 10, m * pixelsParMetreZoom0 * 2 ** 10, 22, m * pixelsParMetreZoom0 * 2 ** 22];
-}
-
-// fleche : { ligne, pointe } ([lon, lat]) ou null pour l'effacer.
-export function dessinerFlecheManoeuvre(fleche) {
-  flecheNav = fleche;
-  const source = carte?.getSource("nav-fleche");
-  if (!source) return;
-  if (fleche && recalage?.segs?.length) {
-    const ligne = recalerSurRoutes(fleche.ligne, recalage.segs, ECART_RECALAGE_M);
-    const [fin, finR] = [fleche.ligne[fleche.ligne.length - 1], ligne[ligne.length - 1]];
-    const [dx, dy] = [finR[0] - fin[0], finR[1] - fin[1]];
-    fleche = { ligne, pointe: fleche.pointe.map(([x, y]) => [x + dx, y + dy]) };
-  }
-  source.setData(
-    fleche
-      ? {
-          type: "FeatureCollection",
-          features: [
-            { type: "Feature", geometry: { type: "LineString", coordinates: fleche.ligne }, properties: {} },
-            { type: "Feature", geometry: { type: "Polygon", coordinates: [[...fleche.pointe, fleche.pointe[0]]] }, properties: {} },
-          ],
-        }
-      : VIDE,
-  );
 }
 
 // Raison du dernier échec, affichée à l'utilisateur pour le diagnostic.
@@ -543,7 +504,6 @@ async function creerCarte(fournisseur, fond, relief) {
   if (vueAvant) carte.jumpTo(vueAvant);
   if (enNavigation) {
     if (traceNav) dessinerRouteNavigation(...traceNav);
-    if (flecheNav) dessinerFlecheManoeuvre(flecheNav);
     voiture?.addTo(carte);
     if (bornesVisibles) for (const m of marqueursBornes) m.addTo(carte);
     for (const m of marqueursRadars) m.addTo(carte);
@@ -1124,10 +1084,8 @@ export function quitterNavigation() {
   voiture?.remove();
   voiture = null;
   traceNav = null;
-  flecheNav = null;
   if (!carte) return;
   carte.getSource("trajet")?.setData(VIDE);
-  carte.getSource("nav-fleche")?.setData(VIDE);
   if (explo.actif) {
     // Retour à la carte des bornes, telle qu'elle était.
     montrerElementsExplo(true);
@@ -1159,11 +1117,14 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
 
 // Radars (officiels OSM ou signalés soi-même) sur le tracé : un symbole de
 // radar plutôt qu'une épingle générique -- demande explicite de
-// l'utilisateur le 2026-09-27.
+// l'utilisateur le 2026-09-27. Symbole et couleur varient selon le type
+// (feu rouge, passage à niveau, vitesse moyenne) -- demande du 2026-10-10.
 export function dessinerRadars(radars) {
   for (const m of marqueursRadars) m.remove();
-  const symbole = `<span style="color:#fff;display:flex">${icone("radar", 16)}</span>`;
-  marqueursRadars = (radars || []).map((r) => new maplibregl.Marker({ element: pastille(28, "rgba(255,70,60,.95)", symbole) }).setLngLat([r.lon, r.lat]).addTo(carte));
+  marqueursRadars = (radars || []).map((r) => {
+    const symbole = `<span style="color:#fff;display:flex">${icone(iconeRadar(r.type), 16)}</span>`;
+    return new maplibregl.Marker({ element: pastille(28, couleurRadar(r.type), symbole) }).setLngLat([r.lon, r.lat]).addTo(carte);
+  });
 }
 
 // Feux tricolores sur le tracé (OpenStreetMap), pendant du 2D : demande du
@@ -1278,7 +1239,6 @@ function recalerAutour(lat, lon) {
   recalage.fenetre = recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M);
   const affiche = [...coords.slice(0, a), ...recalage.fenetre, ...coords.slice(b + 1)];
   carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: affiche }, properties: {} });
-  if (flecheNav) dessinerFlecheManoeuvre(flecheNav);
 }
 
 function voitureRecalee(lat, lon) {

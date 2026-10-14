@@ -77,6 +77,19 @@ test("station entièrement hors service : écartée au profit d'une autre", asyn
   assert.equal(r.arrets[0].nom_borne, "Station qui marche");
 });
 
+test("borne aux coordonnées aberrantes (à des dizaines de km du tracé réel) : écartée même si l'API la dit proche", async () => {
+  bornesAutour((lat, lon) => [
+    poiOcm({ nom: "Bonne borne", lat: lat + 0.002, lon, kw: 150 }),
+    // Décalage de 0.5° de longitude ≈ 55 km à cette latitude : hors de portée
+    // d'un vrai détour, même si l'API la rapporte comme proche du point demandé.
+    poiOcm({ nom: "Borne en pleine mer", lat, lon: lon + 0.5, kw: 350 }),
+  ]);
+  const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });
+  assert.equal(r.ok, true, r.erreur);
+  assert.equal(r.arrets[0].nom_borne, "Bonne borne");
+  assert.ok(!r.arrets[0].alternatives.some((a) => a.nom === "Borne en pleine mer"), "ne doit pas même apparaître en plan B");
+});
+
 test("borne lente seule disponible : temps de charge réaliste (chargeur embarqué)", async () => {
   bornesAutour((lat, lon) => [poiOcm({ nom: "Parking", lat: lat + 0.001, lon, kw: 22 })]);
   const r = await calculerTrajetElectrique("cle", DISTANCE_KM, TRACE, 80, PROFIL, { margeSecuritePct: 12, cibleRechargePct: 80 });

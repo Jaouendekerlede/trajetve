@@ -4,9 +4,9 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero, operateurPeuFiable } from "./storage.js";
 import { planifierTrajet, simulerVitesseMax, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
-import { diagnostiquerCleTomTom } from "./tomtom.js";
+import { diagnostiquerCleTomTom, calculerZoneAtteignable } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
 import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage } from "./carte.js";
@@ -23,7 +23,8 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
-import { RESEAUX_PAIEMENT, lireMoyens, facilitePaiement } from "./paiement.js";
+import { RESEAUX_PAIEMENT, BADGES_MULTIRESEAUX, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
+import { relaisConfigure, lireEtatVehiculeRelais, trajetSuggereParJarvis, signalerBornePartage, signalementsPartagesProches } from "./relais.js";
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
@@ -35,6 +36,7 @@ import { cablerDrive } from "./ui-drive.js";
 import { icone, iconeFond } from "./icones.js";
 import { appelsTomTomDuJour, QUOTA_TOMTOM_JOUR } from "./tomtom.js";
 import { ouvrirSOS, cablerSOS } from "./ui-sos.js";
+import { cablerScanBorne } from "./ui-scan-borne.js";
 import { reconnaissanceDispo, ecouter, interpreterCommande } from "./commandes-vocales.js";
 import { cablerParkings, planifierParkings, cablerTrafic } from "./ui-parkings.js";
 import { afficherAccueil } from "./ui-accueil.js";
@@ -289,6 +291,7 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   if (vue === "trajet") {
     remplirArretsImposes();
     majSuggestionTrajet();
+    majSuggestionJarvis();
   }
   // Appui long sur la carte pour imposer un point de passage : seulement
   // pendant la planification/le résultat (pas pendant la navigation, qui
@@ -374,6 +377,16 @@ function officielValide(b) {
   return b.officiel && !b.officiel.indisponible ? b.officiel : null;
 }
 
+// Le "fournisseur" affiché en premier doit être le plus fiable : l'enseigne
+// officielle (déclaration IRVE, le nom public affiché sur la borne) prime
+// sur l'opérateur officiel, qui prime sur l'opérateur Open Charge Map
+// (communautaire, parfois périmé) -- auparavant c'était l'inverse, d'où des
+// marques différentes selon le site consulté pour la même borne. Demande
+// explicite du 2026-10-09.
+function operateurAffichage(b, o = officielValide(b)) {
+  return o?.enseigne || o?.operateur || b.operateur || null;
+}
+
 function etatCb(b) {
   const o = officielValide(b);
   if (o) {
@@ -422,11 +435,26 @@ function pastilleEtat(etat) {
     : "";
   const minutes = etat.date_occupation ? Math.max(0, Math.round((Date.now() - etat.date_occupation) / 60000)) : null;
   const age = minutes === null ? "< 1 h" : minutes < 1 ? "à l'instant" : `il y a ${minutes} min`;
+  // Une prise precise en panne sur un point par ailleurs "en service" (une
+  // autre prise du meme point marche encore) -- info distincte du statut
+  // global ci-dessous, affichee en plus, pas a la place.
+  const partielle = etat.prises_en_panne?.length ? `<span class="ev-cb-pill warn">⚠️ ${escapeHtml(etat.prises_en_panne.join(", "))} en panne</span>` : "";
   if (etat.tous_hors_service) return `<span class="ev-cb-pill ${etat.signalement_ancien ? "warn" : "non"}">⛔ Hors service${date}</span>`;
-  if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>`;
-  if (etat.libres) return `<span class="ev-cb-pill ok">✅ ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>`;
-  if (etat.occupes) return `<span class="ev-cb-pill warn">⏳ Occupée (${age})</span>`;
-  return "";
+  if (etat.hors_service) return `<span class="ev-cb-pill warn">⚠️ ${etat.hors_service}/${etat.total} hors service${date}</span>${partielle}`;
+  if (etat.libres) return `<span class="ev-cb-pill ok">✅ ${etat.libres} libre${etat.libres > 1 ? "s" : ""} (${age})</span>${partielle}`;
+  if (etat.occupes) return `<span class="ev-cb-pill warn">⏳ Occupée (${age})</span>${partielle}`;
+  // Rien de frais (opérateur qui republie rarement, ex. Power Dot) : le
+  // dernier état connu reste plus utile qu'un silence complet, à condition
+  // de dire clairement son âge -- demande explicite de l'utilisateur le
+  // 2026-10-11 (une station visitée sur place, 0 donnée récente du tout).
+  if (etat.libres_anciens || etat.occupes_anciens) {
+    const ancien = etat.age_ancien_ms ? ageTexte(etat.age_ancien_ms) : "ancien";
+    const texte = etat.libres_anciens
+      ? `${etat.libres_anciens} libre${etat.libres_anciens > 1 ? "s" : ""}`
+      : `${etat.occupes_anciens} occupée${etat.occupes_anciens > 1 ? "s" : ""}`;
+    return `<span class="ev-cb-pill neutre">🕓 Dernière info : ${texte} (${ancien}, à vérifier)</span>${partielle}`;
+  }
+  return partielle;
 }
 
 function pastillesBorne(b) {
@@ -446,7 +474,7 @@ function ligneBorneHtml(b, i, suffixeDistance = "") {
   const kw = puissanceBorne(b);
   const o = officielValide(b);
   const points = o?.nombre_points || b.nombre_points;
-  const operateur = b.operateur || o?.operateur;
+  const operateur = operateurAffichage(b, o);
   const sous = [operateur || "Opérateur inconnu", b.distance_km != null ? `${nombre(b.distance_km, 1)} km${suffixeDistance}` : "", points ? `${points} pts` : ""]
     .filter(Boolean)
     .join(" · ");
@@ -517,7 +545,7 @@ function renderBornes({ carteAussi = true } = {}) {
 async function enrichirProgressivement(bornes, toujoursValide) {
   for (let k = 0; k < bornes.length; k += 6) {
     const groupe = bornes.slice(k, k + 6);
-    appliquerAbonnements(await enrichirBornes(groupe));
+    appliquerAbonnements(await enrichirBornes(groupe, { attendreEtats: true }));
     if (!toujoursValide()) return;
     if (filtres.size) renderBornes();
     else {
@@ -697,6 +725,7 @@ function cablerCarte() {
   cablerVoitureGaree();
   cablerStats();
   cablerSOS();
+  cablerScanBorne();
   cablerDiagnostic();
   // Liste d'essais sur la route : cases mémorisées sur ce téléphone.
   const essais = (() => {
@@ -774,7 +803,7 @@ function cablerCarte() {
 
   function majBoutonFiltres() {
     const n = filtres.size;
-    $("ev-filtres-ouvrir-btn").textContent = n ? `🔍 Filtrer les bornes (${n})` : "🔍 Filtrer les bornes";
+    $("ev-filtres-ouvrir-btn").textContent = n ? `📍 Chercher un lieu / filtrer (${n})` : "📍 Chercher un lieu / filtrer";
     $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
   }
   majBoutonFiltres();
@@ -876,17 +905,21 @@ function ficheBorneHtml(b, ctx) {
       <div class="ev-borne-puissance ${classePuissance(kw)}">${kw || "?"}<small>kW max</small></div>
       <div>
         <div class="ev-fiche-titre">${escapeHtml(nom)}</div>
-        <div class="ev-fiche-sous">${badgeOperateur(b.operateur || o?.operateur)}${escapeHtml([b.operateur || o?.operateur, b.adresse || o?.adresse].filter(Boolean).join(" · "))}</div>
+        <div class="ev-fiche-sous">${badgeOperateur(operateurAffichage(b, o))}${escapeHtml([operateurAffichage(b, o), b.adresse || o?.adresse].filter(Boolean).join(" · "))}</div>
       </div>
     </div>
     <div class="ev-badges">
       ${pastilleEtat(b.etat_dynamique) || (o ? `<span class="ev-cb-pill neutre">❔ Occupation en temps réel inconnue</span>` : "")}
       <span class="ev-cb-pill ${cb.classe}">${cb.court}</span>
       ${points ? `<span class="ev-cb-pill neutre">🔌 ${escapeHtml(points)} point${points > 1 ? "s" : ""}</span>` : ""}
-      ${o?.horaires ? `<span class="ev-cb-pill neutre">🕐 ${escapeHtml(o.horaires)}</span>` : ""}
       ${b.statut ? `<span class="ev-cb-pill ${statutOk ? "ok" : "warn"}">${statutOk ? "✅ En service (déclaré)" : `⚠️ ${escapeHtml(b.statut)}`}</span>` : ""}
       ${o?.gratuit === "oui" ? `<span class="ev-cb-pill ok">🎁 Gratuit</span>` : ""}
     </div>
+    ${
+      o?.operateur && operateurPeuFiable(o.operateur)
+        ? `<div class="ev-hint">⚠️ D'après ce qu'on a observé sur tes trajets, <strong>${escapeHtml(o.operateur)}</strong> transmet rarement l'occupation en temps réel de ses bornes -- prévois un plan B.</div>`
+        : ""
+    }
     <div class="ev-actions-rangee">
       <a class="ev-action" href="${lienGoogleMaps(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🧭</span>Y aller</a>
       <a class="ev-action" href="${lienWaze(b.lat, b.lon)}" target="_blank" rel="noopener"><span>🚗</span>Waze</a>
@@ -902,6 +935,23 @@ function ficheBorneHtml(b, ctx) {
   html += panneJusqua
     ? `<div class="ev-alerte">⚠️ Tu as signalé cette borne en panne : elle n'est plus proposée dans tes trajets jusqu'au ${new Date(panneJusqua).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}. <button id="ev-borne-panne-btn" class="ev-lien" type="button">✅ Elle remarche</button></div>`
     : `<button id="ev-borne-panne-btn" class="ev-lien" type="button">⚠️ Signaler cette borne en panne (${JOURS_BORNE_EN_PANNE} jours)</button>`;
+  // Occupation confirmée sur place, partagée avec les autres utilisateurs de
+  // TrajetVE via le relais (voir relais.js) -- complète l'occupation
+  // officielle quand l'opérateur ne la transmet pas. Visible seulement si un
+  // relais est configuré : sans ça, les boutons ne serviraient à rien.
+  // Demande explicite de l'utilisateur le 2026-10-11.
+  if (relaisConfigure()) {
+    html += `
+    <div class="ev-hint">Tu es sur place ? Dis-nous si elle est libre :</div>
+    <div class="ev-actions-rangee">
+      <button id="ev-borne-confirme-libre-btn" class="ev-action" type="button"><span>✅</span>Libre</button>
+      <button id="ev-borne-confirme-occupee-btn" class="ev-action" type="button"><span>⏳</span>Occupée</button>
+    </div>`;
+  }
+  // Signalements des AUTRES utilisateurs (relais partagé, voir relais.js) --
+  // rempli de façon asynchrone juste après l'affichage de la fiche, pas ici
+  // (synchrone). Demande explicite du 2026-10-09.
+  html += `<div id="ev-borne-signalements-partages"></div>`;
 
   if (ctx) {
     html += `<div class="ev-carte-bloc"><h3>🔋 Cet arrêt dans ton trajet</h3>
@@ -931,7 +981,12 @@ function ficheBorneHtml(b, ctx) {
   if (prises) html += `<div class="ev-carte-bloc"><h3>🔌 Prises</h3>${prises}${o?.cable_attache === "oui" ? hint("Câble Type 2 attaché à la borne.") : ""}</div>`;
 
   const facilite = facilitePaiement(b, lireMoyens(lireReglages()));
-  let paiement = ligneInfo("Avec tes moyens de paiement", `<strong>${{ sur: "✅", probable: "🟡", incertain: "❓" }[facilite.niveau]} ${escapeHtml(facilite.texte)}</strong>`);
+  const acceptes = moyensAcceptesListe(b);
+  let paiement = ligneInfo(
+    "Cartes/badges acceptés ici",
+    `<ul class="ev-liste-paiement">${acceptes.map((a) => `<li>${a.niveau === "sur" ? "✅" : "🟡"} ${escapeHtml(a.texte)}</li>`).join("")}</ul>`,
+  );
+  paiement += ligneInfo("Avec tes moyens de paiement", `<strong>${{ sur: "✅", probable: "🟡", incertain: "❓" }[facilite.niveau]} ${escapeHtml(facilite.texte)}</strong>`);
   paiement += ligneInfo("Carte bancaire", `<strong class="ev-cb-texte ${cb.classe}">${escapeHtml(cb.long)}</strong>`);
   if (o) {
     paiement += ligneInfo("Sans abonnement (à l'acte)", OUI_NON[o.paiement_acte]);
@@ -952,7 +1007,6 @@ function ficheBorneHtml(b, ctx) {
       ligneInfo("Restriction de gabarit", escapeHtml(o.restriction_gabarit)) +
       ligneInfo("Emplacement", escapeHtml(o.implantation)) +
       ligneInfo("Adresse déclarée", escapeHtml(o.adresse));
-    html += `<div class="ev-carte-bloc"><h3>🕐 Accès</h3><div>${acces}</div></div>`;
 
     const contact = o.contact ? (o.contact.includes("@") ? `<a href="mailto:${escapeHtml(o.contact)}">${escapeHtml(o.contact)}</a>` : escapeHtml(o.contact)) : "";
     const operateur =
@@ -964,11 +1018,20 @@ function ficheBorneHtml(b, ctx) {
       ligneInfo("Remarques", escapeHtml(o.observations)) +
       (o.date_mise_en_service ? ligneInfo("Mise en service", dateFr(o.date_mise_en_service)) : "") +
       (o.date_maj ? ligneInfo("Mise à jour officielle", dateFr(o.date_maj)) : "");
-    html += `<div class="ev-carte-bloc"><h3>🏢 Opérateur</h3><div>${operateur}</div></div>`;
-    html += hint(
-      `Source : Base nationale officielle des bornes (IRVE, data.gouv.fr), déclarée par l'opérateur — station « ${o.nom_station || o.id_station} » à ${o.distance_m} m.` +
-        (o.points_consultes < o.nombre_points ? ` Détail établi sur ${o.points_consultes} des ${o.nombre_points} points.` : ""),
-    );
+
+    // Repliées par défaut : adresse/horaires/opérateur sont déjà dans
+    // l'en-tête ou utiles seulement de temps en temps (PMR, gabarit,
+    // contact...) -- la fiche s'alourdissait à mesure que l'appli
+    // s'enrichissait. Demande explicite de l'utilisateur le 2026-10-11.
+    html += `<details class="ev-details">
+      <summary>ℹ️ Plus de détails (accès, opérateur, source)</summary>
+      <div class="ev-carte-bloc"><h3>🕐 Accès</h3><div>${acces}</div></div>
+      <div class="ev-carte-bloc"><h3>🏢 Opérateur</h3><div>${operateur}</div></div>
+      ${hint(
+        `Source : Base nationale officielle des bornes (IRVE, data.gouv.fr), déclarée par l'opérateur — station « ${o.nom_station || o.id_station} » à ${o.distance_m} m.` +
+          (o.points_consultes < o.nombre_points ? ` Détail établi sur ${o.points_consultes} des ${o.nombre_points} points.` : ""),
+      )}
+    </details>`;
   } else if (b.officiel === undefined) {
     html += hint("🔎 Recherche des informations officielles (paiement CB, tarifs, horaires, accès)…");
   } else if (b.officiel?.indisponible) {
@@ -996,8 +1059,48 @@ function remplirFiche(b, ctx) {
   $("ev-borne-panne-btn")?.addEventListener("click", () => {
     const signalee = basculerBorneEnPanne(nom, b.lat, b.lon);
     toast(signalee ? `⚠️ Borne écartée de tes trajets pendant ${JOURS_BORNE_EN_PANNE} jours` : "✅ Borne de nouveau proposée dans tes trajets");
+    signalerBornePartage(b.lat, b.lon, signalee ? "panne" : "retabli", { nom });
     remplirFiche(b, ctx);
   });
+  $("ev-borne-confirme-libre-btn")?.addEventListener("click", () => {
+    toast("✅ Merci, c'est partagé avec les autres utilisateurs de TrajetVE.");
+    signalerBornePartage(b.lat, b.lon, "libre", { nom });
+  });
+  $("ev-borne-confirme-occupee-btn")?.addEventListener("click", () => {
+    toast("⏳ Merci, c'est partagé avec les autres utilisateurs de TrajetVE.");
+    signalerBornePartage(b.lat, b.lon, "occupee", { nom });
+  });
+  afficherSignalementsPartages(b);
+}
+
+// Signalements des AUTRES utilisateurs à proximité de cette borne (relais
+// partagé, facultatif) -- affichés après coup, sans bloquer le rendu de la
+// fiche (réseau potentiellement lent/absent). Demande explicite du
+// 2026-10-09 : les signalements "en panne" restaient connus seulement du
+// téléphone qui avait signalé.
+// Une confirmation d'occupation vieille de plusieurs heures n'a plus de
+// valeur (la place a pu changer de mains) -- même fenêtre que l'occupation
+// officielle (OCCUPATION_RECENTE_MS, irve.js) pour rester cohérent.
+const OCCUPATION_PARTAGEE_RECENTE_MS = 3600 * 1000;
+
+async function afficherSignalementsPartages(b) {
+  const zone = $("ev-borne-signalements-partages");
+  if (!zone || !relaisConfigure()) return;
+  const proches = await signalementsPartagesProches(b.lat, b.lon, 1);
+  if (!zone.isConnected) return; // fiche fermée/changée pendant l'attente réseau
+  const ici = proches.filter((s) => Math.abs(s.lat - b.lat) < 0.001 && Math.abs(s.lon - b.lon) < 0.0015);
+  if (!ici.length) return;
+  const lignes = [];
+  const dernier = ici[ici.length - 1];
+  if (dernier.type === "panne") {
+    lignes.push(`<div class="ev-alerte">⚠️ Signalée en panne par un autre utilisateur de TrajetVE le ${new Date(dernier.ts).toLocaleDateString("fr-FR")}${dernier.commentaire ? ` : ${escapeHtml(dernier.commentaire)}` : ""}.</div>`);
+  }
+  const dernierOccupation = [...ici].reverse().find((s) => s.type === "libre" || s.type === "occupee");
+  if (dernierOccupation && Date.now() - dernierOccupation.ts < OCCUPATION_PARTAGEE_RECENTE_MS) {
+    const libre = dernierOccupation.type === "libre";
+    lignes.push(`<div class="ev-cb-pill ${libre ? "ok" : "warn"}">👤 ${libre ? "Libre" : "Occupée"} (confirmé par un utilisateur ${ageTexte(Date.now() - dernierOccupation.ts)})</div>`);
+  }
+  zone.innerHTML = lignes.join("");
 }
 
 function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer = false } = {}) {
@@ -1014,7 +1117,11 @@ function ouvrirBorne(b, { contexteArret = null, centrerCarte = true, remplacer =
   $("ev-station-note-input").value = obtenirNoteBorne(nom, b.lat, b.lon);
 
   if (b.officiel === undefined) {
-    enrichirBornes([b]).then(appliquerAbonnements).then(() => {
+    // attendreEtats : sans ça, la fiche affiche parfois « occupation
+    // inconnue » alors que l'info existe bien, juste pas encore reçue (gros
+    // fichier des états en temps réel) -- signalé par l'utilisateur le
+    // 2026-10-11.
+    enrichirBornes([b], { attendreEtats: true }).then(appliquerAbonnements).then(() => {
       if (borneOuverte?.b === b) remplirFiche(b, contexteArret);
       rafraichirBorne(b);
     });
@@ -1105,6 +1212,19 @@ function cablerFormulaire() {
       appliquerPresetMode(mode);
     }),
   );
+  $("ev-relais-batterie-btn").addEventListener("click", async () => {
+    if (!relaisConfigure()) return toast("Configure l'URL du relais dans 🚗 Profil pour utiliser ce bouton (facultatif).");
+    const btn = $("ev-relais-batterie-btn");
+    btn.disabled = true;
+    btn.textContent = "🔗 Lecture en cours…";
+    const etat = await lireEtatVehiculeRelais();
+    btn.disabled = false;
+    btn.textContent = "🔗 Récupérer la batterie réelle (Bluelink)";
+    if (!etat || !Number.isFinite(etat.batterie_pct)) return toast("⚠️ Batterie indisponible : JARVIS doit avoir publié un état récent (moins de 15 min).");
+    $("ev-charge-pct-input").value = Math.round(etat.batterie_pct);
+    $("ev-charge-pct-input").dispatchEvent(new Event("input", { bubbles: true }));
+    toast(`🔋 Batterie réelle récupérée : ${Math.round(etat.batterie_pct)} %`);
+  });
   $("ev-depart-gps-btn").addEventListener("click", () => ($("ev-depart-input").value = "Ma position"));
   $("ev-depart-clear-btn").addEventListener("click", () => {
     $("ev-depart-input").value = "";
@@ -1136,6 +1256,29 @@ function cablerFormulaire() {
   $("ev-scenarios-btn").addEventListener("click", lancerScenarios);
   $("ev-voir-resultat-btn").addEventListener("click", () => {
     if (dernierTrajet) afficherResultat(dernierTrajet);
+  });
+  // Enchaine une nouvelle etape depuis l'arrivee REELLE (pas une recharge
+  // supposee) -- demande explicite de l'utilisateur 2026-10-10 (ex: Bordeaux
+  // -> Cenon juste apres l'arrivee, sans recharger entre les deux).
+  $("ev-continuer-trajet-btn").addEventListener("click", () => {
+    if (!dernierTrajet) return;
+    $("ev-depart-input").value = dernierTrajet.to_name || "";
+    $("ev-destination-input").value = "";
+    $("ev-charge-pct-input").value = Math.max(1, Math.round(dernierTrajet.pct_batterie_arrivee ?? 100));
+    afficherVue("trajet");
+    toast(`🔋 Depart repris a ${Math.round(dernierTrajet.pct_batterie_arrivee)} % -- indique la prochaine destination.`);
+    $("ev-destination-input").focus();
+  });
+  // Prepare le trajet retour (lendemain ou plus tard) : inverse juste
+  // depart/destination, la batterie du jour reste au choix de l'utilisateur
+  // (pas d'hypothese de recharge, contrairement a "Avec le retour" qui
+  // calcule les deux sens d'un coup en supposant une recharge immediate).
+  $("ev-trajet-retour-btn").addEventListener("click", () => {
+    if (!dernierTrajet) return;
+    $("ev-depart-input").value = dernierTrajet.to_name || "";
+    $("ev-destination-input").value = dernierTrajet.from_name || "";
+    afficherVue("trajet");
+    toast("↩️ Depart et destination inverses -- regle la batterie du jour et calcule.");
   });
   $("ev-favori-trajet-btn").addEventListener("click", () => {
     const destination = $("ev-destination-input").value.trim();
@@ -1435,7 +1578,7 @@ function etapesHtml(p) {
       <div class="ev-etape-rail"><div class="ev-etape-icone">🚗</div></div>
       <div class="ev-etape-corps">
         <div class="ev-etape-titre">Départ · ${escapeHtml(nomCourt(p.from_name))}</div>
-        <div class="ev-etape-sous">${heure(departMs)} · ${batterieHtml(dernierChargeDepartPct)}</div>
+        <div class="ev-etape-sous">${heure(departMs)} · ${batterieHtml(dernierChargeDepartPct)}${p.meteo_trajet_depart ? ` · 🌡️ ${p.meteo_trajet_depart.temperature_c} °C${p.meteo_trajet_depart.pluie ? " 🌧️" : ""}` : ""}</div>
         ${route(0, arrets.length ? arrets[0].km_depuis_depart : p.distance_km)}
       </div>
     </div>`;
@@ -1454,9 +1597,14 @@ function etapesHtml(p) {
           <div class="ev-etape-carte" data-arret="${i}">
             <strong>${a.impose ? "⭐ " : ""}${escapeHtml(a.nom_borne)}</strong>${a.impose ? ` <span class="ev-cb-pill ok">Votre aire</span>` : ""}
             <div class="ev-borne-sous">${badgeOperateur(a.operateur)}${escapeHtml(a.operateur || "")}${a.adresse ? ` · ${escapeHtml(a.adresse)}` : ""}</div>
-            <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span></div>
+            <div class="ev-meta"><span>⚡ ${a.puissance_kw} kW</span><span>+${a.kwh_ajoutes} kWh</span><span>⏱️ ${a.temps_charge_min} min</span>${a.meteo ? `<span>🌡️ ${a.meteo.temperature_c} °C${a.meteo.pluie ? " 🌧️" : ""}</span>` : ""}</div>
             <div>${batterieHtml(a.pct_arrivee_borne)} → ${batterieHtml(a.pct_depart_borne)}</div>
-            <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique)}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            <div class="ev-borne-pastilles">${pastilleEtat(a.etat_dynamique) || (a.officiel ? `<span class="ev-cb-pill neutre">❔ Occupation en temps réel inconnue</span>` : "")}<span class="ev-cb-pill ${cb.classe}">${cb.court}</span><span class="ev-cb-pill neutre">${coutHtml(a.cout_estime_eur, a.prix_kwh_eur, a.prix_est_estimation)}</span></div>
+            ${
+              (a.officiel?.operateur || a.operateur) && operateurPeuFiable(a.officiel?.operateur || a.operateur)
+                ? `<div class="ev-hint">⚠️ ${escapeHtml(a.officiel?.operateur || a.operateur)} transmet rarement l'occupation en temps réel -- vérifie un plan B.</div>`
+                : ""
+            }
             ${a.alternatives?.length ? `<div class="ev-hint">🔁 Plan B si elle est prise ou en panne : <strong>${escapeHtml(a.alternatives[0].nom)}</strong> (${escapeHtml(a.alternatives[0].distance_km)} km, ${escapeHtml(a.alternatives[0].puissance_max_kw)} kW)</div>` : ""}
             ${a.pct_evite_arret ? `<div class="ev-hint">💡 Charger jusqu'à ${nombre(a.pct_evite_arret.pct)} % ici aurait évité l'arrêt suivant, mais aurait pris ${formaterMinutes(a.pct_evite_arret.cout_min)} de plus au total.</div>` : ""}
           </div>
@@ -1470,7 +1618,7 @@ function etapesHtml(p) {
       <div class="ev-etape-rail"><div class="ev-etape-icone">🏁</div></div>
       <div class="ev-etape-corps">
         <div class="ev-etape-titre">Arrivée · ${escapeHtml(nomCourt(p.to_name))}</div>
-        <div class="ev-etape-sous">vers ${heure(pointHoraire(p.distance_km))} · ${batterieHtml(p.pct_batterie_arrivee)}</div>
+        <div class="ev-etape-sous">vers ${heure(pointHoraire(p.distance_km))} · ${batterieHtml(p.pct_batterie_arrivee)}${p.meteo_arrivee ? ` · 🌡️ ${p.meteo_arrivee.temperature_c} °C${p.meteo_arrivee.pluie ? " 🌧️" : ""}` : ""}</div>
       </div>
     </div>`;
   return html;
@@ -1888,6 +2036,14 @@ function renderProfilTrajet(p) {
   }
   $("ev-profil-stats").innerHTML = stats.join("");
 
+  // Répartition par limitation réelle (80, 110, 130...) -- preuve concrète
+  // et vérifiable que le calcul suit les vraies limitations du trajet,
+  // tronçon par tronçon, et pas une vitesse moyenne unique. Demande
+  // explicite du 2026-10-09 (trajet Saint-Nazaire -> Auray via La Roche-
+  // Bernard : 80 km/h puis 110 km/h).
+  const repartition = s.repartition_vitesses?.length
+    ? ` Vitesses rencontrées : ${s.repartition_vitesses.map((r) => `${r.limite_kmh} km/h sur ${nombre(r.km)} km (≈${nombre(r.energie_kwh)} kWh, soit ${nombre(r.conso_kwh100)} kWh/100 km)`).join(", ")}.`
+    : "";
   const notes =
     p.modele === "detaille"
       ? [
@@ -1896,7 +2052,7 @@ function renderProfilTrajet(p) {
           pt.meteo_ok ? "météo à l'heure de passage" : "réglage saisonnier du profil",
         ]
       : ["Consommation constante (mode JARVIS) — coche « Calcul détaillé » dans les options avancées pour tenir compte de la vitesse et du relief"];
-  $("ev-profil-note").textContent = `ℹ️ ${notes.join(", ")}. Estimation : la conduite réelle peut s'en écarter.`;
+  $("ev-profil-note").textContent = `ℹ️ ${notes.join(", ")}. Estimation : la conduite réelle peut s'en écarter.${repartition}`;
   afficherVueCourbe();
 }
 
@@ -2067,7 +2223,7 @@ function demanderBornesADistance(minutes) {
     placerCurseur(r.lat, r.lon, `km ${r.distance_cible_km}`);
     const bornes = r.bornes || [];
     afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
-    appliquerAbonnements(await enrichirBornes(bornes));
+    appliquerAbonnements(await enrichirBornes(bornes, { attendreEtats: true }));
     if (jeton === jetonFrise) afficherListe(zone, bornes, "Aucune borne trouvée près de ce point.", " du tracé");
   }, 250);
 }
@@ -2487,6 +2643,9 @@ function rendreReglagesProfil() {
   const { tomtom, openChargeMap } = getApiKeys();
   $("ev-cle-tomtom").value = tomtom || "";
   $("ev-cle-ocm").value = openChargeMap || "";
+  $("ev-relais-url").value = reglages.relais_url || "";
+  $("ev-alerte-batterie-activee").checked = reglages.alerte_batterie_activee !== false;
+  $("ev-alerte-batterie-seuil").value = reglages.alerte_batterie_seuil_pct ?? 20;
 
   const types = typesDeCharge(profil);
   for (const option of $("ev-calc-type-select").options) {
@@ -2670,6 +2829,9 @@ function cablerProfil() {
       zones_danger: $("ev-reglage-zones-danger").checked,
       pause_mi_parcours: $("ev-reglage-pause-mi-parcours").checked,
       mode_eco: $("ev-reglage-mode-eco").checked,
+      relais_url: $("ev-relais-url").value.trim(),
+      alerte_batterie_activee: $("ev-alerte-batterie-activee").checked,
+      alerte_batterie_seuil_pct: Math.min(90, Math.max(5, Number($("ev-alerte-batterie-seuil").value) || 20)),
     });
     const ancienneCleTomTom = getApiKeys().tomtom;
     setApiKeys({ tomtom: $("ev-cle-tomtom").value.trim(), openChargeMap: $("ev-cle-ocm").value.trim() });
@@ -2705,6 +2867,27 @@ export function proposerRechargeMaison() {
     texte: `🔌 Trajet ${quand} vers ${nomCourt(t.destination || "").split(",")[0]} (${nombre(t.distance_km)} km) : branchez ce soir en heures creuses pour partir à 100 %.`,
     boutons: [{ libelle: "OK", action: () => {} }],
   });
+}
+
+// « 🗓️ RDV médecin ? » : destination du prochain rendez-vous du jour,
+// publiée par JARVIS au moment du briefing "je pars en voiture" (voir
+// relais.js, jarvis_briefing_runtime.py). N'écrase jamais une destination
+// déjà saisie. Demande explicite de l'utilisateur le 2026-10-11.
+async function majSuggestionJarvis() {
+  const b = $("ev-suggestion-jarvis");
+  if ($("ev-destination-input").value.trim()) {
+    b.classList.add("hidden");
+    return;
+  }
+  const s = await trajetSuggereParJarvis();
+  if (!s) {
+    b.classList.add("hidden");
+    return;
+  }
+  b.dataset.dest = s.destination;
+  const heure = s.heure ? new Date(s.heure).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+  b.textContent = `🗓️ ${s.titre || "Rendez-vous"}${heure ? ` (${heure})` : ""} ?`;
+  b.classList.remove("hidden");
 }
 
 // « 💡 Travail ? » : destination souvent prise à cette heure-ci.
@@ -2773,9 +2956,14 @@ export function viderChampsTrajet() {
 function rendreMoyensPaiement() {
   const m = lireMoyens(lireReglages());
   const case_ = (attr, coche, texte) => `<label class="ev-check"><input type="checkbox" ${attr}${coche ? " checked" : ""}> ${texte}</label>`;
+  const options =
+    `<option value="">— Aucun —</option>` +
+    BADGES_MULTIRESEAUX.map((b) => `<option value="${b.id}"${m.badgeId === b.id ? " selected" : ""}>${escapeHtml(b.nom)}</option>`).join("") +
+    `<option value="autre"${m.badgeId === "autre" ? " selected" : ""}>Un autre badge multi-réseaux</option>`;
   $("ev-moyens-paiement").innerHTML =
     case_('data-moyen="cb"', m.cb, "💳 Carte bancaire sans contact") +
-    case_('data-moyen="badge"', m.badge, "🪪 Un badge multi-réseaux (Chargemap, Freshmile, Shell Recharge…)") +
+    `<label class="ev-champ"><span class="ev-champ-titre">🪪 Mon badge multi-réseaux</span><select id="ev-moyen-badge" class="ev-input">${options}</select></label>` +
+    `<div class="ev-hint">Les 10 plus répandus en France : il fonctionne presque partout grâce à l'interopérabilité obligatoire entre réseaux publics (seule vraie exception connue : les Superchargeurs Tesla, badge-less). La différence entre eux, c'est surtout le prix.</div>` +
     `<div class="ev-hint">Les applis de réseau où j'ai un compte :</div>` +
     RESEAUX_PAIEMENT.map((r) => case_(`data-reseau="${r.id}"`, m.reseaux.includes(r.id), `📲 ${escapeHtml(r.nom)}`)).join("");
 }
@@ -2785,7 +2973,7 @@ function enregistrerMoyensPaiement() {
   sauverReglages({
     moyens_paiement: {
       cb: zone.querySelector('[data-moyen="cb"]').checked,
-      badge: zone.querySelector('[data-moyen="badge"]').checked,
+      badge_id: zone.querySelector("#ev-moyen-badge").value,
       reseaux: [...zone.querySelectorAll("[data-reseau]:checked")].map((c) => c.dataset.reseau),
     },
   });
@@ -2871,6 +3059,23 @@ async function basculerAutonomie() {
   const centre = pos.erreur ? centreVisible() : pos;
   autonomieAffichee = true;
   chip.classList.add("actif");
+
+  // Vrai contour routier (respecte les limitations de vitesse réelles,
+  // comme le calcul détaillé d'un trajet) si une clé TomTom est
+  // disponible ; sinon, repli sur le cercle à vol d'oiseau habituel.
+  const energieKwh = (p.capacite_kwh * (charge - marge)) / 100;
+  const { tomtom } = getApiKeys();
+  if (tomtom) {
+    toast("🔋 Calcul de la zone atteignable (vraies routes et limitations)…");
+    const courbeVitesse = [30, 50, 70, 90, 110, 130].map((v) => [v, conso * facteurVitesse(p, v)]);
+    const zone = await calculerZoneAtteignable(tomtom, centre.lat, centre.lon, energieKwh, p, courbeVitesse);
+    if (zone.ok) {
+      afficherAutonomie(centre.lat, centre.lon, kmRoute * PART_VOL_OISEAU, zone.limites);
+      toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : zone atteignable par la route, limitations de vitesse réelles comprises.`);
+      return;
+    }
+    console.warn("[AUTONOMIE] Zone atteignable TomTom indisponible, repli sur le cercle approximatif :", zone.erreur);
+  }
   afficherAutonomie(centre.lat, centre.lon, kmRoute * PART_VOL_OISEAU);
   toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : environ ${nombre(kmRoute)} km de route${pos.erreur ? ", autour du centre de la carte" : ""}. Niveau de batterie réglable dans Trajet.`);
 }
