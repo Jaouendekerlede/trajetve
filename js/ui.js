@@ -807,6 +807,7 @@ function cablerCarte() {
     $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
   }
   majBoutonFiltres();
+  majLibellePayable();
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
     chip.addEventListener("click", () => {
@@ -2977,8 +2978,19 @@ function enregistrerMoyensPaiement() {
       reseaux: [...zone.querySelectorAll("[data-reseau]:checked")].map((c) => c.dataset.reseau),
     },
   });
+  majLibellePayable();
   // Le filtre « Je peux payer » dépend de ces choix.
   if (filtres.has("payable")) renderBornes();
+}
+
+// Le chip "Je peux payer" prend le nom du badge choisi (ex: "✅ Chargemap
+// Pass") quand il y en a un -- plus explicite que le libelle generique,
+// demande explicite de l'utilisateur le 2026-10-15.
+function majLibellePayable() {
+  const chip = $("ev-chip-payable");
+  if (!chip) return;
+  const { badgeNom } = lireMoyens(lireReglages());
+  chip.textContent = badgeNom ? `✅ ${badgeNom}` : "✅ Je peux payer";
 }
 
 // Minuteur de recharge hors guidage (depuis le calculateur). Gardé dans le
