@@ -109,6 +109,26 @@ export async function publierFiabiliteOperateurs(donnees) {
   }
 }
 
+// Commande ponctuelle envoyée à JARVIS (ex: préchauffer la batterie en
+// approchant d'une borne rapide, comme ABRP -- voir rappelsAvantBorne dans
+// navigation.js). JARVIS interroge le relais toutes les ~90 s et agit une
+// seule fois par "ts" ; toujours best-effort, jamais bloquant pour la
+// navigation. Demande explicite de l'utilisateur le 2026-10-25.
+export async function publierCommandeVehicule(action, extra = {}) {
+  const base = urlRelais();
+  if (!base) return;
+  try {
+    await fetch(`${base}/commande-vehicule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ts: Date.now(), ...extra }),
+      signal: avecDelai(),
+    });
+  } catch {
+    // Sans conséquence : au pire, l'utilisateur reçoit juste le rappel vocal existant.
+  }
+}
+
 let cache = { cle: "", ts: 0, donnees: [] };
 const DUREE_CACHE_MS = 5 * 60000;
 

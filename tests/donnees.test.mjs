@@ -45,6 +45,17 @@ test("consommation mesurée : moyenne pondérée, mesures aberrantes ignorées",
   assert.equal(m.kwh_100km, 15.5, "(4,5 + 7,1) kWh sur 75 km");
 });
 
+test("consommation calibrée : la valeur mesurée remplace la fiche technique dans le profil", async () => {
+  localStorage.clear();
+  const { consommationEffectiveKwh100km } = await import("../js/planner.js");
+  s.definirProfilVehicule({ consommation_kwh_100km: 13.2, saison: "ete" });
+  assert.equal(s.obtenirProfilVehicule().consommation_kwh_100km, 13.2, "pas encore assez de mesures : fiche technique inchangée");
+  s.enregistrerMesureConso(60, 10.8); // 18 kWh/100 km mesurés, nettement différent de la fiche
+  const p = s.obtenirProfilVehicule();
+  assert.equal(p.consommation_kwh_100km, 18, "la valeur mesurée remplace la fiche technique une fois 50 km atteints");
+  assert.equal(consommationEffectiveKwh100km(p), 18, "le calcul de trajet lit bien la valeur calibrée (multiplicateur été = 1.0)");
+});
+
 test("abonnements : le prix remplace le tarif public sur le bon réseau seulement", () => {
   s.sauverAbonnements([{ reseau: "Ionity", prix: 0.39 }]);
   const bornes = [

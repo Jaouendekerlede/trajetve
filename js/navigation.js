@@ -7,7 +7,7 @@
 
 import { getApiKeys } from "./config.js";
 import { obtenirProfilVehicule, lireReglages, sauverReglages, ajouterAuJournal, enregistrerMesureConso, rectanglesZonesEvitees, garerVoiture, ajouterTrajetFait, ajouterTrace, consoParType, listerRadarsPersonnels, ajouterRadarPersonnel, retirerDernierRadarPersonnel, listerBornesPersonnelles, ajouterBornePersonnelle, retirerDerniereBornePersonnelle } from "./storage.js";
-import { signalerBornePartage } from "./relais.js";
+import { signalerBornePartage, publierCommandeVehicule } from "./relais.js";
 import { toast } from "./ui-commun.js";
 import { enrichirBornes } from "./irve.js";
 import { sauvegardeApresTrajet } from "./ui-drive.js";
@@ -919,8 +919,12 @@ function rappelsAvantBorne(arret) {
   // Recharge rapide dans ~20 min : batterie chaude = charge plus rapide.
   if (etat.prefs.prechauffage && (arret.puissance_kw || 0) >= 50 && secondes <= AVANCE_PRECHAUFFAGE_S && secondes > 5 * 60 && !etat.rappelsFaits.has(`chauffe|${cle}`)) {
     etat.rappelsFaits.add(`chauffe|${cle}`);
-    parler("Recharge rapide dans une vingtaine de minutes : pensez à préchauffer la batterie.");
-    const texte = "🌡️ Préchauffez la batterie : borne rapide dans ~20 min";
+    // Déclenche le préchauffage réel via JARVIS/Bluelink (comme ABRP) --
+    // best-effort : le rappel vocal reste utile même si ça échoue (relais
+    // non configuré, JARVIS éteint, Bluelink indisponible...).
+    publierCommandeVehicule("prechauffage", { lat: arret.lat, lon: arret.lon, nom_borne: arret.nom_borne });
+    parler("Recharge rapide dans une vingtaine de minutes : préchauffage de la batterie demandé.");
+    const texte = "🌡️ Préchauffage batterie demandé : borne rapide dans ~20 min";
     if ($("ev-nav-alerte").classList.contains("hidden")) {
       afficherAlerte(texte);
       setTimeout(() => etat && $("ev-nav-alerte").textContent === texte && afficherAlerte(null), 15000);

@@ -2582,8 +2582,8 @@ function majConsoMesuree() {
   const apprisTxt = [types.ville && `ville ${nombre(types.ville, 1)}`, types.route && `route ${nombre(types.route, 1)}`, types.autoroute && `autoroute ${nombre(types.autoroute, 1)}`].filter(Boolean).join(" · ");
   const mesure = consoMesuree();
   $("ev-conso-mesuree").innerHTML = mesure
-    ? `Mesurée : <strong>${nombre(mesure.kwh_100km, 1)}</strong> sur ${mesure.km} km · <button type="button" class="ev-lien" id="ev-conso-utiliser-btn">Utiliser</button>`
-    : "Se mesure en roulant (batterie indiquée aux bornes)";
+    ? `Mesurée : <strong>${nombre(mesure.kwh_100km, 1)}</strong> sur ${mesure.km} km · déjà utilisée pour calculer tes trajets · <button type="button" class="ev-lien" id="ev-conso-utiliser-btn">Figer dans le profil</button>`
+    : "Se mesure en roulant (batterie indiquée aux bornes), utilisée automatiquement pour calculer tes trajets dès 50 km mesurés";
   if (apprisTxt || f) $("ev-conso-mesuree").insertAdjacentHTML("beforeend", `<div>${apprisTxt ? `Apprise par route (kWh/100) : ${apprisTxt}` : ""}${f ? `<br>Temps de charge appris : réel ≈ ${nombre(f, 2)} × calculé` : ""}</div>`);
   $("ev-conso-utiliser-btn")?.addEventListener("click", () => {
     $("ev-profil-conso").value = mesure.kwh_100km;

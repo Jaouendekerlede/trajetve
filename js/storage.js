@@ -45,6 +45,16 @@ export function obtenirProfilVehicule() {
   }
   const fusion = { ...PROFIL_PAR_DEFAUT, ...profil };
   fusion.facteur_charge_appris = facteurChargeAppris();
+  // Consommation calibrée sur l'historique réel (corrections de batterie en
+  // navigation, voir enregistrerMesureConso) plutôt que la seule fiche
+  // technique -- demande explicite du 2026-10-25, inspirée d'ABRP.
+  // Simplification assumée : la valeur mesurée reflète déjà le mélange de
+  // saisons réellement roulées, et MULTIPLICATEURS_SAISON s'applique quand
+  // même par-dessus pour le trajet en cours -- léger double comptage
+  // saisonnier possible, pas corrigé ici (demanderait de stocker la saison
+  // à chaque mesure).
+  const mesure = consoMesuree();
+  if (mesure) fusion.consommation_kwh_100km = mesure.kwh_100km;
   if (!(fusion.saison in MULTIPLICATEURS_SAISON)) {
     fusion.saison = "mi_saison";
   }
