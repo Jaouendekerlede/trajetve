@@ -370,7 +370,6 @@ function cablerNavigation() {
     else if (l.dataset.vue) ouvrirRubrique(l.dataset.vue, null, `${l.querySelector(".ev-menu-icone").textContent} ${l.querySelector(".ev-menu-nom").textContent}`);
   });
   $("ev-cles-manquantes").addEventListener("click", () => ouvrirBloc("ev-bloc-cles"));
-  $("ev-filtres-ouvrir-btn").addEventListener("click", () => ouvrirBloc("ev-bloc-recherche"));
   $("ev-voix-global-btn").addEventListener("click", () => basculerVoix());
   majIconeVoixGlobale();
   $("ev-recherche-rapide").addEventListener("click", () => {
@@ -826,13 +825,11 @@ function cablerCarte() {
     lancerTrajet();
   });
 
-  function majBoutonFiltres() {
-    const n = filtres.size;
-    $("ev-filtres-ouvrir-btn").textContent = n ? `📍 Chercher un lieu / filtrer (${n})` : "📍 Chercher un lieu / filtrer";
-    $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
-  }
-  majBoutonFiltres();
   majLibellePayable();
+  // Le badge de compteur sur "ev-filtres-ouvrir-btn" (majBoutonFiltres) a
+  // été retiré le 2026-10-25 en même temps que ce bouton (supprimé du
+  // bandeau du haut, redondant avec Menu > Rechercher des bornes) -- les
+  // chips de filtre rapide eux-mêmes restent actifs/fonctionnels ici.
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
     chip.addEventListener("click", () => {
@@ -841,7 +838,6 @@ function cablerCarte() {
       else filtres.add(f);
       chip.classList.toggle("actif", filtres.has(f));
       sauverReglages({ filtres_carte: [...filtres] });
-      majBoutonFiltres();
       renderBornes();
       if (vueCourante !== "bornes" && vueCourante !== "resultat") afficherVue("bornes", { etat: "mi", historique: false });
     });
