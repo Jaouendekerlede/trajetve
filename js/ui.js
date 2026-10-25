@@ -23,7 +23,7 @@ import { cablerZonesEvitees } from "./ui-zones.js";
 import { facteurVitesse } from "./energie.js";
 import { classeNumero } from "./panneau-nav.js";
 import { cablerSuggestions } from "./ui-suggestions.js";
-import { RESEAUX_PAIEMENT, BADGES_MULTIRESEAUX, lireMoyens, facilitePaiement, moyensAcceptesListe } from "./paiement.js";
+import { RESEAUX_PAIEMENT, BADGES_MULTIRESEAUX, lireMoyens, facilitePaiement, moyensAcceptesListe, reseauDeLaBorne } from "./paiement.js";
 import { relaisConfigure, lireEtatVehiculeRelais, trajetSuggereParJarvis, signalerBornePartage, signalementsPartagesProches } from "./relais.js";
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
@@ -518,6 +518,9 @@ function passeFiltres(b) {
   if (filtres.has("rapide") && puissanceBorne(b) < 50) return false;
   if (filtres.has("cb") && !cbPossible(b)) return false;
   if (filtres.has("payable") && !enAttente && facilitePaiement(b, lireMoyens(lireReglages())).niveau === "incertain") return false;
+  // Le badge Chargemap (comme les autres badges multi-reseaux) passe partout
+  // sauf aux Superchargeurs Tesla, qui n'acceptent pas les badges externes.
+  if (filtres.has("chargemap") && reseauDeLaBorne(b)?.id === "tesla") return false;
   if (filtres.has("compatible") && !borneCompatible(b, obtenirProfilVehicule().connecteurs_acceptes)) return false;
   if (filtres.has("h24") && !enAttente && !(o && /24\s*\/\s*7|24\s*h/i.test(o.horaires))) return false;
   if (filtres.has("gratuit") && !enAttente && !(o?.gratuit === "oui" || /gratuit|free/i.test(b.cout_texte || ""))) return false;
@@ -807,6 +810,7 @@ function cablerCarte() {
     $("ev-filtres-ouvrir-btn").classList.toggle("actif", n > 0);
   }
   majBoutonFiltres();
+  majLibellePayable();
   document.querySelectorAll(".ev-chip[data-filtre]").forEach((chip) => {
     chip.classList.toggle("actif", filtres.has(chip.dataset.filtre));
     chip.addEventListener("click", () => {
@@ -2977,8 +2981,19 @@ function enregistrerMoyensPaiement() {
       reseaux: [...zone.querySelectorAll("[data-reseau]:checked")].map((c) => c.dataset.reseau),
     },
   });
+  majLibellePayable();
   // Le filtre « Je peux payer » dépend de ces choix.
   if (filtres.has("payable")) renderBornes();
+}
+
+// Le chip "Je peux payer" prend le nom du badge choisi (ex: "✅ Chargemap
+// Pass") quand il y en a un -- plus explicite que le libelle generique,
+// demande explicite de l'utilisateur le 2026-10-15.
+function majLibellePayable() {
+  const chip = $("ev-chip-payable");
+  if (!chip) return;
+  const { badgeNom } = lireMoyens(lireReglages());
+  chip.textContent = badgeNom ? `✅ ${badgeNom}` : "✅ Je peux payer";
 }
 
 // Minuteur de recharge hors guidage (depuis le calculateur). Gardé dans le
