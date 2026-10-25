@@ -148,7 +148,7 @@
       <div class="ev-carte-bloc">
         <label class="ev-champ"><span class="ev-champ-titre">Batterie au départ : <span id="ev-charge-pct-value" class="ev-valeur">100</span> %</span>
           <div class="ev-jauge"><div id="ev-charge-pct-fill" class="ev-jauge-remplissage"></div></div>
-          <input type="range" min="1" max="100" value="100" id="ev-charge-pct-input" class="ev-curseur">
+          <input type="number" inputmode="numeric" min="1" max="100" step="1" value="100" id="ev-charge-pct-input" class="ev-input ev-batterie-nombre">
           <span id="ev-charge-km" class="ev-km-estime"></span>
         </label>
         <button type="button" id="ev-relais-batterie-btn" class="ev-lien">🔗 Récupérer la batterie réelle (Bluelink)</button>
@@ -842,7 +842,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 136 : la fiabilité des opérateurs observée ici est partagée avec JARVIS via le relais (son propre calcul de trajet en profite aussi)</div>
+      <div class="ev-hint ev-lien-centre">Version 137 : batterie au départ saisie au clavier (au lieu d'un curseur trop sensible)</div>
     </div>
   </div>
 </section>
