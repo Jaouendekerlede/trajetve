@@ -28,7 +28,7 @@ import { relaisConfigure, lireEtatVehiculeRelais, trajetSuggereParJarvis, signal
 import { lignesEtat } from "./etat-appli.js";
 import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
-import { rendreStats, cablerStats } from "./ui-stats.js";
+import { rendreStats, cablerStats, rendreTrajets } from "./ui-stats.js";
 import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
 import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { boutonPartage, partagerTrajet } from "./ui-partage.js";
@@ -301,6 +301,7 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   if (vue === "outils") {
     rendreJournal();
     rendreStats();
+    rendreTrajets();
     rendreTraces();
     // Importe les recharges détectées par JARVIS via Bluelink depuis la
     // dernière ouverture de cet écran -- best-effort, puis rafraîchit
@@ -743,7 +744,7 @@ function cablerCarte() {
   cablerParkings();
   cablerTrafic();
   cablerVoitureGaree();
-  cablerStats();
+  cablerStats(ouvrirBloc);
   cablerSOS();
   cablerScanBorne();
   cablerDiagnostic();

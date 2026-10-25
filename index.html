@@ -397,6 +397,20 @@
           <button type="button" data-periode="tout">Depuis le début</button>
         </div>
         <div id="ev-stats-tuiles" class="ev-tuiles"></div>
+        <!-- Km parcourus : rempli tout seul par un trajet guidé, ou à la
+             main en attendant la détection automatique (odomètre réel via
+             Bluelink, voir Journal des recharges). Demande explicite de
+             l'utilisateur le 2026-10-25. -->
+        <details class="ev-details" id="ev-trajets-details">
+          <summary>➕ Ajouter un trajet à la main (km)</summary>
+          <div class="ev-grille-2">
+            <label class="ev-champ">Date <input type="date" id="ev-trajet-manuel-date" class="ev-input"></label>
+            <label class="ev-champ">Km parcourus <input type="number" id="ev-trajet-manuel-km" class="ev-input" min="0" step="0.1"></label>
+            <label class="ev-champ ev-large">Destination (optionnel) <input type="text" id="ev-trajet-manuel-destination" class="ev-input" placeholder="Ex : Nantes"></label>
+            <button id="ev-trajet-manuel-ajouter-btn" class="ev-btn" type="button">Ajouter</button>
+          </div>
+        </details>
+        <div id="ev-trajets-liste" class="ev-journal-liste"></div>
         <details class="ev-details">
           <summary>🗺️ Revoir mes derniers trajets</summary>
           <div id="ev-traces-liste" class="ev-journal-liste"></div>
@@ -890,7 +904,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 146 : nouvelle illustration de la Kona (silhouette SUV plus fidèle)</div>
+      <div class="ev-hint ev-lien-centre">Version 147 : ajout manuel de trajets (km) + détail des tuiles de statistiques</div>
     </div>
   </div>
 </section>

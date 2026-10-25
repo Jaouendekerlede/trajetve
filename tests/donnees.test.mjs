@@ -123,6 +123,17 @@ test("conso apprise par type de route (mesures surtout sur un type)", () => {
   assert.equal(c.route, null);
 });
 
+test("trajets faits : ajout manuel puis suppression par date", () => {
+  localStorage.clear();
+  s.ajouterTrajetFait({ date: 1000, km: 25, destination: "Nantes" });
+  s.ajouterTrajetFait({ date: 2000, km: 40, destination: "Rennes" });
+  assert.equal(s.listerTrajetsFaits().length, 2);
+  s.retirerTrajetFait(1000);
+  const reste = s.listerTrajetsFaits();
+  assert.equal(reste.length, 1);
+  assert.equal(reste[0].destination, "Rennes");
+});
+
 test("trajet habituel : destination prise au moins 2 fois vers cette heure-ci", () => {
   localStorage.clear();
   const a8h = (j) => new Date(2026, 8, j, 8, 5).getTime();

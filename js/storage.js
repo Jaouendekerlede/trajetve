@@ -512,6 +512,10 @@ export function ajouterTrajetFait(trajet) {
   ecrireJson(CLE_TRAJETS_FAITS, [{ date: Date.now(), ...trajet }, ...listerTrajetsFaits()].slice(0, MAX_TRAJETS_FAITS));
 }
 
+export function retirerTrajetFait(date) {
+  ecrireJson(CLE_TRAJETS_FAITS, listerTrajetsFaits().filter((t) => t.date !== date));
+}
+
 // Conso apprise par type de route : mesures faites surtout (70 % des km)
 // en ville, sur route ou sur autoroute. { ville, route, autoroute } en
 // kWh/100 km (null si pas assez de km pour ce type).

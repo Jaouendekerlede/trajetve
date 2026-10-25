@@ -40,8 +40,11 @@ export function alerte(texte) {
   return `<div class="ev-alerte">${escapeHtml(texte)}</div>`;
 }
 
-export function tuile(couleur, valeur, label) {
-  return `<div class="ev-tuile ${couleur}"><span class="t-valeur">${escapeHtml(valeur)}</span><span class="t-label">${escapeHtml(label)}</span></div>`;
+// cible (optionnel) : posé en data-cible, pour qu'un clic délégué sache
+// quel détail ouvrir (voir ui-stats.js rendreStats/cablerStats).
+export function tuile(couleur, valeur, label, cible) {
+  const attr = cible ? ` data-cible="${escapeHtml(cible)}"` : "";
+  return `<div class="ev-tuile ${couleur}"${attr}><span class="t-valeur">${escapeHtml(valeur)}</span><span class="t-label">${escapeHtml(label)}</span></div>`;
 }
 
 export function telechargerTexte(nomFichier, texte) {
