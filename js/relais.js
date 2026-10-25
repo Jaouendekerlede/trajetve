@@ -129,6 +129,24 @@ export async function publierCommandeVehicule(action, extra = {}) {
   }
 }
 
+// Recharges réelles détectées par JARVIS via Bluelink (toute recharge, pas
+// seulement celles faites en navigation guidée) -- voir
+// jarvis_bluelink_runtime.boucle_detection_recharge. Lue à l'ouverture de
+// l'écran Outils (ui.js) pour importer dans le Journal des recharges.
+// Toujours best-effort, [] si non configuré/indisponible.
+export async function rechargesDetecteesParJarvis() {
+  const base = urlRelais();
+  if (!base) return [];
+  try {
+    const r = await fetch(`${base}/recharge-detectee`, { signal: avecDelai() });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return d?.ok ? d.recharges || [] : [];
+  } catch {
+    return [];
+  }
+}
+
 let cache = { cle: "", ts: 0, donnees: [] };
 const DUREE_CACHE_MS = 5 * 60000;
 

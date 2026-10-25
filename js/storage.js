@@ -258,6 +258,36 @@ export function retirerDuJournal(id) {
   ecrireJson(STORAGE_KEYS.journal, listerJournal().filter((e) => e.id !== id));
 }
 
+// Km réellement parcourus entre deux recharges détectées par JARVIS via
+// Bluelink (odomètre réel du véhicule, source: "bluelink"), pas une
+// estimation -- uniquement calculable entre deux entrées "bluelink"
+// consécutives (les seules à porter un odometre_km réel). Renvoie une Map
+// id d'entrée -> km réels parcourus avant cette recharge. Demande explicite
+// de l'utilisateur le 2026-10-25.
+export function kmReelsParRecharge(journal) {
+  const bluelink = journal.filter((e) => e.source === "bluelink" && Number.isFinite(e.odometre_km)).sort((a, b) => a.ts - b.ts);
+  const parId = new Map();
+  for (let i = 1; i < bluelink.length; i++) {
+    const km = bluelink[i].odometre_km - bluelink[i - 1].odometre_km;
+    if (km > 0) parId.set(bluelink[i].id, km);
+  }
+  return parId;
+}
+
+// Consommation réelle (kWh/100 km) déduite des recharges Bluelink
+// consécutives de la liste donnée -- les kWh rechargés à la recharge N
+// correspondent physiquement à l'énergie consommée sur les km parcourus
+// depuis la recharge N-1 (même principe que toute mesure de consommation
+// réelle à partir de l'historique de recharge). null si pas assez de
+// paires de recharges Bluelink consécutives.
+export function consommationReelleSur(journal) {
+  const parId = kmReelsParRecharge(journal);
+  if (!parId.size) return null;
+  const km = [...parId.values()].reduce((s, v) => s + v, 0);
+  const kwh = journal.filter((e) => parId.has(e.id)).reduce((s, e) => s + (e.kwh || 0), 0);
+  return km > 0 ? Math.round((kwh / km) * 1000) / 10 : null;
+}
+
 // ── Abonnements de recharge ────────────────────────────────────────────────
 // { reseau: "Ionity", prix: 0.39 } : sur les bornes de ce réseau, le prix
 // de l'abonnement remplace le tarif public (et les estimations).

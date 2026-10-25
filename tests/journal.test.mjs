@@ -1,9 +1,12 @@
-import { test } from "node:test";
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { installerLocalStorage } from "./aide.mjs";
+import { installerLocalStorage, installerFetch } from "./aide.mjs";
 
 installerLocalStorage();
-const { construireCsvJournal } = await import("../js/ui-journal.js");
+const { construireCsvJournal, synchroniserRechargesDetectees } = await import("../js/ui-journal.js");
+const { sauverReglages, definirProfilVehicule, listerJournal } = await import("../js/storage.js");
+
+beforeEach(() => localStorage.clear());
 
 test("export CSV du journal : point-virgule, virgule décimale, total, accents protégés", () => {
   const journal = [
@@ -20,4 +23,31 @@ test("export CSV du journal : point-virgule, virgule décimale, total, accents p
   const total = lignes[3];
   assert.ok(total.startsWith("Total;;42,46;21,00;2 recharges"), `obtenu : ${total}`);
   assert.equal(csv.charCodeAt(0), 0xfeff, "BOM UTF-8 pour Excel");
+});
+
+test("synchronisation Bluelink : importe une recharge détectée, estime le kWh depuis le profil", async () => {
+  sauverReglages({ relais_url: "https://relais.test" });
+  definirProfilVehicule({ capacite_kwh: 64 });
+  installerFetch(() => ({ json: { ok: true, recharges: [{ ts_fin: 1000, batterie_pct_debut: 20, batterie_pct_fin: 84, odometre_km: 12345 }] } }));
+  const importees = await synchroniserRechargesDetectees();
+  assert.equal(importees, 1);
+  const journal = listerJournal();
+  assert.equal(journal.length, 1);
+  assert.equal(journal[0].source, "bluelink");
+  assert.equal(journal[0].kwh, 40.96, "(84-20)% de 64 kWh");
+  assert.equal(journal[0].odometre_km, 12345);
+  assert.equal(journal[0].id_bluelink, 1000);
+});
+
+test("synchronisation Bluelink : une recharge déjà importée n'est pas dupliquée", async () => {
+  sauverReglages({ relais_url: "https://relais.test" });
+  installerFetch(() => ({ json: { ok: true, recharges: [{ ts_fin: 1000, batterie_pct_debut: 20, batterie_pct_fin: 80, odometre_km: 100 }] } }));
+  assert.equal(await synchroniserRechargesDetectees(), 1);
+  assert.equal(await synchroniserRechargesDetectees(), 0, "déjà connue (même ts_fin) : pas réimportée");
+  assert.equal(listerJournal().length, 1);
+});
+
+test("synchronisation Bluelink : sans relais configuré, ne fait rien", async () => {
+  assert.equal(await synchroniserRechargesDetectees(), 0);
+  assert.equal(listerJournal().length, 0);
 });

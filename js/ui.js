@@ -15,7 +15,7 @@ import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
 import { $, toast, bandeau, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur } from "./ui-commun.js";
-import { rendreJournal, cablerJournal } from "./ui-journal.js";
+import { rendreJournal, cablerJournal, synchroniserRechargesDetectees } from "./ui-journal.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
 import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
@@ -302,6 +302,16 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
     rendreJournal();
     rendreStats();
     rendreTraces();
+    // Importe les recharges détectées par JARVIS via Bluelink depuis la
+    // dernière ouverture de cet écran -- best-effort, puis rafraîchit
+    // l'affichage si de nouvelles entrées ont été ajoutées. Demande
+    // explicite de l'utilisateur le 2026-10-25.
+    synchroniserRechargesDetectees().then((importees) => {
+      if (importees > 0) {
+        rendreJournal();
+        rendreStats();
+      }
+    });
   }
   // Mesures et abonnements ont pu changer depuis (navigation, autre écran).
   if (vue === "profil") {

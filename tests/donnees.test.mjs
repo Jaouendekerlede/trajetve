@@ -56,6 +56,32 @@ test("consommation calibrée : la valeur mesurée remplace la fiche technique da
   assert.equal(consommationEffectiveKwh100km(p), 18, "le calcul de trajet lit bien la valeur calibrée (multiplicateur été = 1.0)");
 });
 
+test("km réels par recharge : différence d'odomètre entre deux recharges Bluelink consécutives", () => {
+  localStorage.clear();
+  s.ajouterAuJournal({ ts: 1000, lieu: "A", kwh: 20, source: "bluelink", odometre_km: 1000, id_bluelink: 1 });
+  s.ajouterAuJournal({ ts: 2000, lieu: "B", kwh: 15, source: "bluelink", odometre_km: 1300, id_bluelink: 2 });
+  s.ajouterAuJournal({ ts: 3000, lieu: "Manuel", kwh: 10, source: "manuel" }); // pas d'odomètre : ignorée
+  const journal = s.listerJournal();
+  const b = journal.find((e) => e.id_bluelink === 2);
+  const km = s.kmReelsParRecharge(journal);
+  assert.equal(km.get(b.id), 300);
+  const a = journal.find((e) => e.id_bluelink === 1);
+  assert.equal(km.has(a.id), false, "la première recharge Bluelink n'a pas de précédente à comparer");
+});
+
+test("consommation réelle : kWh de la recharge suivante / km réels parcourus avant elle", () => {
+  localStorage.clear();
+  s.ajouterAuJournal({ ts: 1000, lieu: "A", kwh: 20, source: "bluelink", odometre_km: 1000, id_bluelink: 1 });
+  s.ajouterAuJournal({ ts: 2000, lieu: "B", kwh: 15, source: "bluelink", odometre_km: 1100, id_bluelink: 2 }); // 100 km, 15 kWh -> 15 kWh/100km
+  assert.equal(s.consommationReelleSur(s.listerJournal()), 15);
+});
+
+test("consommation réelle : null sans au moins 2 recharges Bluelink", () => {
+  localStorage.clear();
+  s.ajouterAuJournal({ lieu: "A", kwh: 20, source: "manuel" });
+  assert.equal(s.consommationReelleSur(s.listerJournal()), null);
+});
+
 test("abonnements : le prix remplace le tarif public sur le bon réseau seulement", () => {
   s.sauverAbonnements([{ reseau: "Ionity", prix: 0.39 }]);
   const bornes = [
