@@ -4,10 +4,9 @@
   "version": "0.1.0",
   "identifier": "fr.jaouendekerlede.trajetve",
   "build": {
-    "frontendDist": "../dist-tauri",
+    "frontendDist": "https://jaouendekerlede.github.io/trajetve/",
     "devUrl": "http://localhost:8766",
-    "beforeDevCommand": "python -m http.server 8766",
-    "beforeBuildCommand": "node scripts/copier-dist-tauri.mjs"
+    "beforeDevCommand": "python -m http.server 8766"
   },
   "app": {
     "windows": [
