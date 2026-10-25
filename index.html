@@ -51,11 +51,18 @@
     </button>
   </div>
   <div class="ev-chips" id="ev-filtres">
-    <button class="ev-chip" type="button" id="ev-filtres-ouvrir-btn" title="Chercher un lieu (adresse, ville...) et filtrer les bornes affichées">📍 Chercher un lieu / filtrer</button>
-    <button class="ev-chip" type="button" id="ev-scan-borne-ouvrir-btn" title="Scanner le QR code d'une borne pour préparer la recharge">📷 Scanner une borne</button>
-    <button class="ev-chip" type="button" id="ev-autonomie-chip" title="Jusqu'où je peux aller avec la batterie">🔋 Autonomie</button>
     <button class="ev-chip hidden" type="button" id="ev-voiture-chip" title="Où est garée ma voiture">🚗 Ma voiture</button>
   </div>
+  <!-- "Chercher un lieu/filtrer", "Scanner une borne" et "Autonomie" ont
+       déplacés dans le Menu (☰) le 2026-10-25 -- demande explicite de
+       l'utilisateur, ce bandeau toujours visible sur la carte prenait trop
+       de place pour des actions secondaires. "Chercher un lieu/filtrer" a
+       été retiré sans remplacement : redondant avec "Rechercher des bornes"
+       du Menu, qui ouvre déjà exactement le même panneau (ev-bloc-recherche,
+       recherche de zone + filtres rapides). Les boutons "Scanner une borne"
+       et "Autonomie" eux-mêmes ont juste été déplacés plus bas dans le
+       Menu, mêmes id, mêmes gestionnaires de clic (js/ui-scan-borne.js,
+       js/ui.js basculerAutonomie). -->
   <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
 </header>
 
@@ -291,6 +298,11 @@
       <div class="ev-menu-titre">Mes trajets</div>
       <div class="ev-menu-groupe">
           <button type="button" class="ev-menu-ligne" data-vue="favoris"><span class="ev-menu-icone" style="background:#f59e0b"><span class="ev-menu-glyphe">⭐</span></span><span><span class="ev-menu-nom">Favoris et historique</span><span class="ev-menu-detail">Trajets favoris, trajets calculés, bornes favorites</span></span></button>
+      </div>
+      <div class="ev-menu-titre">Bornes</div>
+      <div class="ev-menu-groupe">
+          <button type="button" class="ev-menu-ligne" id="ev-scan-borne-ouvrir-btn"><span class="ev-menu-icone" style="background:#16a34a"><span class="ev-menu-glyphe">📷</span></span><span><span class="ev-menu-nom">Scanner une borne</span><span class="ev-menu-detail">Scanner le QR code d'une borne pour préparer la recharge</span></span></button>
+          <button type="button" class="ev-menu-ligne" id="ev-autonomie-chip"><span class="ev-menu-icone" style="background:#0ea5e9"><span class="ev-menu-glyphe">🔋</span></span><span><span class="ev-menu-nom">Autonomie</span><span class="ev-menu-detail">Jusqu'où je peux aller avec la batterie</span></span></button>
       </div>
       <div class="ev-menu-titre">Outils</div>
       <div class="ev-menu-groupe">
@@ -843,7 +855,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 140 : batterie au départ saisie au clavier (au lieu d'un curseur trop sensible)</div>
+      <div class="ev-hint ev-lien-centre">Version 141 : bandeau du haut allégé (recherche/filtre, scan, autonomie déplacés dans le Menu)</div>
     </div>
   </div>
 </section>

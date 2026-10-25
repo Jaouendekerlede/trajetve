@@ -1143,6 +1143,8 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 .ev-menu-ligne:last-child { border-bottom: none; }
 .ev-menu-ligne:active { background: var(--bloc-2); }
 .ev-menu-ligne::after { content: "›"; font-size: 24px; line-height: 1; color: var(--texte-faible); }
+.ev-menu-ligne.actif { background: var(--bloc-2); }
+.ev-menu-ligne.actif .ev-menu-detail { color: var(--vert-clair); }
 /* Rond de couleur pleine + icône blanche, comme la liste Paramètres de Waze
    (l'icône reste un emoji dans le code ; .ev-menu-glyphe le rend blanc,
    séparément du fond pour ne pas aussi le blanchir). */
