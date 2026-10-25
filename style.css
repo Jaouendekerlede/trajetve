@@ -129,7 +129,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   top: 0;
   width: 32px;
   height: 32px;
-  border-radius: 50% 50% 50% 3px;
+  border-radius: 50% 50% 50% 6px; /* un peu plus arrondi, plus ludique (2026-10-25) */
   transform: rotate(-45deg);
   display: flex;
   align-items: center;
@@ -263,7 +263,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* ── Boutons flottants ─────────────────────────────────────────────────── */
 .ev-fabs {
   position: fixed;
-  right: 12px;
   bottom: calc(var(--feuille-visible) + 14px);
   z-index: 600;
   display: flex;
@@ -271,6 +270,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   gap: 10px;
   transition: bottom 0.28s ease, opacity 0.2s;
 }
+/* Deux groupes distincts (gauche/droite) façon ABRP, au lieu d'un seul
+   empilement à droite -- demande explicite de l'utilisateur le 2026-10-25. */
+.ev-fabs-gauche { left: 12px; }
+.ev-fabs-droite { right: 12px; }
 .ev-fab {
   width: 48px;
   height: 48px;
@@ -350,6 +353,30 @@ body[data-feuille="haut"] .ev-fabs { opacity: 0; pointer-events: none; }
 .ev-nav-btn span { font-size: 21px; filter: grayscale(0.7); opacity: 0.8; }
 .ev-nav-btn.actif { color: var(--vert-clair); font-weight: 700; }
 .ev-nav-btn.actif span { filter: none; opacity: 1; }
+
+/* Fiche véhicule façon ABRP, en tête de l'écran Carte -- demande explicite
+   de l'utilisateur le 2026-10-25. Batterie en lecture seule, un tap ouvre
+   l'écran Trajet (vraie saisie). */
+.ev-fiche-vehicule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: var(--bloc);
+  border: 1px solid var(--bordure);
+  border-radius: 16px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.ev-fiche-vehicule-image { width: 84px; height: auto; flex-shrink: 0; }
+.ev-fiche-vehicule-texte { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.ev-fiche-vehicule-nom { font-weight: 800; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-fiche-vehicule-jauge { width: 100%; }
+.ev-fiche-vehicule-pct { color: var(--vert-clair); font-weight: 800; font-size: 13px; }
 
 /* ── Éléments communs ──────────────────────────────────────────────────── */
 .ev-carte-bloc { background: var(--bloc); border: 1px solid var(--bordure); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
@@ -1143,8 +1170,6 @@ body.ev-borne-bas .ev-nav-boutons, body.ev-borne-bas .ev-nav-vitesse-bloc { bott
 .ev-menu-ligne:last-child { border-bottom: none; }
 .ev-menu-ligne:active { background: var(--bloc-2); }
 .ev-menu-ligne::after { content: "›"; font-size: 24px; line-height: 1; color: var(--texte-faible); }
-.ev-menu-ligne.actif { background: var(--bloc-2); }
-.ev-menu-ligne.actif .ev-menu-detail { color: var(--vert-clair); }
 /* Rond de couleur pleine + icône blanche, comme la liste Paramètres de Waze
    (l'icône reste un emoji dans le code ; .ev-menu-glyphe le rend blanc,
    séparément du fond pour ne pas aussi le blanchir). */

@@ -4,10 +4,11 @@
 import { $, toast } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
 import { listerZonesEvitees, ajouterZoneEvitee, retirerZoneEvitee } from "./storage.js";
-import { centreVisible, pixelCentreVisible, centrer } from "./carte.js";
+import { centreVisible, pixelCentreVisible, centrer, afficherZonesEvitees } from "./carte.js";
 
 function rendreListe() {
   const zones = listerZonesEvitees();
+  afficherZonesEvitees(zones);
   $("ev-zones-evitees-liste").innerHTML = zones.length
     ? zones
         .map(

@@ -730,6 +730,14 @@ function cablerCarte() {
     majBoutonCarte3D();
     toast(`⚠️ Carte 3D interrompue (${e.detail}) : retour en 2D`);
   });
+
+  // Bouton Menu flottant façon ABRP -- même action que l'onglet Menu du bas,
+  // juste un accès en plus sur la carte. Demande explicite du 2026-10-25.
+  $("ev-menu-flottant-btn").addEventListener("click", () => afficherVue("menu"));
+
+  // Fiche véhicule (écran Carte) : un tap ouvre l'écran Trajet, où la
+  // batterie peut vraiment être modifiée. Demande explicite du 2026-10-25.
+  $("ev-fiche-vehicule").addEventListener("click", () => afficherVue("trajet"));
   if (reglages.carte_explo_3d) basculerCarte3D(true, false);
 
   for (const f of reglages.filtres_carte || []) filtres.add(f);
@@ -766,14 +774,18 @@ function cablerCarte() {
   });
   for (const b of document.querySelectorAll("[data-icone]")) b.innerHTML = icone(b.dataset.icone);
   cablerDrive();
-  // Raccourcis de destination (Chez moi, Travail, trajet habituel).
-  document.querySelector(".ev-raccourcis-dest").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-dest]");
-    if (!b) return;
-    $("ev-destination-input").value = b.dataset.dest;
-    $("ev-destination-input").dispatchEvent(new Event("change"));
-    lancerTrajet();
-  });
+  // Raccourcis de destination (Chez moi, Travail, trajet habituel) --
+  // deux groupes depuis le 2026-10-25 (vue-trajet ET vue-bornes, façon
+  // ABRP), d'où querySelectorAll au lieu d'un seul querySelector.
+  document.querySelectorAll(".ev-raccourcis-dest").forEach((groupe) =>
+    groupe.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-dest]");
+      if (!b) return;
+      $("ev-destination-input").value = b.dataset.dest;
+      $("ev-destination-input").dispatchEvent(new Event("change"));
+      lancerTrajet();
+    }),
+  );
   $("ev-traces-liste").addEventListener("click", (e) => {
     const aSupprimer = e.target.closest("[data-suppr-trace]")?.dataset.supprTrace;
     if (aSupprimer !== undefined) {
@@ -1192,6 +1204,16 @@ function majJaugeBatterie() {
   fill.style.width = `${pct}%`;
   fill.style.background = couleur;
   fill.style.color = couleur;
+  // Fiche véhicule (écran Carte, lecture seule) : même valeur, pas de
+  // seconde source de vérité. Demande explicite du 2026-10-25.
+  const ficheFill = $("ev-fiche-vehicule-jauge-fill");
+  if (ficheFill) {
+    ficheFill.style.width = `${pct}%`;
+    ficheFill.style.background = couleur;
+    ficheFill.style.color = couleur;
+  }
+  const fichePct = $("ev-fiche-vehicule-pct");
+  if (fichePct) fichePct.textContent = `${Math.round(pct)} %`;
 }
 
 function activerModeVisuel(mode) {
@@ -2567,6 +2589,7 @@ function majBandeauCles() {
 function rendreProfil() {
   const profil = obtenirProfilVehicule();
   $("ev-vehicule-badge").textContent = profil.nom || "";
+  $("ev-fiche-vehicule-nom").textContent = profil.nom || "";
   $("ev-profil-nom").value = profil.nom || "";
   $("ev-profil-capacite").value = profil.capacite_kwh;
   $("ev-profil-conso").value = profil.consommation_kwh_100km;

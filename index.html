@@ -66,16 +66,29 @@
   <button type="button" id="ev-cles-manquantes" class="ev-bandeau hidden">⚠️ Clés API manquantes : touche ici pour les ajouter (Menu › Clés API).</button>
 </header>
 
-<!-- Boutons flottants sur la carte -->
-<div class="ev-fabs">
+<!-- Boutons flottants sur la carte, scindés gauche/droite comme ABRP --
+     demande explicite de l'utilisateur le 2026-10-25 (remplace l'ancien
+     empilement unique à droite). -->
+<div class="ev-fabs ev-fabs-gauche">
   <button id="ev-urgence-btn" class="ev-fab ev-fab-urgence" type="button" title="Mode urgence : bornes les plus proches"><span class="ev-fab-sos">SOS</span></button>
+  <!-- Autonomie : ramenée ici en bouton flottant (était dans le Menu depuis
+       ce matin) -- redemande explicite de l'utilisateur pour coller à
+       l'icône éclair d'ABRP, même id/gestionnaire (js/ui.js basculerAutonomie),
+       juste déplacée et restylée en FAB. -->
+  <button id="ev-autonomie-chip" class="ev-fab" type="button" title="Jusqu'où je peux aller avec la batterie">⚡</button>
+  <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser" data-icone="localiser"></button>
+</div>
+<div class="ev-fabs ev-fabs-droite">
   <!-- Couper/remettre la voix : au-dessus des icônes de carte, comme Waze.
        Accessible aussi pendant le guidage (ev-nav-voix-btn, même réglage) --
        demande explicite de l'utilisateur. -->
   <button id="ev-voix-global-btn" class="ev-fab" type="button" title="Couper / remettre la voix"></button>
   <button id="ev-fond-btn" class="ev-fab" type="button" title="Changer le fond de carte"></button>
   <button id="ev-carte3d-btn" class="ev-fab ev-fab-texte" type="button" title="Carte en 3D / 2D">3D</button>
-  <button id="ev-localiser-btn" class="ev-fab" type="button" title="Me localiser" data-icone="localiser"></button>
+  <!-- Menu flottant : même action que l'onglet Menu du bas (afficherVue
+       "menu"), juste un accès en plus façon ABRP -- l'onglet du bas reste
+       aussi en place. Demande explicite du 2026-10-25. -->
+  <button id="ev-menu-flottant-btn" class="ev-fab" type="button" title="Menu">☰</button>
 </div>
 
 <!-- Point choisi sur la carte en planification (appui long) -->
@@ -91,6 +104,26 @@
 
     <!-- ══ Bornes autour ══ -->
     <div id="vue-bornes" class="ev-vue">
+      <!-- Fiche véhicule + raccourcis façon ABRP, sur l'écran Carte par
+           défaut -- demande explicite de l'utilisateur le 2026-10-25. La
+           barre de recherche existe déjà en permanence en haut d'écran
+           (ev-recherche-rapide) : pas dupliquée ici pour éviter deux
+           barres de recherche visibles en même temps. Batterie en LECTURE
+           SEULE, synchronisée sur ev-charge-pct-input (écran Trajet) --
+           une seule source de vérité, un tap ouvre l'écran Trajet pour la
+           modifier. -->
+      <button type="button" id="ev-fiche-vehicule" class="ev-fiche-vehicule">
+        <img src="./icons/kona-noire.svg" alt="" class="ev-fiche-vehicule-image">
+        <span class="ev-fiche-vehicule-texte">
+          <span class="ev-fiche-vehicule-nom" id="ev-fiche-vehicule-nom"></span>
+          <span class="ev-jauge ev-fiche-vehicule-jauge"><span id="ev-fiche-vehicule-jauge-fill" class="ev-jauge-remplissage"></span></span>
+          <span class="ev-fiche-vehicule-pct" id="ev-fiche-vehicule-pct"></span>
+        </span>
+      </button>
+      <div class="ev-raccourcis-dest">
+        <button type="button" class="ev-chip" data-dest="Chez moi">🏠 Chez moi</button>
+        <button type="button" class="ev-chip" data-dest="Travail">💼 Travail</button>
+      </div>
       <div class="ev-vue-entete">
         <h2 id="ev-bornes-titre">📍 Bornes à proximité</h2>
         <button id="ev-recherche-effacer" class="ev-lien hidden" type="button">✕ Effacer la recherche</button>
@@ -302,8 +335,10 @@
       <div class="ev-menu-titre">Bornes</div>
       <div class="ev-menu-groupe">
           <button type="button" class="ev-menu-ligne" id="ev-scan-borne-ouvrir-btn"><span class="ev-menu-icone" style="background:#16a34a"><span class="ev-menu-glyphe">📷</span></span><span><span class="ev-menu-nom">Scanner une borne</span><span class="ev-menu-detail">Scanner le QR code d'une borne pour préparer la recharge</span></span></button>
-          <button type="button" class="ev-menu-ligne" id="ev-autonomie-chip"><span class="ev-menu-icone" style="background:#0ea5e9"><span class="ev-menu-glyphe">🔋</span></span><span><span class="ev-menu-nom">Autonomie</span><span class="ev-menu-detail">Jusqu'où je peux aller avec la batterie</span></span></button>
       </div>
+      <!-- "Autonomie" est redevenue un bouton flottant sur la carte (⚡,
+           groupe gauche) le 2026-10-25, demande explicite de l'utilisateur
+           pour coller à l'icône éclair d'ABRP -- plus d'entrée ici. -->
       <div class="ev-menu-titre">Outils</div>
       <div class="ev-menu-groupe">
           <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-stats"><span class="ev-menu-icone" style="background:#8b5cf6"><span class="ev-menu-glyphe">📊</span></span><span><span class="ev-menu-nom">Mes statistiques</span><span class="ev-menu-detail">Kilomètres, coût, anciens trajets</span></span></button>
@@ -855,7 +890,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 143 : détection automatique des recharges réelles (Bluelink) + km réels par charge</div>
+      <div class="ev-hint ev-lien-centre">Version 144 : habillage façon ABRP (fiche véhicule, boutons flottants) + route couleur Waze</div>
     </div>
   </div>
 </section>

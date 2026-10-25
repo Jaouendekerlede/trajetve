@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 190" width="400" height="190" role="img" aria-label="SUV électrique noir">
+  <defs>
+    <linearGradient id="carrosserie" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2b2f36"/>
+      <stop offset="55%" stop-color="#15171b"/>
+      <stop offset="100%" stop-color="#0a0b0d"/>
+    </linearGradient>
+    <linearGradient id="vitres" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5b7694"/>
+      <stop offset="100%" stop-color="#28343f"/>
+    </linearGradient>
+    <radialGradient id="jante" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#a9b2bc"/>
+      <stop offset="100%" stop-color="#4b5158"/>
+    </radialGradient>
+    <linearGradient id="sol" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#000000" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="200" cy="172" rx="175" ry="10" fill="url(#sol)"/>
+
+  <!-- Carrosserie (profil SUV compact) -->
+  <path d="M30,140
+           C30,118 42,104 66,100
+           L96,94
+           C112,66 140,46 176,42
+           C206,39 238,41 262,52
+           C280,60 292,74 300,92
+           L332,98
+           C352,101 366,112 370,128
+           L372,140
+           L358,140
+           C356,152 345,161 332,161
+           C319,161 309,152 306,140
+           L132,140
+           C130,152 119,161 106,161
+           C93,161 83,152 80,140
+           L30,140 Z"
+        fill="url(#carrosserie)" stroke="#000000" stroke-width="1.5"/>
+
+  <!-- Toit / vitrage -->
+  <path d="M108,96
+           C122,70 146,52 178,48
+           C204,45 232,47 254,57
+           C268,64 278,76 284,90
+           Z"
+        fill="url(#vitres)" opacity="0.92"/>
+  <path d="M182,52 L182,93" stroke="#0a0b0d" stroke-width="3"/>
+
+  <!-- Liseré lumineux (reflet du jour sur la carrosserie) -->
+  <path d="M70,104 C110,86 170,70 230,66 C270,63 300,70 322,90"
+        fill="none" stroke="#6b7682" stroke-width="2" opacity="0.55" stroke-linecap="round"/>
+
+  <!-- Poignée -->
+  <rect x="222" y="86" width="20" height="5" rx="2.5" fill="#000000" opacity="0.5"/>
+
+  <!-- Phare avant + feu arrière -->
+  <path d="M358,118 C366,118 371,123 371,129 C371,135 366,139 358,139 Z" fill="#dfe6ee" opacity="0.9"/>
+  <rect x="32" y="118" width="10" height="14" rx="3" fill="#c23b3b"/>
+
+  <!-- Bas de caisse -->
+  <path d="M80,140 L332,140 L332,146 L80,146 Z" fill="#000000" opacity="0.35"/>
+
+  <!-- Roues -->
+  <circle cx="106" cy="148" r="26" fill="#0a0b0d"/>
+  <circle cx="106" cy="148" r="15" fill="url(#jante)"/>
+  <circle cx="106" cy="148" r="4" fill="#2b2f36"/>
+
+  <circle cx="332" cy="148" r="26" fill="#0a0b0d"/>
+  <circle cx="332" cy="148" r="15" fill="url(#jante)"/>
+  <circle cx="332" cy="148" r="4" fill="#2b2f36"/>
+</svg>

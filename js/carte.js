@@ -202,7 +202,11 @@ export function dessinerRouteNavigation(coords, arrets, destination) {
   const ll = coords.map(([lon, lat]) => L.latLng(lat, lon));
   pointsRoute = ll;
   indiceDecoupe = -1;
-  const restant = { color: "#7c3aed", weight: 9, opacity: 0.95, interactive: false };
+  // Vert = libre, façon Waze -- demande explicite de l'utilisateur le
+  // 2026-10-25 (remplace le violet fixe). Les segments avec ralentissement
+  // réel (data.bouchons, couleurBouchon) restent dessinés par-dessus en
+  // orange/rouge, logique déjà en place et inchangée.
+  const restant = { color: "#22e5a0", weight: 9, opacity: 0.95, interactive: false };
   const parcouru = { color: "#6b7385", weight: 9, opacity: 0.9, interactive: false };
   L.polyline(ll, { color: "#062a1e", weight: 14, opacity: 0.55, interactive: false }).addTo(coucheNav);
   ligneRestante = L.polyline(ll, restant).addTo(coucheNav);
@@ -589,6 +593,21 @@ function montrerParkings2D(visible) {
   if (!visible && carte.hasLayer(coucheParkings)) carte.removeLayer(coucheParkings);
 }
 
+// Zones évitées (routes coupées signalées par l'utilisateur, storage.js
+// listerZonesEvitees) : aucun pin sur la carte jusqu'ici, seulement une
+// liste texte (ui-zones.js) -- ajouté pour la visibilité façon Waze,
+// demande explicite de l'utilisateur le 2026-10-25. Vue 2D seulement
+// (carte de planification) : pas critique pendant le guidage en 3D.
+let coucheZonesEvitees;
+export function afficherZonesEvitees(zones) {
+  coucheZonesEvitees ??= L.layerGroup().addTo(carte);
+  coucheZonesEvitees.clearLayers();
+  for (const z of zones || []) {
+    if (!Number.isFinite(z.lat) || !Number.isFinite(z.lon)) continue;
+    L.marker([z.lat, z.lon], { icon: pastille(30, "rgba(255,180,0,.95)", "🚧"), zIndexOffset: 3000 }).addTo(coucheZonesEvitees);
+  }
+}
+
 // Zone visible au-dessus du panneau, en degrés.
 function limitesVisibles2D() {
   const taille = carte.getSize();
@@ -678,7 +697,8 @@ function afficherTrajet2D(data, onClicArret) {
   placerCurseur2D(undefined, undefined);
   if (!data?.coords?.length) return;
 
-  const aller = L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#7c3aed", weight: 6, opacity: 0.9 }).addTo(coucheTrajet);
+  // Vert = libre, façon Waze -- demande explicite du 2026-10-25.
+  const aller = L.polyline(data.coords.map(([lon, lat]) => [lat, lon]), { color: "#22e5a0", weight: 6, opacity: 0.9 }).addTo(coucheTrajet);
   // Ralentissements et bouchons par-dessus le tracé.
   for (const b of data.bouchons || []) {
     const morceau = data.coords.slice(b.debut, b.fin + 1).map(([lon, lat]) => [lat, lon]);
