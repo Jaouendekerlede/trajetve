@@ -1,101 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 200" width="440" height="200" role="img" aria-label="SUV électrique noir">
-  <defs>
-    <linearGradient id="carrosserie" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#32373f"/>
-      <stop offset="45%" stop-color="#16181d"/>
-      <stop offset="100%" stop-color="#07080a"/>
-    </linearGradient>
-    <linearGradient id="vitres" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#7691ac"/>
-      <stop offset="100%" stop-color="#28333d"/>
-    </linearGradient>
-    <linearGradient id="cladding" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#3f4349"/>
-      <stop offset="100%" stop-color="#191b1e"/>
-    </linearGradient>
-    <radialGradient id="jante" cx="35%" cy="32%" r="70%">
-      <stop offset="0%" stop-color="#cdd3da"/>
-      <stop offset="60%" stop-color="#848b94"/>
-      <stop offset="100%" stop-color="#3c4048"/>
-    </radialGradient>
-    <linearGradient id="sol" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
-      <stop offset="50%" stop-color="#000000" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100" role="img" aria-label="SUV électrique noir">
+  <!-- Conçue pour rester lisible en petit (84 px dans la fiche véhicule) :
+       formes simples, couleurs pleines, pas de dégradé fin ni de détail
+       qui disparaît au rendu réduit. Demande explicite du 2026-10-25. -->
 
-  <ellipse cx="220" cy="178" rx="188" ry="9" fill="url(#sol)"/>
+  <ellipse cx="100" cy="88" rx="86" ry="5" fill="#000000" opacity="0.18"/>
 
-  <!-- Caisse : lignes essentiellement droites + petits congés, pour une
-       silhouette SUV nette (pas une forme "bulle") -->
-  <path d="M50,145
-           L46,138
-           C45,128 50,119 59,113
-           L108,100
-           L138,58
-           C142,53 148,50 154,49
-           L268,49
-           C275,50 281,54 285,59
-           L312,98
-           L350,106
-           C362,109 371,116 377,126
-           L389,138
-           C392,141 392,144 388,145
-           L50,145 Z"
-        fill="url(#carrosserie)" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Carrosserie : silhouette SUV nette, passages de roue inclus dans le
+       contour (pas de calque séparé qui disparaîtrait en petit) -->
+  <path d="M18,66
+           L18,58 C18,50 24,44 32,43
+           L48,40
+           L62,24 C66,19 73,16 80,16
+           L140,16 C147,16 153,19 157,25
+           L168,42
+           C178,44 185,51 185,60
+           L185,66
+           C185,70 182,73 178,73
+           L170,73
+           C170,62 161,53 150,53
+           C139,53 130,62 130,73
+           L70,73
+           C70,62 61,53 50,53
+           C39,53 30,62 30,73
+           L22,73
+           C19,73 18,70 18,66 Z"
+        fill="#0c0d0f"/>
 
-  <!-- Toit / vitrage : trapèze aux bords nets, caractère SUV -->
-  <path d="M114,98
-           L142,60
-           C145,56 150,53 155,53
-           L267,53
-           C272,53 277,56 280,60
-           L308,97 Z"
-        fill="url(#vitres)"/>
-  <!-- montant central -->
-  <path d="M212,55 L210,97" stroke="#07080a" stroke-width="4"/>
-  <!-- montant arrière -->
-  <path d="M292,70 L284,97" stroke="#07080a" stroke-width="4"/>
+  <!-- Vitrage, bloc unique clair sur fond sombre : reste lisible en petit -->
+  <path d="M66,41 L78,25 C80,22 84,20 88,20 L134,20 C138,20 141,22 143,25 L154,41 Z"
+        fill="#7a93ab"/>
+  <rect x="108" y="22" width="3" height="19" fill="#0c0d0f"/>
 
-  <!-- Barres de toit -->
-  <rect x="150" y="46" width="112" height="4" rx="2" fill="#1a1c1f"/>
+  <!-- Barre de toit -->
+  <rect x="78" y="17" width="58" height="3" rx="1.5" fill="#0c0d0f"/>
 
-  <!-- Ligne de ceinture (reflet) -->
-  <path d="M80,108 L310,100" stroke="#5b6269" stroke-width="2" opacity="0.6" stroke-linecap="round"/>
+  <!-- Phare + feu, gros aplats francs pour rester visibles en petit -->
+  <circle cx="176" cy="48" r="6" fill="#ffffff"/>
+  <rect x="20" y="46" width="7" height="9" rx="1.5" fill="#d6372f"/>
 
-  <!-- Passages de roue cladding (look SUV/crossover), posés par-dessus le
-       bas de caisse -->
-  <path d="M90,148 a44,44 0 0 1 88,0 Z" fill="url(#cladding)"/>
-  <path d="M302,148 a44,44 0 0 1 88,0 Z" fill="url(#cladding)"/>
+  <!-- Roues : grands disques pleins, pas de rayons fins -->
+  <circle cx="50" cy="73" r="20" fill="#0c0d0f"/>
+  <circle cx="50" cy="73" r="10" fill="#aab1b9"/>
+  <circle cx="50" cy="73" r="3.5" fill="#0c0d0f"/>
 
-  <!-- Bas de caisse -->
-  <rect x="50" y="143" width="338" height="5" fill="#000000" opacity="0.4"/>
-
-  <!-- Poignée + rétroviseur (sur la portière avant, base du montant A) -->
-  <rect x="246" y="86" width="22" height="5" rx="2.5" fill="#000000" opacity="0.55"/>
-  <path d="M300,92 C309,90 316,94 316,100 C316,105 310,108 304,106 L299,99 Z" fill="#111317"/>
-
-  <!-- Phare avant (vertical) + feu arrière -->
-  <path d="M381,124 C388,125 392,131 390,137 C388,142 382,144 377,141 L376,125 Z" fill="#e4ebf2" opacity="0.95"/>
-  <path d="M50,122 L64,120 L66,140 L52,142 Z" fill="#c2342f"/>
-
-  <!-- Roues (grandes, caractère SUV) -->
-  <circle cx="138" cy="150" r="29" fill="#07080a"/>
-  <circle cx="138" cy="150" r="17" fill="url(#jante)"/>
-  <circle cx="138" cy="150" r="5" fill="#2a2d32"/>
-  <g stroke="#4a5058" stroke-width="2.2">
-    <line x1="138" y1="150" x2="138" y2="135"/>
-    <line x1="138" y1="150" x2="151" y2="159"/>
-    <line x1="138" y1="150" x2="125" y2="159"/>
-  </g>
-
-  <circle cx="346" cy="150" r="29" fill="#07080a"/>
-  <circle cx="346" cy="150" r="17" fill="url(#jante)"/>
-  <circle cx="346" cy="150" r="5" fill="#2a2d32"/>
-  <g stroke="#4a5058" stroke-width="2.2">
-    <line x1="346" y1="150" x2="346" y2="135"/>
-    <line x1="346" y1="150" x2="359" y2="159"/>
-    <line x1="346" y1="150" x2="333" y2="159"/>
-  </g>
+  <circle cx="150" cy="73" r="20" fill="#0c0d0f"/>
+  <circle cx="150" cy="73" r="10" fill="#aab1b9"/>
+  <circle cx="150" cy="73" r="3.5" fill="#0c0d0f"/>
 </svg>
