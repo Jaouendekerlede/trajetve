@@ -289,7 +289,7 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   appliquerRubrique(vue, rubrique);
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
-  if (vue === "bornes") rafraichirFicheVehiculeReelle();
+  if (vue === "bornes" || vue === "trajet") rafraichirFicheVehiculeReelle();
   if (vue === "trajet") {
     remplirArretsImposes();
     majSuggestionTrajet();
