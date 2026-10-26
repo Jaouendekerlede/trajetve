@@ -331,6 +331,7 @@
       <div class="ev-menu-titre">Mes trajets</div>
       <div class="ev-menu-groupe">
           <button type="button" class="ev-menu-ligne" data-vue="favoris"><span class="ev-menu-icone" style="background:#f59e0b"><span class="ev-menu-glyphe">⭐</span></span><span><span class="ev-menu-nom">Favoris et historique</span><span class="ev-menu-detail">Trajets favoris, trajets calculés, bornes favorites</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-historique-kona"><span class="ev-menu-icone" style="background:#1d4ed8"><span class="ev-menu-glyphe">🔧</span></span><span><span class="ev-menu-nom">Historique détaillé (Kona)</span><span class="ev-menu-detail">Distance, vitesse max, météo par trajet réel</span></span></button>
       </div>
       <div class="ev-menu-titre">Bornes</div>
       <div class="ev-menu-groupe">
@@ -421,6 +422,17 @@
           <summary>🗺️ Revoir mes derniers trajets</summary>
           <div id="ev-traces-liste" class="ev-journal-liste"></div>
         </details>
+      </div>
+
+      <!-- Historique détaillé par trajet (Pleos : distance, vitesse max,
+           température, avertissements réels) -- volontairement séparé de
+           "Mes statistiques" (vision globale) et accessible directement
+           depuis le Menu, sous "Mes trajets". Demande explicite de
+           l'utilisateur le 2026-10-26. -->
+      <div class="ev-carte-bloc" id="ev-bloc-historique-kona">
+        <h3>🔧 Historique détaillé (Kona)</h3>
+        <div class="ev-hint">Chaque trajet réel détecté par Hyundai (Pleos) : distance, durée, vitesse max, température extérieure. Les 6 derniers jours.</div>
+        <div id="ev-historique-kona-liste"></div>
       </div>
 
       <div class="ev-carte-bloc" id="ev-bloc-journal">
@@ -910,7 +922,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 150 : État de la Kona (batterie, verrouillage, charge...) dans Mes statistiques</div>
+      <div class="ev-hint ev-lien-centre">Version 151 : historique détaillé par trajet (Menu › Mes trajets)</div>
     </div>
   </div>
 </section>
