@@ -31,7 +31,7 @@ export { traceRestante, dessinVoies } from "./nav-outils.js";
 
 import { radarsLeLongDu, feuxLeLongDe, routesAutourDe, airesLeLongDe, LABELS_TYPE_RADAR } from "./osm-route.js";
 import { textesPanneau, classeNumero, estAutoroute, svgCarrefour } from "./panneau-nav.js";
-import { zonesDeDanger, radarsSurTrace, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute } from "./alertes-route.js";
+import { zonesDeDanger, radarsSurTrace, positionsSurTrace, compterFeux, messageAvecFeu, partDifferente, projeterSurTrace, airesSurRoute, repartitionParVitesse } from "./alertes-route.js";
 import { haversineKm, carresSurTrace, traceTraverseCarres } from "./geo.js";
 import { formaterMinutes, calculerTempsCharge } from "./planner.js";
 import { escapeHtml, lienAPied, estNuit } from "./util.js";
@@ -3030,7 +3030,12 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   if (!etat.demo && etat.odometre > 1000) {
     const km = etat.odometre / 1000;
     if (etat.traceRoulee.length >= 2) ajouterTrace({ destination: (etat.destinationFinale || etat.destination).nom || "", km: Math.round(km * 10) / 10, coords: etat.traceRoulee });
-    ajouterTrajetFait({ km: Math.round(km * 10) / 10, kwh: Math.round(km * etat.consoKwhKm * 10) / 10, duree_min: Math.round((Date.now() - etat.debut) / 60000), destination: (etat.destinationFinale || etat.destination).nom || "" });
+    // Répartition par type de route (autoroute/voie express/nationale-
+    // départementale) -- approximative (calculée sur l'itinéraire plutôt
+    // que suivie en temps réel), moyenne grossière assumée. Demande
+    // explicite de l'utilisateur le 2026-10-26.
+    const repartition_km = etat.route?.cum && etat.route?.limites ? repartitionParVitesse(etat.route.cum, etat.route.limites, etat.route.autoroutes || []) : null;
+    ajouterTrajetFait({ km: Math.round(km * 10) / 10, kwh: Math.round(km * etat.consoKwhKm * 10) / 10, duree_min: Math.round((Date.now() - etat.debut) / 60000), destination: (etat.destinationFinale || etat.destination).nom || "", repartition_km });
   }
   const onFin = etat.onFin;
   const plan = etat.plan;

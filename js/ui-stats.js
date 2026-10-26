@@ -1,5 +1,6 @@
-// Onglet Outils › 📊 Mes statistiques : tuiles de chiffres (pas de
-// graphique : chaque valeur se lit directement).
+// Onglet Outils › 📊 Mes statistiques : tuiles de chiffres, plus deux
+// graphiques simples (km par jour, répartition par type de route --
+// demande explicite de l'utilisateur le 2026-10-26).
 
 import { $, toast, euros, nombre, nombreOuUndefined, tuile } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
@@ -87,6 +88,72 @@ export function rendreStats() {
         tuile("good", `${nombre(s.co2_evite_kg)} kg`, "De CO₂ évités (~)", "trajets"),
       ].join("")
     : `<div class="ev-hint">Rien encore sur cette période : les trajets guidés et le journal des recharges alimentent ces chiffres.</div>`;
+  rendreKmJournalier(listerTrajetsFaits());
+  rendreRepartitionRoutes(listerTrajetsFaits());
+}
+
+// Km par jour, 14 derniers jours (même sans trajet un jour donné -- barre
+// vide, pour voir le rythme réel). Toujours sur les 14 derniers jours,
+// indépendamment du filtre Ce mois/Cette année/Depuis le début ci-dessus :
+// c'est une vue "récente", pas une période choisie. Demande explicite de
+// l'utilisateur le 2026-10-26.
+function rendreKmJournalier(trajets) {
+  const conteneur = $("ev-stats-km-jour");
+  if (!conteneur) return;
+  const parJour = new Map();
+  for (const t of trajets) {
+    const d = new Date(t.date);
+    const cle = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    parJour.set(cle, (parJour.get(cle) || 0) + (t.km || 0));
+  }
+  const jours = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const cle = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    jours.push({ km: parJour.get(cle) || 0, label: d.toLocaleDateString("fr-FR", { weekday: "narrow" }) });
+  }
+  const max = Math.max(...jours.map((j) => j.km), 1);
+  conteneur.innerHTML = `<div class="ev-graphe-jours">${jours
+    .map(
+      (j) =>
+        `<div class="ev-barre-jour" title="${nombre(j.km, 1)} km"><span class="ev-barre-jour-remplissage" style="height:${Math.max(2, Math.round((j.km / max) * 100))}%"></span><span class="ev-barre-jour-label">${escapeHtml(j.label)}</span></div>`,
+    )
+    .join("")}</div>`;
+}
+
+// Répartition par type de route (autoroute/voie express/nationale-
+// départementale/ville), cumulée sur tous les trajets guidés par TrajetVE
+// depuis le 2026-10-26 (seuls à connaître le type de route parcouru --
+// contrairement aux trajets détectés par Hyundai/Pleos, qui ne donnent que
+// la distance totale). Moyenne volontairement grossière, sans correction
+// météo -- demande explicite de l'utilisateur.
+const CATEGORIES_ROUTE = [
+  ["autoroute", "Autoroute", "var(--violet-texte)"],
+  ["voie_express", "Voie express", "var(--cyan)"],
+  ["nationale_departementale", "Nationale/départ.", "var(--vert-vif)"],
+  ["autre", "Ville / autre", "var(--texte-faible)"],
+];
+
+function rendreRepartitionRoutes(trajets) {
+  const conteneur = $("ev-stats-routes");
+  if (!conteneur) return;
+  const total = { autoroute: 0, voie_express: 0, nationale_departementale: 0, autre: 0 };
+  let uneDonnee = false;
+  for (const t of trajets) {
+    if (!t.repartition_km) continue;
+    uneDonnee = true;
+    for (const c in total) total[c] += t.repartition_km[c] || 0;
+  }
+  if (!uneDonnee) {
+    conteneur.innerHTML = `<div class="ev-hint">Se remplit au fil de tes trajets guidés par TrajetVE (pas ceux suivis seulement par Hyundai, qui ne précisent pas le type de route).</div>`;
+    return;
+  }
+  const max = Math.max(...Object.values(total), 1);
+  conteneur.innerHTML = CATEGORIES_ROUTE.map(
+    ([cle, label, couleur]) =>
+      `<div class="ev-barre-ligne"><span>${label}</span><span class="ev-barre-piste"><span class="ev-barre-remplissage" style="width:${Math.round((total[cle] / max) * 100)}%;background:${couleur}"></span></span><span class="ev-barre-valeur">${nombre(total[cle])} km</span></div>`,
+  ).join("");
 }
 
 export function rendreTrajets() {

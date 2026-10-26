@@ -84,6 +84,35 @@ export function zonesDeDanger(radars, coords, cum, limites) {
   return fusion;
 }
 
+// Répartition des km parcourus par catégorie de route (vitesse limite),
+// façon "combien de km sur autoroute / voie express / nationale-
+// départementale" -- demande explicite de l'utilisateur le 2026-10-26,
+// conscient que ce n'est qu'une moyenne approximative (pas de correction
+// météo). Catégories calées sur les limitations françaises usuelles :
+// 130 (autoroute), 110 (voie express), 70-100 (nationale/départementale),
+// le reste en "ville/autre". `autoroutes` (plages [debut,fin] en m, voir
+// route.autoroutes) prime sur la seule limite affichée, plus fiable pour
+// distinguer une portion d'autoroute limitée à 110/90 (travaux, zone
+// urbaine) d'une vraie voie express.
+export function repartitionParVitesse(cum, limites, autoroutes = []) {
+  const km = { autoroute: 0, voie_express: 0, nationale_departementale: 0, autre: 0 };
+  const surAutoroute = (offset) => autoroutes.some(([a, b]) => offset >= a && offset <= b);
+  for (let i = 0; i < cum.length - 1; i++) {
+    const segmentKm = (cum[i + 1] - cum[i]) / 1000;
+    if (segmentKm <= 0) continue;
+    const limite = limites[i] || 0;
+    const milieu = (cum[i] + cum[i + 1]) / 2;
+    let categorie;
+    if (surAutoroute(milieu) || limite >= 120) categorie = "autoroute";
+    else if (limite >= 100) categorie = "voie_express";
+    else if (limite >= 70) categorie = "nationale_departementale";
+    else categorie = "autre";
+    km[categorie] += segmentKm;
+  }
+  for (const c in km) km[c] = Math.round(km[c] * 10) / 10;
+  return km;
+}
+
 const ECART_MEME_CARREFOUR_M = 35;
 const ORDINAUX = ["", "Au feu, ", "Au deuxième feu, ", "Au troisième feu, "];
 

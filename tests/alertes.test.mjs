@@ -80,3 +80,27 @@ test("aires sur autoroute : à droite, sur la route, bornes d'une aire regroupé
   assert.equal(r[2].recharge, false);
   assert.equal(a.airesSurRoute(lieux, coords, cum, [[8000, 9000]]).length, 0, "hors tronçon rapide");
 });
+
+test("répartition par vitesse : 4 catégories selon la limitation (et les plages autoroute)", () => {
+  // 10 km : 2 km à 50 (ville), 3 km à 90 (nationale), 2 km à 110 (voie
+  // express), 3 km à 130 (autoroute) -- limites par point (km/h).
+  const limites = coords.map((_, i) => {
+    const km = i / 10;
+    if (km < 2) return 50;
+    if (km < 5) return 90;
+    if (km < 7) return 110;
+    return 130;
+  });
+  const r = a.repartitionParVitesse(cum, limites, []);
+  assert.equal(r.autre, 2, `obtenu : ${r.autre}`);
+  assert.equal(r.nationale_departementale, 3, `obtenu : ${r.nationale_departementale}`);
+  assert.equal(r.voie_express, 2, `obtenu : ${r.voie_express}`);
+  assert.equal(r.autoroute, 3, `obtenu : ${r.autoroute}`);
+});
+
+test("répartition par vitesse : une plage 'autoroutes' classe en autoroute même à limite réduite (travaux)", () => {
+  const limites = coords.map(() => 90); // toute la route à 90 (ex: travaux)
+  const r = a.repartitionParVitesse(cum, limites, [[0, 10000]]); // mais entièrement en zone autoroute
+  assert.equal(r.autoroute, 10, `obtenu : ${r.autoroute}`);
+  assert.equal(r.nationale_departementale, 0);
+});
