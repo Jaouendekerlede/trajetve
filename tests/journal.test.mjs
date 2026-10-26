@@ -48,6 +48,9 @@ test("synchronisation Bluelink : une recharge déjà importée n'est pas dupliqu
 });
 
 test("synchronisation Bluelink : sans relais configuré, ne fait rien", async () => {
+  // relais_url a une valeur par défaut (lecture directe Pleos, voir
+  // storage.js) -- on la vide explicitement pour simuler ce cas.
+  sauverReglages({ relais_url: "" });
   assert.equal(await synchroniserRechargesDetectees(), 0);
   assert.equal(listerJournal().length, 0);
 });
