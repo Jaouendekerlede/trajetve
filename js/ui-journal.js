@@ -105,10 +105,18 @@ export function rendreJournal() {
 // que l'ajout manuel (pré-rempli), pour ne pas dupliquer l'interface.
 let idEnEdition = null;
 
+// yyyy-MM-dd en heure LOCALE (pas toISOString, qui bascule en UTC et peut
+// décaler la date d'un jour près de minuit).
+function dateVersValeurChamp(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function demarrerEditionJournal(id) {
   const entree = listerJournal().find((e) => e.id === id);
   if (!entree) return;
   idEnEdition = id;
+  $("ev-journal-date").value = dateVersValeurChamp(entree.ts);
   $("ev-journal-lieu").value = entree.lieu || "";
   $("ev-journal-kwh").value = entree.kwh ?? "";
   $("ev-journal-cout").value = entree.cout_eur ?? "";
@@ -121,7 +129,7 @@ function demarrerEditionJournal(id) {
 
 function annulerEditionJournal() {
   idEnEdition = null;
-  for (const id of ["ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
+  for (const id of ["ev-journal-date", "ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
   $("ev-journal-ajouter-titre").textContent = "➕ Ajouter une recharge à la main";
   $("ev-journal-ajouter-btn").textContent = "Ajouter";
   $("ev-journal-annuler-btn").classList.add("hidden");
@@ -186,13 +194,18 @@ export function cablerJournal() {
     if (!kwh || kwh <= 0) return toast("Indique l'énergie rechargée (kWh).");
     const lieu = $("ev-journal-lieu").value.trim() || "Recharge";
     const cout_eur = nombreOuUndefined($("ev-journal-cout").value) ?? 0;
+    // Date optionnelle (pour corriger une recharge mal datée, ou en
+    // ajouter une à une date passée) -- demande explicite de l'utilisateur
+    // le 2026-10-26. Sans date choisie : date du jour, comme avant.
+    const dateChoisie = $("ev-journal-date").value;
+    const ts = dateChoisie ? new Date(dateChoisie).getTime() : Date.now();
     if (idEnEdition) {
-      modifierJournal(idEnEdition, { lieu, kwh, cout_eur });
+      modifierJournal(idEnEdition, { lieu, kwh, cout_eur, ts });
       toast("✅ Recharge modifiée");
       annulerEditionJournal();
     } else {
-      ajouterAuJournal({ lieu, kwh, cout_eur, source: "manuel" });
-      for (const id of ["ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
+      ajouterAuJournal({ lieu, kwh, cout_eur, source: "manuel", ts });
+      for (const id of ["ev-journal-date", "ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
       toast("✅ Recharge ajoutée au journal");
     }
     rendreJournal();
