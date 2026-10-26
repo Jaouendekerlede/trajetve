@@ -1200,7 +1200,9 @@ const CASES = {
 
 function majJaugeBatterie() {
   const pct = parseFloat($("ev-charge-pct-input").value);
-  const couleur = pct >= 50 ? "#22e5a0" : pct >= 20 ? "#ffcf70" : "#ff5c7a";
+  // Vert jusqu'à 20 %, puis orange, rouge sous 10 % -- façon ABRP. Demande
+  // explicite de l'utilisateur le 2026-10-26 (avant : vert ≥50 %, orange ≥20 %).
+  const couleur = pct >= 20 ? "#22e5a0" : pct >= 10 ? "#ffcf70" : "#ff5c7a";
   const fill = $("ev-charge-pct-fill");
   fill.style.width = `${pct}%`;
   fill.style.background = couleur;

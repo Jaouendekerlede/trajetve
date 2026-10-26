@@ -18,7 +18,7 @@ let periode = "mois";
 // pneus, dépendent de la finition/des capteurs -- pas une erreur s'ils
 // manquent).
 function couleurBatterie(pct) {
-  return pct >= 50 ? "good" : pct >= 20 ? "warn" : "bad";
+  return pct >= 20 ? "good" : pct >= 10 ? "warn" : "bad";
 }
 
 function texteDepuis(iso) {

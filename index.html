@@ -113,12 +113,14 @@
            une seule source de vérité, un tap ouvre l'écran Trajet pour la
            modifier. -->
       <button type="button" id="ev-fiche-vehicule" class="ev-fiche-vehicule">
-        <img src="./icons/kona-noire.png" alt="" class="ev-fiche-vehicule-image">
-        <span class="ev-fiche-vehicule-texte">
-          <span class="ev-fiche-vehicule-nom" id="ev-fiche-vehicule-nom"></span>
-          <span class="ev-jauge ev-fiche-vehicule-jauge"><span id="ev-fiche-vehicule-jauge-fill" class="ev-jauge-remplissage"></span></span>
-          <span class="ev-fiche-vehicule-pct" id="ev-fiche-vehicule-pct"></span>
+        <span class="ev-fiche-vehicule-haut">
+          <span class="ev-fiche-vehicule-infos">
+            <span class="ev-fiche-vehicule-nom" id="ev-fiche-vehicule-nom"></span>
+            <span class="ev-fiche-vehicule-pct" id="ev-fiche-vehicule-pct"></span>
+          </span>
+          <img src="./icons/kona-noire.png" alt="" class="ev-fiche-vehicule-image">
         </span>
+        <span class="ev-jauge ev-fiche-vehicule-jauge"><span id="ev-fiche-vehicule-jauge-fill" class="ev-jauge-remplissage"></span></span>
       </button>
       <div class="ev-raccourcis-dest">
         <button type="button" class="ev-chip" data-dest="Chez moi">🏠 Chez moi</button>
@@ -922,7 +924,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 152 : vraie photo de la Kona noire sur la fiche véhicule</div>
+      <div class="ev-hint ev-lien-centre">Version 153 : fiche véhicule façon ABRP (plus grande, barre pleine largeur, vert jusqu'à 20 %)</div>
     </div>
   </div>
 </section>

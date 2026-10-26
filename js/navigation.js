@@ -500,7 +500,7 @@ function majEcran() {
   $("ev-nav-reste-km").textContent = `${Math.round((route.total - etat.offset) / 1000)}`;
   const pct = Math.max(0, Math.round(pctMaintenant));
   $("ev-nav-batt").textContent = `${pct} %`;
-  $("ev-nav-batt").className = pct >= 50 ? "good" : pct >= 20 ? "warn" : "bad";
+  $("ev-nav-batt").className = pct >= 20 ? "good" : pct >= 10 ? "warn" : "bad";
 }
 
 // Recalcule à la fois les zones de danger (fusionnées, pour le bandeau
