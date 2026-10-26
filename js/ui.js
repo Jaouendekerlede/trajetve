@@ -2747,6 +2747,7 @@ function rendreReglagesProfil() {
   $("ev-cle-tomtom").value = tomtom || "";
   $("ev-cle-ocm").value = openChargeMap || "";
   $("ev-relais-url").value = reglages.relais_url || "";
+  $("ev-relais-secret").value = reglages.relais_secret || "";
   $("ev-alerte-batterie-activee").checked = reglages.alerte_batterie_activee !== false;
   $("ev-alerte-batterie-seuil").value = reglages.alerte_batterie_seuil_pct ?? 20;
 
@@ -2862,7 +2863,7 @@ function cablerProfil() {
     if (fichier && confirm("Remplacer toutes les données de ce téléphone par celles de la sauvegarde ?")) importerSauvegarde(fichier);
   });
   $("ev-tester-tomtom-btn").addEventListener("click", () => testerCleTomTom($("ev-cle-tomtom").value.trim() || getApiKeys().tomtom));
-  for (const id of ["ev-cle-tomtom", "ev-cle-ocm"]) {
+  for (const id of ["ev-cle-tomtom", "ev-cle-ocm", "ev-relais-secret"]) {
     $(`${id}-voir`).addEventListener("click", () => {
       // Masquage par le style, pas par un champ « mot de passe » : sinon le
       // téléphone prend la destination pour un identifiant et propose
@@ -2933,6 +2934,7 @@ function cablerProfil() {
       pause_mi_parcours: $("ev-reglage-pause-mi-parcours").checked,
       mode_eco: $("ev-reglage-mode-eco").checked,
       relais_url: $("ev-relais-url").value.trim(),
+      relais_secret: $("ev-relais-secret").value.trim(),
       alerte_batterie_activee: $("ev-alerte-batterie-activee").checked,
       alerte_batterie_seuil_pct: Math.min(90, Math.max(5, Number($("ev-alerte-batterie-seuil").value) || 20)),
     });

@@ -26,13 +26,24 @@ function avecDelai(signal) {
   return typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(DELAI_MS) : signal;
 }
 
+// Secret de LECTURE (distinct de celui de JARVIS, qui protège l'écriture) --
+// demande explicite de l'utilisateur le 2026-10-26 : sans lui, n'importe
+// qui découvrant l'adresse du relais pouvait lire la position GPS en
+// direct, le verrouillage, etc., sans authentification. Réglé une fois
+// dans Profil, envoyé automatiquement ensuite. Absent : en-tête omis, le
+// worker reste ouvert tant que ce secret n'est pas configuré côté serveur.
+function enTetesLecture() {
+  const secret = (lireReglages().relais_secret || "").trim();
+  return secret ? { Authorization: `Bearer ${secret}` } : {};
+}
+
 // État du véhicule publié par JARVIS (batterie_pct, autonomie_km, en_charge,
 // branche...), ou null si non configuré/indisponible/périmé (>15 min).
 export async function lireEtatVehiculeRelais() {
   const base = urlRelais();
   if (!base) return null;
   try {
-    const r = await fetch(`${base}/vehicule`, { signal: avecDelai() });
+    const r = await fetch(`${base}/vehicule`, { headers: enTetesLecture(), signal: avecDelai() });
     if (!r.ok) return null;
     const d = await r.json();
     return d?.ok ? d : null;
@@ -52,7 +63,7 @@ export async function trajetSuggereParJarvis() {
   const base = urlRelais();
   if (!base) return null;
   try {
-    const r = await fetch(`${base}/trajet-prevu`, { signal: avecDelai() });
+    const r = await fetch(`${base}/trajet-prevu`, { headers: enTetesLecture(), signal: avecDelai() });
     if (!r.ok) return null;
     const d = await r.json();
     if (!d?.ok || !d.destination || Date.now() - (d.maj_ts || 0) > DUREE_TRAJET_PREVU_MS) return null;
@@ -138,7 +149,7 @@ export async function rechargesDetecteesParJarvis() {
   const base = urlRelais();
   if (!base) return [];
   try {
-    const r = await fetch(`${base}/recharge-detectee`, { signal: avecDelai() });
+    const r = await fetch(`${base}/recharge-detectee`, { headers: enTetesLecture(), signal: avecDelai() });
     if (!r.ok) return [];
     const d = await r.json();
     return d?.ok ? d.recharges || [] : [];
