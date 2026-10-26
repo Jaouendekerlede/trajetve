@@ -391,6 +391,12 @@
 
       <div class="ev-carte-bloc" id="ev-bloc-stats">
         <h3>📊 Mes statistiques</h3>
+        <!-- État réel de la Kona (Pleos/Bluelink via le relais JARVIS) :
+             batterie, autonomie, compteur réel, verrouillage, charge,
+             climatisation... Demande explicite de l'utilisateur le
+             2026-10-26 : « avoir vraiment un suivi de la Kona ». -->
+        <h4 class="ev-sous-titre">🚗 État de la Kona</h4>
+        <div id="ev-kona-etat"></div>
         <div class="ev-segments ev-stats-periodes">
           <button type="button" data-periode="mois" class="active">Ce mois</button>
           <button type="button" data-periode="annee">Cette année</button>
@@ -904,7 +910,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 149 : batterie réelle automatique sur la fiche véhicule</div>
+      <div class="ev-hint ev-lien-centre">Version 150 : État de la Kona (batterie, verrouillage, charge...) dans Mes statistiques</div>
     </div>
   </div>
 </section>

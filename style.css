@@ -438,6 +438,7 @@ textarea.ev-input { resize: vertical; }
 .ev-accordeon[open] summary { margin-bottom: 14px; color: var(--vert-clair); }
 
 .ev-hint { font-size: 12px; color: var(--texte-faible); line-height: 1.45; }
+.ev-sous-titre { font-size: 13px; font-weight: 700; margin: 14px 0 8px; color: var(--texte-faible); }
 .ev-alerte { background: rgba(255, 60, 90, 0.12); border: 1px solid rgba(255, 60, 90, 0.4); color: var(--rouge-texte); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; }
 .ev-domicile { background: rgba(255, 210, 63, 0.08); border: 1px solid rgba(255, 210, 63, 0.3); border-radius: 14px; padding: 12px 14px; font-size: 13.5px; color: var(--jaune); line-height: 1.5; }
 .ev-resultat-calc { background: var(--bloc-2); border-radius: 12px; padding: 12px; font-size: 14px; line-height: 1.6; }

@@ -5,8 +5,70 @@ import { $, toast, euros, nombre, nombreOuUndefined, tuile } from "./ui-commun.j
 import { escapeHtml } from "./util.js";
 import { listerJournal, listerTrajetsFaits, ajouterTrajetFait, retirerTrajetFait } from "./storage.js";
 import { statistiques } from "./statistiques.js";
+import { relaisConfigure, lireEtatVehiculeRelais } from "./relais.js";
 
 let periode = "mois";
+
+// État réel de la Kona (batterie, autonomie, compteur réel, verrouillage,
+// charge, climatisation...) -- lu via le relais JARVIS (Pleos en priorité,
+// voir jarvis_bluelink_runtime.py). Demande explicite de l'utilisateur le
+// 2026-10-26 : « avoir vraiment un suivi de la Kona », avec le maximum
+// d'informations disponibles. Chaque champ n'apparaît que s'il est
+// réellement transmis par le véhicule (certains, comme la pression des
+// pneus, dépendent de la finition/des capteurs -- pas une erreur s'ils
+// manquent).
+function couleurBatterie(pct) {
+  return pct >= 50 ? "good" : pct >= 20 ? "warn" : "bad";
+}
+
+function texteDepuis(iso) {
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!Number.isFinite(diffMin)) return "";
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `il y a ${diffH} h`;
+  return `il y a ${Math.round(diffH / 24)} j`;
+}
+
+export function rendreEtatKona(etat) {
+  const conteneur = $("ev-kona-etat");
+  if (!conteneur) return;
+  if (!relaisConfigure()) {
+    conteneur.innerHTML = `<div class="ev-hint">Configure l'URL du relais dans 🚗 Profil pour voir ici l'état réel de la Kona (batterie, verrouillage, charge...).</div>`;
+    return;
+  }
+  if (!etat || !etat.ok) {
+    conteneur.innerHTML = `<div class="ev-hint">État indisponible pour l'instant (JARVIS doit avoir publié un relevé récent, moins de 15 min).</div>`;
+    return;
+  }
+  const t = [];
+  if (Number.isFinite(etat.batterie_pct)) t.push(tuile(couleurBatterie(etat.batterie_pct), `${Math.round(etat.batterie_pct)} %`, "Batterie"));
+  if (Number.isFinite(etat.autonomie_km)) t.push(tuile("cyan", `${nombre(etat.autonomie_km)} km`, "Autonomie"));
+  if (Number.isFinite(etat.odometre_km)) t.push(tuile("violet", `${nombre(etat.odometre_km)} km`, "Compteur réel"));
+  if (etat.en_charge) t.push(tuile("good", "⚡ En charge", Number.isFinite(etat.minutes_restantes_charge) && etat.minutes_restantes_charge > 0 ? `${etat.minutes_restantes_charge} min restantes` : "Charge en cours"));
+  else if (etat.branche) t.push(tuile("warn", "🔌 Branchée", "Pas en charge"));
+  if (typeof etat.verrouille === "boolean") t.push(tuile(etat.verrouille ? "good" : "warn", etat.verrouille ? "🔒 Verrouillée" : "🔓 Déverrouillée", "Portes"));
+  if (etat.climatisation_active) t.push(tuile("warn", "❄️ Active", "Climatisation"));
+  if (Number.isFinite(etat.temperature_exterieure_c)) t.push(tuile("cyan", `${Math.round(etat.temperature_exterieure_c)} °C`, "Température extérieure"));
+  if (etat.capot_ouvert || etat.coffre_ouvert) {
+    const quoi = [etat.capot_ouvert ? "capot" : null, etat.coffre_ouvert ? "coffre" : null].filter(Boolean).join(" + ");
+    t.push(tuile("bad", "⚠️ Ouvert", quoi.charAt(0).toUpperCase() + quoi.slice(1)));
+  }
+  if (etat.avertissements?.length) t.push(tuile("bad", `${etat.avertissements.length}`, `Avertissement${etat.avertissements.length > 1 ? "s" : ""}`));
+  const maj = etat.derniere_maj_position ? texteDepuis(etat.derniere_maj_position) : "";
+  conteneur.innerHTML = t.length
+    ? `<div class="ev-tuiles">${t.join("")}</div><div class="ev-hint">${etat.source === "pleos" ? "Donnée officielle Pleos" : "Donnée Bluelink"}${maj ? " · position " + maj : ""}</div>`
+    : `<div class="ev-hint">Aucune donnée exploitable pour l'instant.</div>`;
+}
+
+let derniereLectureEtatKona = 0;
+export async function rafraichirEtatKona({ forcer = false } = {}) {
+  if (!relaisConfigure()) return rendreEtatKona(null);
+  if (!forcer && Date.now() - derniereLectureEtatKona < 60000) return;
+  derniereLectureEtatKona = Date.now();
+  rendreEtatKona(await lireEtatVehiculeRelais());
+}
 
 // Tuiles km/kWh/€ par 100km/CO2 : dérivées des trajets guidés + ajoutés à
 // la main (voir cablerTrajets ci-dessous) -- un tap ouvre cette liste. La
