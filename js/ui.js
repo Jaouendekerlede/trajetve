@@ -4,12 +4,14 @@
 // local (trajet.js), portage du panneau Trajet VE de JARVIS.
 
 import { MULTIPLICATEURS_SAISON, getApiKeys, setApiKeys, MODES_TRAJET } from "./config.js";
-import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero, operateurPeuFiable } from "./storage.js";
+import { obtenirProfilVehicule, definirProfilVehicule, listerHistoriqueTrajets, supprimerTrajetHistorique, effacerHistoriqueTrajets, listerTrajetsFavoris, ajouterTrajetFavori, retirerTrajetFavori, listerBornesFavorites, estBorneFavorite, basculerFavoriBorne, obtenirNoteBorne, definirNoteBorne, lirePrefs, sauverPrefs, lireReglages, sauverReglages, consoMesuree, appliquerAbonnements, noterTrajetPrevu, trajetPrevu, consoParType, listerTraces, borneEnPanneJusqua, basculerBorneEnPanne, JOURS_BORNE_EN_PANNE, supprimerTrace, destinationHabituelle, facteurChargeAppris, remiseAZero, operateurPeuFiable, listerRadarsPersonnels } from "./storage.js";
+import { radarsLeLongDu } from "./osm-route.js";
+import { radarsSurTrace } from "./alertes-route.js";
 import { planifierTrajet, simulerVitesseMax, planifierAlternative, planifierAllerRetour, comparerScenarios, bornesADistance, rechercherBornesAutour, bornesUrgence } from "./trajet.js";
 import { diagnostiquerCleTomTom, calculerZoneAtteignable } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage } from "./carte.js";
+import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage, afficherRadarsApercu } from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
@@ -479,6 +481,13 @@ function pastillesBorne(b) {
   if (o?.gratuit === "oui") morceaux.push(`<span class="ev-cb-pill ok">🎁 Gratuit</span>`);
   else if (prix !== null) morceaux.push(`<span class="ev-cb-pill ${b.abonnement ? "ok" : "neutre"}">${b.abonnement ? "💳" : "💶"} ${euros(prix)}/kWh${b.abonnement ? " (abonnement)" : ""}</span>`);
   if (o && /24\s*\/\s*7|24\s*h/i.test(o.horaires)) morceaux.push(`<span class="ev-cb-pill neutre">🕐 24h/24</span>`);
+  // Fiabilité de l'occupation temps réel (observée sur tes propres
+  // trajets, voir storage.js noterFiabiliteOperateur) -- déjà expliquée en
+  // détail sur la fiche de la borne, mais invisible dans la liste avant
+  // de taper dessus. Demande explicite de l'utilisateur le 2026-10-26 :
+  // "être plus précis, y compris pour les bornes". Seulement si une
+  // occupation temps réel est affichée : c'est elle qu'il faut nuancer.
+  if (b.etat_dynamique && o?.operateur && operateurPeuFiable(o.operateur)) morceaux.push(`<span class="ev-cb-pill warn" title="D'après tes trajets, cet opérateur transmet rarement l'occupation réelle">⚠️ À vérifier sur place</span>`);
   return morceaux.join("");
 }
 
@@ -1697,6 +1706,25 @@ function etapesHtml(p) {
   return html;
 }
 
+// Radars dès l'aperçu du trajet calculé, pas seulement pendant le guidage
+// actif (qui les affichait déjà) -- demande explicite de l'utilisateur le
+// 2026-10-26. Respecte le même réglage que la navigation (Profil ›
+// Alertes dangers) ; best-effort, jamais bloquant pour l'affichage du
+// résultat (fetch après coup, pas attendu).
+async function afficherRadarsSurApercu(coords) {
+  if (!lirePrefs().dangers || !coords?.length) return;
+  try {
+    const r = await radarsLeLongDu(coords);
+    if (!r.ok) return;
+    const cum = [0];
+    for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]) * 1000);
+    const tousRadars = [...r.radars, ...listerRadarsPersonnels()];
+    afficherRadarsApercu(radarsSurTrace(tousRadars, coords, cum));
+  } catch {
+    // Sans conséquence : le trajet reste utilisable sans les radars affichés.
+  }
+}
+
 function afficherResultat(p) {
   dernierTrajet = p;
   trajetAffiche = true;
@@ -1783,6 +1811,7 @@ function afficherResultat(p) {
 
   afficherVue("resultat");
   afficherTrajet(p, (arret) => ouvrirBorne(arret, { contexteArret: arret }));
+  afficherRadarsSurApercu(p.coords);
   afficherItineraires(p);
   renderProfilTrajet(p);
   preparerFrise(p);

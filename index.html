@@ -440,17 +440,18 @@
 
       <div class="ev-carte-bloc" id="ev-bloc-journal">
         <h3>📒 Journal des recharges</h3>
-        <div class="ev-hint">Rempli tout seul en navigation (à « Reprendre la route »), ou à la main ci-dessous.</div>
+        <div class="ev-hint">Rempli tout seul en navigation (à « Reprendre la route »), ou à la main ci-dessous. Touchez une recharge dans la liste pour la modifier.</div>
         <div id="ev-journal-bilan"></div>
         <button id="ev-journal-exporter-btn" class="ev-btn" type="button">📄 Exporter mes recharges (CSV)</button>
-        <details class="ev-details">
-          <summary>➕ Ajouter une recharge à la main</summary>
+        <details class="ev-details" id="ev-journal-ajouter-details">
+          <summary id="ev-journal-ajouter-titre">➕ Ajouter une recharge à la main</summary>
           <div class="ev-grille-2">
             <label class="ev-champ">Lieu <input type="text" id="ev-journal-lieu" class="ev-input" placeholder="Domicile"></label>
             <label class="ev-champ">Énergie (kWh) <input type="number" id="ev-journal-kwh" class="ev-input" min="0" step="0.1"></label>
             <label class="ev-champ">Coût (€) <input type="number" id="ev-journal-cout" class="ev-input" min="0" step="0.01"></label>
             <button id="ev-journal-ajouter-btn" class="ev-btn" type="button">Ajouter</button>
           </div>
+          <button id="ev-journal-annuler-btn" class="ev-lien hidden" type="button">✕ Annuler la modification</button>
         </details>
         <div id="ev-journal-liste" class="ev-journal-liste"></div>
       </div>
@@ -925,7 +926,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 158 : badges sur la fiche véhicule (verrouillage, charge, autonomie)</div>
+      <div class="ev-hint ev-lien-centre">Version 159 : radars dès l'aperçu du trajet, fiabilité des bornes dans la liste, recharges modifiables</div>
     </div>
   </div>
 </section>

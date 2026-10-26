@@ -164,6 +164,10 @@ export function entrerNavigation({ onDeplacementManuel } = {}) {
   coucheNav = coucheNav || L.layerGroup();
   coucheNav.clearLayers();
   coucheNav.addTo(carte);
+  // Les radars d'aperçu (afficherRadarsApercu) cèdent la place à ceux de
+  // dessinerRadars, mis à jour en continu pendant le guidage -- deux jeux
+  // de pastilles superposées sinon.
+  coucheRadarsApercu?.clearLayers();
   // Zoom continu pour que l'animation de navigation le fasse varier en douceur.
   carte.options.zoomSnap = 0;
   // Carte des bornes en 3D : elle s'efface le temps de cette navigation 2D.
@@ -608,6 +612,23 @@ export function afficherZonesEvitees(zones) {
   }
 }
 
+// Radars sur l'aperçu du trajet calculé (avant de démarrer le guidage) --
+// jusqu'ici visibles seulement pendant la navigation active (dessinerRadars
+// ci-dessus, qui dépend de coucheNav, créée seulement au guidage). Couche
+// indépendante dédiée, même esprit que coucheZonesEvitees : évite de
+// dépendre du cycle de vie de la navigation. Demande explicite de
+// l'utilisateur le 2026-10-26.
+let coucheRadarsApercu;
+export function afficherRadarsApercu(radars) {
+  coucheRadarsApercu ??= L.layerGroup().addTo(carte);
+  coucheRadarsApercu.clearLayers();
+  for (const r of radars || []) {
+    if (!Number.isFinite(r.lat) || !Number.isFinite(r.lon)) continue;
+    const symbole = `<span style="color:#fff;display:flex">${icone(iconeRadar(r.type), 16)}</span>`;
+    L.marker([r.lat, r.lon], { icon: pastille(28, couleurRadar(r.type), symbole), zIndexOffset: 3500, interactive: false }).addTo(coucheRadarsApercu);
+  }
+}
+
 // Zone visible au-dessus du panneau, en degrés.
 function limitesVisibles2D() {
   const taille = carte.getSize();
@@ -833,6 +854,7 @@ export function afficherTrajet(data, onClicArret) {
 export function effacerTrajet() {
   effacerTrajet2D();
   c3d.exploEffacerTrajet();
+  coucheRadarsApercu?.clearLayers();
 }
 
 export function placerCurseur(lat, lon, label) {

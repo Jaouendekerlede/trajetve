@@ -860,6 +860,8 @@ body.ev-mode-voiture .ev-nav-limite { width: 64px; height: 64px; font-size: 24px
 .ev-negatif { color: var(--rouge); font-weight: 700; }
 .ev-journal-liste { display: flex; flex-direction: column; }
 .ev-journal-ligne { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--separateur); font-size: 12.5px; }
+.ev-journal-ligne[data-editer] { cursor: pointer; }
+.ev-journal-ligne[data-editer]:active { background: var(--voile); }
 
 /* Accueil du premier lancement */
 .ev-accueil { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.6); }

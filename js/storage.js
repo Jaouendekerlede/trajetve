@@ -258,6 +258,23 @@ export function retirerDuJournal(id) {
   ecrireJson(STORAGE_KEYS.journal, listerJournal().filter((e) => e.id !== id));
 }
 
+// Modifie une recharge existante (lieu/kwh/cout_eur...), quelle que soit sa
+// source (manuelle, navigation, bluelink) -- demande explicite de
+// l'utilisateur le 2026-10-26 : pouvoir corriger une entrée en cliquant
+// dessus, pas seulement la supprimer. Enlève les marqueurs "estimé" des
+// champs désormais saisis à la main (kwh_estime/prix_estime), sinon
+// l'affichage continuerait de les signaler comme estimés après correction.
+export function modifierJournal(id, champs) {
+  const journal = listerJournal().map((e) => {
+    if (e.id !== id) return e;
+    const maj = { ...e, ...champs };
+    if (champs.kwh !== undefined) delete maj.kwh_estime;
+    if (champs.cout_eur !== undefined) delete maj.prix_estime;
+    return maj;
+  });
+  ecrireJson(STORAGE_KEYS.journal, journal);
+}
+
 // Km réellement parcourus entre deux recharges détectées par JARVIS via
 // Bluelink (odomètre réel du véhicule, source: "bluelink"), pas une
 // estimation -- uniquement calculable entre deux entrées "bluelink"

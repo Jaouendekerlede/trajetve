@@ -2,7 +2,7 @@
 
 import { $, toast, euros, nombre, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
-import { obtenirProfilVehicule, listerJournal, ajouterAuJournal, retirerDuJournal, kmReelsParRecharge, consommationReelleSur } from "./storage.js";
+import { obtenirProfilVehicule, listerJournal, ajouterAuJournal, modifierJournal, retirerDuJournal, kmReelsParRecharge, consommationReelleSur } from "./storage.js";
 import { rechargesDetecteesParJarvis } from "./relais.js";
 
 function moisLisible(cle) {
@@ -82,17 +82,49 @@ export function rendreJournal() {
     .slice(0, 15)
     .map((e) => {
       const km = kmReels.get(e.id);
-      return `<div class="ev-journal-ligne"><span>${new Date(e.ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${escapeHtml(e.lieu || "Recharge")}</span><span>${nombre(e.kwh, 1)} kWh${e.kwh_estime ? " (estimé)" : ""} · ${euros(e.cout_eur || 0)}${e.prix_estime ? " (estimé)" : ""}${km !== undefined ? ` · ${nombre(km)} km réels` : ""}</span><button type="button" class="ev-lien" data-journal="${escapeHtml(e.id)}" title="Supprimer">✕</button></div>`;
+      return `<div class="ev-journal-ligne" data-editer="${escapeHtml(e.id)}"><span>${new Date(e.ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${escapeHtml(e.lieu || "Recharge")}</span><span>${nombre(e.kwh, 1)} kWh${e.kwh_estime ? " (estimé)" : ""} · ${euros(e.cout_eur || 0)}${e.prix_estime ? " (estimé)" : ""}${km !== undefined ? ` · ${nombre(km)} km réels` : ""}</span><button type="button" class="ev-lien" data-journal="${escapeHtml(e.id)}" title="Supprimer">✕</button></div>`;
     })
     .join("");
   $("ev-journal-liste")
     .querySelectorAll("[data-journal]")
     .forEach((btn) =>
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation(); // ne doit pas aussi déclencher l'édition de la ligne
         retirerDuJournal(btn.dataset.journal);
+        if (idEnEdition === btn.dataset.journal) annulerEditionJournal();
         rendreJournal();
       }),
     );
+  $("ev-journal-liste")
+    .querySelectorAll("[data-editer]")
+    .forEach((ligne) => ligne.addEventListener("click", () => demarrerEditionJournal(ligne.dataset.editer)));
+}
+
+// Modification d'une recharge existante en touchant sa ligne -- demande
+// explicite de l'utilisateur le 2026-10-26. Réutilise le même formulaire
+// que l'ajout manuel (pré-rempli), pour ne pas dupliquer l'interface.
+let idEnEdition = null;
+
+function demarrerEditionJournal(id) {
+  const entree = listerJournal().find((e) => e.id === id);
+  if (!entree) return;
+  idEnEdition = id;
+  $("ev-journal-lieu").value = entree.lieu || "";
+  $("ev-journal-kwh").value = entree.kwh ?? "";
+  $("ev-journal-cout").value = entree.cout_eur ?? "";
+  $("ev-journal-ajouter-details").open = true;
+  $("ev-journal-ajouter-titre").textContent = "✏️ Modifier cette recharge";
+  $("ev-journal-ajouter-btn").textContent = "Enregistrer la modification";
+  $("ev-journal-annuler-btn").classList.remove("hidden");
+  $("ev-journal-ajouter-details").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function annulerEditionJournal() {
+  idEnEdition = null;
+  for (const id of ["ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
+  $("ev-journal-ajouter-titre").textContent = "➕ Ajouter une recharge à la main";
+  $("ev-journal-ajouter-btn").textContent = "Ajouter";
+  $("ev-journal-annuler-btn").classList.add("hidden");
 }
 
 // Pour Excel en français : point-virgule (la virgule sert de séparateur
@@ -152,10 +184,19 @@ export function cablerJournal() {
   $("ev-journal-ajouter-btn").addEventListener("click", () => {
     const kwh = nombreOuUndefined($("ev-journal-kwh").value);
     if (!kwh || kwh <= 0) return toast("Indique l'énergie rechargée (kWh).");
-    ajouterAuJournal({ lieu: $("ev-journal-lieu").value.trim() || "Recharge", kwh, cout_eur: nombreOuUndefined($("ev-journal-cout").value) ?? 0, source: "manuel" });
-    for (const id of ["ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
-    toast("✅ Recharge ajoutée au journal");
+    const lieu = $("ev-journal-lieu").value.trim() || "Recharge";
+    const cout_eur = nombreOuUndefined($("ev-journal-cout").value) ?? 0;
+    if (idEnEdition) {
+      modifierJournal(idEnEdition, { lieu, kwh, cout_eur });
+      toast("✅ Recharge modifiée");
+      annulerEditionJournal();
+    } else {
+      ajouterAuJournal({ lieu, kwh, cout_eur, source: "manuel" });
+      for (const id of ["ev-journal-lieu", "ev-journal-kwh", "ev-journal-cout"]) $(id).value = "";
+      toast("✅ Recharge ajoutée au journal");
+    }
     rendreJournal();
   });
+  $("ev-journal-annuler-btn").addEventListener("click", annulerEditionJournal);
   $("ev-journal-exporter-btn").addEventListener("click", exporterJournalCsv);
 }
