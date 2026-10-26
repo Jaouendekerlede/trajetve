@@ -1227,6 +1227,22 @@ function majJaugeBatterie() {
 // solliciter le relais à chaque passage sur l'écran Carte. Demande
 // explicite de l'utilisateur le 2026-10-26.
 let derniereLectureFicheReelle = 0;
+// Badges d'un coup d'œil (verrouillage, charge, autonomie) à côté du %,
+// façon ABRP -- les mêmes infos existent déjà dans la tuile "État de la
+// Kona" (Mes statistiques), mais perdues là-bas pour qui ne va pas les
+// chercher. Demande explicite de l'utilisateur le 2026-10-26. N'affiche
+// que ce qui est réellement transmis (voir ui-stats.js, même principe).
+function rendreBadgesFicheVehicule(etat) {
+  const conteneur = $("ev-fiche-vehicule-badges");
+  if (!conteneur) return;
+  const morceaux = [];
+  if (etat.en_charge) morceaux.push("⚡ En charge");
+  else if (etat.branche) morceaux.push("🔌 Branchée");
+  if (typeof etat.verrouille === "boolean") morceaux.push(etat.verrouille ? "🔒 Verrouillée" : "🔓 Déverrouillée");
+  if (Number.isFinite(etat.autonomie_km)) morceaux.push(`${nombre(etat.autonomie_km)} km`);
+  conteneur.textContent = morceaux.join(" · ");
+}
+
 async function rafraichirFicheVehiculeReelle() {
   if (!relaisConfigure() || Date.now() - derniereLectureFicheReelle < 60000) return;
   derniereLectureFicheReelle = Date.now();
@@ -1234,6 +1250,7 @@ async function rafraichirFicheVehiculeReelle() {
   if (!etat || !Number.isFinite(etat.batterie_pct)) return;
   $("ev-charge-pct-input").value = Math.round(etat.batterie_pct);
   $("ev-charge-pct-input").dispatchEvent(new Event("input", { bubbles: true }));
+  rendreBadgesFicheVehicule(etat);
 }
 
 function activerModeVisuel(mode) {

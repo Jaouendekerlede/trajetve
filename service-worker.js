@@ -6,11 +6,11 @@
 // préparées. Les autres services (TomTom, bornes, météo) ne passent pas ici :
 // TomTom interdit de stocker ses cartes, et les autres doivent être frais.
 
-const CACHE_NOM = "trajetve-v157";
+const CACHE_NOM = "trajetve-v158";
 // Empreinte des fichiers ci-dessous, vérifiée par les tests : les téléphones
 // ne reçoivent une modification que si ce fichier change. À chaque
 // publication : augmenter CACHE_NOM et recopier l'empreinte donnée par le test.
-const EMPREINTE_COQUILLE = "8eb8c055d42da432";
+const EMPREINTE_COQUILLE = "d5ee84579bc5c248";
 const FICHIERS_COQUILLE = [
   "./",
   "./index.html",
