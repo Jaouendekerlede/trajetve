@@ -398,16 +398,25 @@ async function stationsOfficiellesZoneReseau(lat, lon, rayonKm, puissanceMin, ma
   try {
     let rayon = rayonKm;
     let params = parametresZone(lat, lon, rayon, puissanceMin);
-    let total = (await page(params, 1, 1)).meta?.total || 0;
+    // Première page ET total en un seul aller-retour (l'API renvoie
+    // meta.total quelle que soit la taille de page demandée) -- avant,
+    // une requête "sonde" séparée (page_size=1) ne servait qu'à connaître
+    // le total, ajoutant un aller-retour réseau complet avant même de
+    // recevoir la moindre donnée utile. Optimisation demandée explicitement
+    // par l'utilisateur le 2026-10-26 (recherche de bornes jugée trop lente).
+    let premierePage = await page(params, 1, 50);
+    let total = premierePage.meta?.total || 0;
     let incomplet = false;
     if (total > maxLignes) {
       incomplet = true;
       rayon = Math.max(0.3, rayonKm * Math.sqrt(maxLignes / total) * 0.9);
       params = parametresZone(lat, lon, rayon, puissanceMin);
-      total = (await page(params, 1, 1)).meta?.total || 0;
+      premierePage = await page(params, 1, 50);
+      total = premierePage.meta?.total || 0;
     }
     const nbPages = Math.min(Math.ceil(Math.min(total, maxLignes) / 50), Math.ceil(maxLignes / 50));
-    const pages = await Promise.all(Array.from({ length: nbPages }, (_, i) => page(params, i + 1, 50)));
+    const pagesRestantes = await Promise.all(Array.from({ length: Math.max(0, nbPages - 1) }, (_, i) => page(params, i + 2, 50)));
+    const pages = [premierePage, ...pagesRestantes];
     // La base signale elle-même les coordonnées non vérifiées (déclarées par
     // l'opérateur, jamais recoupées) -- on ne les garde pas : c'est une des
     // façons dont une borne finit affichée en pleine mer. Signalé par
