@@ -288,6 +288,7 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   appliquerRubrique(vue, rubrique);
   for (const v of VUES) $(`vue-${v}`).classList.toggle("hidden", v !== vue);
   vueCourante = vue;
+  if (vue === "bornes") rafraichirFicheVehiculeReelle();
   if (vue === "trajet") {
     remplirArretsImposes();
     majSuggestionTrajet();
@@ -1211,6 +1212,23 @@ function majJaugeBatterie() {
   }
   const fichePct = $("ev-fiche-vehicule-pct");
   if (fichePct) fichePct.textContent = `${Math.round(pct)} %`;
+}
+
+// Batterie réelle à côté de la Kona sur l'écran Carte, sans action manuelle
+// (le bouton "🔗 Récupérer la batterie réelle" reste disponible pour un
+// rafraîchissement immédiat à la demande). Repose sur le même relais que ce
+// bouton (lireEtatVehiculeRelais) -- no-op silencieux si non configuré ou
+// indisponible. Rafraîchi au plus une fois par minute pour ne pas
+// solliciter le relais à chaque passage sur l'écran Carte. Demande
+// explicite de l'utilisateur le 2026-10-26.
+let derniereLectureFicheReelle = 0;
+async function rafraichirFicheVehiculeReelle() {
+  if (!relaisConfigure() || Date.now() - derniereLectureFicheReelle < 60000) return;
+  derniereLectureFicheReelle = Date.now();
+  const etat = await lireEtatVehiculeRelais();
+  if (!etat || !Number.isFinite(etat.batterie_pct)) return;
+  $("ev-charge-pct-input").value = Math.round(etat.batterie_pct);
+  $("ev-charge-pct-input").dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function activerModeVisuel(mode) {
