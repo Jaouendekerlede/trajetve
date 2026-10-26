@@ -407,8 +407,12 @@ textarea.ev-input { resize: vertical; }
 
 .ev-valeur { color: var(--vert-clair); font-weight: 800; font-size: 14px; }
 .ev-curseur { width: 100%; height: 28px; margin: 0; accent-color: var(--vert); }
-.ev-jauge { height: 10px; border-radius: 999px; background: var(--piste); overflow: hidden; }
-.ev-jauge-remplissage { height: 100%; width: 80%; background: var(--vert); box-shadow: 0 0 12px currentColor; transition: width 0.2s, background 0.2s; }
+/* display:block explicite : la fiche véhicule utilise des <span> (pas des
+   <div> comme la jauge d'origine) pour cette barre -- sans ça, la largeur/
+   hauteur ci-dessous est ignorée (un <span> reste "inline" par défaut) et
+   le remplissage devient invisible. Bug réel trouvé le 2026-10-26. */
+.ev-jauge { display: block; height: 10px; border-radius: 999px; background: var(--piste); overflow: hidden; }
+.ev-jauge-remplissage { display: block; height: 100%; width: 80%; background: var(--vert); box-shadow: 0 0 12px currentColor; transition: width 0.2s, background 0.2s; }
 .ev-batterie-nombre { text-align: center; font-size: 20px; font-weight: 800; }
 
 .ev-check { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; line-height: 1.35; }
