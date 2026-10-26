@@ -30,11 +30,18 @@ function avecDelai(signal) {
 // demande explicite de l'utilisateur le 2026-10-26 : sans lui, n'importe
 // qui découvrant l'adresse du relais pouvait lire la position GPS en
 // direct, le verrouillage, etc., sans authentification. Réglé une fois
-// dans Profil, envoyé automatiquement ensuite. Absent : en-tête omis, le
+// dans Profil, envoyé automatiquement ensuite. Absent : paramètre omis, le
 // worker reste ouvert tant que ce secret n'est pas configuré côté serveur.
-function enTetesLecture() {
+// En paramètre d'URL plutôt qu'en en-tête Authorization : un en-tête
+// personnalisé transforme la requête en CORS "non simple", qui exige une
+// vérification préalable (OPTIONS) -- un paramètre d'URL reste une requête
+// GET simple, sans ce risque. Choix fait après un échec silencieux
+// constaté en conditions réelles le 2026-10-26 (fetch avalé par le bloc
+// catch, sans date pour l'identifier avec certitude -- ce choix l'évite
+// par construction plutôt que de chercher à le confirmer).
+function suffixeLecture() {
   const secret = (lireReglages().relais_secret || "").trim();
-  return secret ? { Authorization: `Bearer ${secret}` } : {};
+  return secret ? `?cle_lecture=${encodeURIComponent(secret)}` : "";
 }
 
 // État du véhicule publié par JARVIS (batterie_pct, autonomie_km, en_charge,
@@ -43,7 +50,7 @@ export async function lireEtatVehiculeRelais() {
   const base = urlRelais();
   if (!base) return null;
   try {
-    const r = await fetch(`${base}/vehicule`, { headers: enTetesLecture(), signal: avecDelai() });
+    const r = await fetch(`${base}/vehicule${suffixeLecture()}`, { signal: avecDelai() });
     if (!r.ok) return null;
     const d = await r.json();
     return d?.ok ? d : null;
@@ -63,7 +70,7 @@ export async function trajetSuggereParJarvis() {
   const base = urlRelais();
   if (!base) return null;
   try {
-    const r = await fetch(`${base}/trajet-prevu`, { headers: enTetesLecture(), signal: avecDelai() });
+    const r = await fetch(`${base}/trajet-prevu${suffixeLecture()}`, { signal: avecDelai() });
     if (!r.ok) return null;
     const d = await r.json();
     if (!d?.ok || !d.destination || Date.now() - (d.maj_ts || 0) > DUREE_TRAJET_PREVU_MS) return null;
@@ -149,7 +156,7 @@ export async function rechargesDetecteesParJarvis() {
   const base = urlRelais();
   if (!base) return [];
   try {
-    const r = await fetch(`${base}/recharge-detectee`, { headers: enTetesLecture(), signal: avecDelai() });
+    const r = await fetch(`${base}/recharge-detectee${suffixeLecture()}`, { signal: avecDelai() });
     if (!r.ok) return [];
     const d = await r.json();
     return d?.ok ? d.recharges || [] : [];
