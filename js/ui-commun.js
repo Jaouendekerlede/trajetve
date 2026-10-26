@@ -16,6 +16,18 @@ export function euros(x) {
   return `${Number(x).toFixed(2).replace(".", ",")} €`;
 }
 
+// "il y a X min/h/j" depuis une date ISO -- partagé entre la tuile "État de
+// la Kona" (ui-stats.js) et le pin de position réelle sur la carte (ui.js).
+export function texteDepuis(iso) {
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!Number.isFinite(diffMin)) return "";
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `il y a ${diffH} h`;
+  return `il y a ${Math.round(diffH / 24)} j`;
+}
+
 export function nombre(x, dec = 0) {
   return Number(x).toFixed(dec).replace(".", ",");
 }

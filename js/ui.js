@@ -11,12 +11,12 @@ import { planifierTrajet, simulerVitesseMax, planifierAlternative, planifierAlle
 import { diagnostiquerCleTomTom, calculerZoneAtteignable } from "./tomtom.js";
 
 import { typesDeCharge, calculerTempsCharge, exporterTrajetTexte, exporterScenariosTexte, formaterMinutes } from "./planner.js";
-import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage, afficherRadarsApercu } from "./carte.js";
+import { initCarte, afficherAutonomie, fondSuivant, choisirFond, rechargerFond, activerCarte3D, carte3DActive, fondCourant, derniereErreur3D, definirDecalageBas, centreVisible, rayonVisibleKm, zoomActuel, centrer, classePuissance, puissanceBorne, afficherBornes, rafraichirBorne, selectionnerBorne, montrerBornes, afficherPosition, afficherTrajet, afficherAlternatives, effacerTrajet, placerCurseur, definirAppuiLong, afficherPointsPassage, afficherRadarsApercu, afficherPositionVoitureReelle } from "./carte.js";
 import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
-import { $, toast, bandeau, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur } from "./ui-commun.js";
+import { $, toast, bandeau, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur, texteDepuis } from "./ui-commun.js";
 import { rendreJournal, cablerJournal, synchroniserRechargesDetectees } from "./ui-journal.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
@@ -1260,6 +1260,9 @@ async function rafraichirFicheVehiculeReelle() {
   $("ev-charge-pct-input").value = Math.round(etat.batterie_pct);
   $("ev-charge-pct-input").dispatchEvent(new Event("input", { bubbles: true }));
   rendreBadgesFicheVehicule(etat);
+  // Pin "position réelle" sur la carte (GPS du véhicule, pas du téléphone)
+  // -- demande explicite de l'utilisateur le 2026-10-26.
+  afficherPositionVoitureReelle(etat.latitude, etat.longitude, etat.derniere_maj_position ? texteDepuis(etat.derniere_maj_position) : "");
 }
 
 function activerModeVisuel(mode) {

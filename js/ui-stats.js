@@ -2,7 +2,7 @@
 // graphiques simples (km par jour, répartition par type de route --
 // demande explicite de l'utilisateur le 2026-10-26).
 
-import { $, toast, euros, nombre, nombreOuUndefined, tuile } from "./ui-commun.js";
+import { $, toast, euros, nombre, nombreOuUndefined, tuile, texteDepuis } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
 import { listerJournal, listerTrajetsFaits, ajouterTrajetFait, retirerTrajetFait } from "./storage.js";
 import { statistiques } from "./statistiques.js";
@@ -20,16 +20,6 @@ let periode = "mois";
 // manquent).
 function couleurBatterie(pct) {
   return pct >= 20 ? "good" : pct >= 10 ? "warn" : "bad";
-}
-
-function texteDepuis(iso) {
-  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (!Number.isFinite(diffMin)) return "";
-  if (diffMin < 1) return "à l'instant";
-  if (diffMin < 60) return `il y a ${diffMin} min`;
-  const diffH = Math.round(diffMin / 60);
-  if (diffH < 24) return `il y a ${diffH} h`;
-  return `il y a ${Math.round(diffH / 24)} j`;
 }
 
 export function rendreEtatKona(etat) {

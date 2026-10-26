@@ -918,6 +918,26 @@ export function marquerVoitureGaree(pos) {
   c3d.exploVoitureGaree(pos);
 }
 
+// Position RÉELLE de la voiture (GPS du véhicule via Pleos/relais JARVIS) --
+// différent de marquerVoitureGaree ci-dessus (position du TÉLÉPHONE au
+// moment où le guidage s'arrête). Plus fiable : fonctionne même si on n'est
+// pas arrivé en suivant un guidage TrajetVE, ou si quelqu'un d'autre a
+// conduit. Demande explicite de l'utilisateur le 2026-10-26.
+let marqueurVoitureReelle = null;
+
+export function afficherPositionVoitureReelle(lat, lon, texteAge) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    marqueurVoitureReelle?.remove();
+    marqueurVoitureReelle = null;
+    return;
+  }
+  const icone = L.divIcon({ className: "", iconSize: [44, 44], iconAnchor: [22, 22], html: `<div class="ev-position-reelle">🚗</div>` });
+  if (marqueurVoitureReelle) marqueurVoitureReelle.setLatLng([lat, lon]);
+  else marqueurVoitureReelle = L.marker([lat, lon], { icon, zIndexOffset: 2000 }).addTo(carte);
+  marqueurVoitureReelle.unbindTooltip();
+  if (texteAge) marqueurVoitureReelle.bindTooltip(`Position réelle de la Kona · ${escapeHtml(texteAge)}`, { direction: "top", offset: [0, -24] });
+}
+
 // Appui long sur la carte (navigation) : cb(lat, lon), ou null.
 let appuiLongCb = null;
 let appuiLongBranche = false;
