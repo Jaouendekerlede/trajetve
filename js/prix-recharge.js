@@ -1,12 +1,16 @@
-// Comparateur de prix de recharge (projet séparé "comparateur-recharge-ve",
-// backend FastAPI/PostgreSQL lancé sur le PC de l'utilisateur) -- intégré
-// directement dans TrajetVE plutôt que dans un .apk séparé, demande
-// explicite de l'utilisateur le 2026-10-27 : un seul APK à ouvrir. Le
-// backend tourne en local (même Wi-Fi que le PC pour l'instant, pas encore
-// de tunnel Cloudflare) -- réglages indépendants du reste de l'appli
-// (localStorage dédié), pas de secret pour l'instant (réseau local
-// uniquement, même étape que TrajetVE avant l'ajout de son secret de
-// lecture -- à revoir si un accès distant est ajouté plus tard).
+// Comparateur de prix de recharge -- intégré directement dans TrajetVE
+// plutôt que dans un .apk séparé, demande explicite de l'utilisateur le
+// 2026-10-27 : un seul APK à ouvrir. Backend : Worker Cloudflare + D1
+// (...\Sauvegarde Projets 16-09-2026\ComparateurRecharge-Worker), gratuit
+// et toujours disponible -- remplace le backend Python local (FastAPI/
+// PostgreSQL) qui exigeait que le PC tourne en permanence sur le même
+// Wi-Fi, jugé "pas pratique du tout" par l'utilisateur. Réglages
+// indépendants du reste de l'appli (localStorage dédié), même principe que
+// `relais_url` : adresse à coller une fois après déploiement du Worker, pas
+// de valeur par défaut dans le code public (l'adresse du Worker contient
+// l'identifiant du compte Cloudflare -- même blocage de sécurité déjà
+// rencontré et contourné de la même façon pour le relais TrajetVE). Pas de
+// secret de lecture : prix de bornes publiques, pas de donnée personnelle.
 
 import { $ } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
