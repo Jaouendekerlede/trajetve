@@ -1268,3 +1268,8 @@ button.ev-bandeau { width: 100%; border: none; font-family: inherit; text-align:
 .pr-confiance { color: var(--texte-att); font-size: 12px; }
 .pr-notes-incertitude { margin-top: 12px; padding: 10px 12px; background: var(--bloc); border-radius: 10px; color: var(--texte-faible); font-size: 12px; }
 .pr-erreur { color: var(--rouge-texte); }
+.pr-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 8px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.pr-badge-confirmed { background: rgba(53,200,120,.18); color: var(--vert-vif); }
+.pr-badge-estimated, .pr-badge-brut_non_verifie { background: rgba(255,180,0,.18); color: #e0a400; }
+.pr-badge-non_calculable { background: rgba(150,150,150,.18); color: var(--texte-faible); }
+.pr-alerte { background: rgba(255,180,0,.15); border: 1px solid rgba(255,180,0,.4); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; color: #e0a400; }

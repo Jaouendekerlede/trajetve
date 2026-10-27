@@ -612,6 +612,25 @@ export function afficherZonesEvitees(zones) {
   }
 }
 
+// Bornes du comparateur de prix de recharge (prix-recharge.js), colorées
+// selon la confiance du prix affiché -- demande explicite de l'utilisateur
+// le 2026-10-27 ("vue carte en plus de la liste"). Couche indépendante,
+// même esprit que coucheZonesEvitees : prix-recharge.js ne touche jamais
+// l'instance Leaflet directement, seulement cette fonction exportée.
+let coucheBornesPrix;
+const COULEUR_CONFIANCE = { confirmed: "rgba(53,200,120,.95)", estimated: "rgba(255,180,0,.95)", brut_non_verifie: "rgba(255,180,0,.95)", non_calculable: "rgba(150,150,150,.9)" };
+export function afficherBornesPrix(bornes) {
+  coucheBornesPrix ??= L.layerGroup().addTo(carte);
+  coucheBornesPrix.clearLayers();
+  for (const b of bornes || []) {
+    if (!Number.isFinite(b.lat) || !Number.isFinite(b.lon)) continue;
+    const couleur = COULEUR_CONFIANCE[b.moins_cher_confiance] || COULEUR_CONFIANCE.non_calculable;
+    const prix = b.moins_cher_eur != null ? `${b.moins_cher_eur.toFixed(2)} €` : "prix non calculable";
+    L.marker([b.lat, b.lon], { icon: pastille(26, couleur, "⚡"), zIndexOffset: 2000 })
+      .bindPopup(`<b>${escapeHtml(b.nom || "Borne de recharge")}</b><br>${escapeHtml(prix)}`)
+      .addTo(coucheBornesPrix);
+  }
+}
 // Radars sur l'aperçu du trajet calculé (avant de démarrer le guidage) --
 // jusqu'ici visibles seulement pendant la navigation active (dessinerRadars
 // ci-dessus, qui dépend de coucheNav, créée seulement au guidage). Couche

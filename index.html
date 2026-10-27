@@ -399,7 +399,10 @@
           <label for="pr-recherche-kwh">Énergie (kWh)</label>
           <input id="pr-recherche-kwh" type="number" min="1" step="1" value="30" />
         </div>
+        <p class="pr-aide">kWh pré-rempli à partir de la charge actuelle/cible et de la capacité de votre véhicule -- modifiable.</p>
         <button id="pr-chercher-btn" type="button" class="ev-btn ev-btn-principal ev-btn-plein">📍 Chercher les bornes près de moi</button>
+        <button id="pr-destination-btn" type="button" class="ev-btn-secondaire ev-btn-plein">🏁 Chercher à la destination du trajet</button>
+        <button id="pr-voir-carte-btn" type="button" class="ev-btn-secondaire ev-btn-plein hidden">🗺️ Voir sur la carte</button>
         <p id="pr-recherche-statut" class="pr-statut"></p>
         <p id="pr-recherche-note" class="pr-aide hidden">Triées de la moins chère à la plus chère pour cette charge. Prix affiché uniquement quand un moyen de paiement est calculable.</p>
         <div id="pr-liste-bornes"></div>
@@ -417,6 +420,14 @@
         </form>
         <p class="pr-aide">La durée de branchement sert à estimer les frais au-delà d'un certain temps (confirmés uniquement pour Chargemap Pass sur Electra, voir notes ci-dessous).</p>
         <div id="pr-comparatif-resultat"></div>
+        <form id="pr-journal-form" class="ev-input-row">
+          <label for="pr-journal-kwh">kWh réels</label>
+          <input id="pr-journal-kwh" type="number" min="0" step="0.01" />
+          <label for="pr-journal-cout">Prix réellement payé (€)</label>
+          <input id="pr-journal-cout" type="number" min="0" step="0.01" />
+          <button type="submit" class="ev-btn-secondaire">Enregistrer cette recharge</button>
+        </form>
+        <p id="pr-journal-statut" class="pr-statut"></p>
       </section>
 
       <section id="pr-ecran-reglages" class="pr-ecran hidden">
@@ -426,8 +437,33 @@
           <label for="pr-serveur-input">Adresse du serveur</label>
           <input id="pr-serveur-input" type="text" placeholder="https://comparateur-recharge.VOTRE-COMPTE.workers.dev" />
           <p class="pr-aide">Collez ici l'adresse du Worker une fois déployé (voir ComparateurRecharge-Worker/LISEZ-MOI.md) -- fonctionne ensuite sans PC allumé.</p>
+          <label for="pr-secret-admin-input">Mot de passe admin (pour "Signaler un prix")</label>
+          <input id="pr-secret-admin-input" type="password" placeholder="ADMIN_SECRET du Worker" />
           <button type="submit" class="ev-btn ev-btn-principal ev-btn-plein">Enregistrer</button>
         </form>
+        <button id="pr-signaler-ouvrir-btn" type="button" class="ev-lien">➕ Signaler un prix pour un nouvel opérateur</button>
+      </section>
+
+      <section id="pr-ecran-signaler" class="pr-ecran hidden">
+        <button id="pr-signaler-retour-btn" type="button" class="ev-lien">← Retour aux réglages</button>
+        <h3>Signaler un prix</h3>
+        <p class="pr-aide">À partir d'une facture Chargemap réelle (opérateur, prix au kWh). Enregistré immédiatement en base, utilisé pour toutes les bornes de cet opérateur.</p>
+        <form id="pr-signaler-form" class="ev-champ">
+          <label for="pr-signaler-operateur">Opérateur (ex. powerdot, engievianeo)</label>
+          <input id="pr-signaler-operateur" type="text" placeholder="nom de l'opérateur" />
+          <label for="pr-signaler-methode">Moyen de paiement</label>
+          <select id="pr-signaler-methode">
+            <option value="partner_card">Carte Chargemap Pass</option>
+            <option value="app_card">Carte / application de l'opérateur</option>
+            <option value="cb_direct">CB directement à la borne</option>
+          </select>
+          <label for="pr-signaler-prix">Prix au kWh (€)</label>
+          <input id="pr-signaler-prix" type="number" min="0" step="0.001" />
+          <label for="pr-signaler-notes">Notes (optionnel)</label>
+          <input id="pr-signaler-notes" type="text" placeholder="ex. facture du 27/10, pas de frais de branchement" />
+          <button type="submit" class="ev-btn ev-btn-principal ev-btn-plein">Envoyer</button>
+        </form>
+        <p id="pr-signaler-statut" class="pr-statut"></p>
       </section>
 
       <button id="pr-reglages-ouvrir-btn" type="button" class="ev-lien pr-lien-reglages">⚙️ Réglages du serveur</button>
@@ -987,7 +1023,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 169 : Prix recharge - tarif Chargemap Pass corrigé avec une vraie facture (frais de branchement au-delà de 60 min)</div>
+      <div class="ev-hint ev-lien-centre">Version 170 : Prix recharge - fourchette et fiabilité visibles, carte, trajet, journal, signaler un prix</div>
     </div>
   </div>
 </section>

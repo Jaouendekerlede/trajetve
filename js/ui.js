@@ -3040,6 +3040,21 @@ export function executerAction(action) {
   }
 }
 
+// Exposé pour le comparateur de prix de recharge (prix-recharge.js) : permet
+// de chercher les bornes autour de la destination du trajet en cours plutôt
+// que d'exiger une nouvelle géolocalisation -- demande explicite du
+// 2026-10-27 ("intégration au planificateur de trajet").
+export function trajetActuel() {
+  return dernierTrajet;
+}
+
+// Bascule vers l'écran carte principal (même mécanisme que les boutons de
+// menu existants) -- utilisé par le bouton "Voir sur la carte" du
+// comparateur de prix.
+export function afficherVueBornes() {
+  afficherVue("bornes");
+}
+
 // Départ et destination toujours vides à l'ouverture -- demande explicite de
 // l'utilisateur les 2026-09-27 et 2026-10-01 (champ vide = ma position pour
 // le départ, cf. placeholder). Exportée pour être rappelée aussi quand
