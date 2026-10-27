@@ -32,6 +32,7 @@ import { niveauPrecision } from "./recalage.js";
 import { cablerVoitureGaree } from "./ui-voiture.js";
 import { rendreStats, cablerStats, rendreTrajets, rafraichirEtatKona } from "./ui-stats.js";
 import { rafraichirHistoriqueKona } from "./ui-historique-kona.js";
+import { cablerPrixRecharge } from "./prix-recharge.js";
 import { remplirArretsImposes, cablerArretsImposes, arretImposeChoisi } from "./ui-arret-impose.js";
 import { boutonQuandPartir, quandPartir } from "./ui-quand-partir.js";
 import { boutonPartage, partagerTrajet } from "./ui-partage.js";
@@ -49,7 +50,7 @@ import { ageTexte } from "./reprise.js";
 import { cablerDiagnostic } from "./ui-diagnostic.js";
 import { estimerPreparation, preparerHorsLigne, guidagePrepare, bilanPreparation, RAYONS_REGION_KM, estimerRegion, preparerRegion, regionPreparee } from "./hors-ligne.js";
 
-const VUES = ["bornes", "borne", "trajet", "resultat", "menu", "favoris", "outils", "profil"];
+const VUES = ["bornes", "borne", "trajet", "resultat", "menu", "favoris", "outils", "profil", "prix"];
 const ETAT_FEUILLE_PAR_VUE = { bornes: "bas", borne: "mi", trajet: "haut", resultat: "mi", menu: "haut", favoris: "haut", outils: "haut", profil: "haut" };
 const ONGLET_PAR_VUE = { bornes: "bornes", trajet: "trajet", resultat: "trajet", menu: "menu", favoris: "menu", outils: "menu", profil: "menu" };
 const LABELS_MODE = { rapide: "⚡ Rapide", economique: "💶 Économique", confort: "🛋️ Confort", prudent: "🛡️ Prudent" };
@@ -238,7 +239,7 @@ function cablerFeuille() {
 // Favoris, Outils et Profil s'ouvrent depuis le Menu, rubrique par rubrique :
 // seul le bloc choisi reste affiché, avec un retour au Menu. Ouvertes sans
 // rubrique, ces vues s'affichent en entier.
-const VUES_A_RUBRIQUES = ["favoris", "outils", "profil"];
+const VUES_A_RUBRIQUES = ["favoris", "outils", "profil", "prix"];
 const titresVues = {};
 let rubriqueOuverte = false;
 
@@ -3308,6 +3309,7 @@ export function initialiserUI() {
   cablerUrgence();
   cablerProfil();
   cablerComplements();
+  cablerPrixRecharge();
 
   chargerPrefs();
   rendreProfil();
