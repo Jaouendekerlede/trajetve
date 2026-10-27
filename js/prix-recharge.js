@@ -119,14 +119,14 @@ function rendreListeBornes(bornes, kwh) {
 
 const LABELS_CONFIANCE = { confirmed: "confirmé", estimated: "estimé", brut_non_verifie: "non vérifié", non_calculable: "non calculable" };
 
-async function afficherComparatifPrix(borne, kwh) {
+async function afficherComparatifPrix(borne, kwh, dureeBranchementMin) {
   const conteneur = $("pr-comparatif-resultat");
   conteneur.innerHTML = "<p class='pr-vide'>Calcul en cours…</p>";
   try {
     const resultat = await appel("/prix/estimation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_station: borne.id_station, kwh }),
+      body: JSON.stringify({ id_station: borne.id_station, kwh, duree_branchement_min: dureeBranchementMin ?? null }),
     });
     const lignes = resultat.quotes
       .map((q) => {
@@ -158,12 +158,14 @@ async function afficherComparatifPrix(borne, kwh) {
 function ouvrirComparatif(borne, kwh) {
   $("pr-comparatif-titre").textContent = borne.nom || "Borne de recharge";
   $("pr-comparatif-kwh").value = kwh;
+  $("pr-comparatif-duree").value = "";
   afficherEcranPrix("comparatif");
-  afficherComparatifPrix(borne, kwh);
+  afficherComparatifPrix(borne, kwh, null);
 
   $("pr-comparatif-form").onsubmit = (e) => {
     e.preventDefault();
-    afficherComparatifPrix(borne, Number($("pr-comparatif-kwh").value) || 30);
+    const duree = $("pr-comparatif-duree").value ? Number($("pr-comparatif-duree").value) : null;
+    afficherComparatifPrix(borne, Number($("pr-comparatif-kwh").value) || 30, duree);
   };
   $("pr-comparatif-retour-btn").onclick = () => afficherEcranPrix("recherche");
 }

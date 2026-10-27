@@ -411,8 +411,11 @@
         <form id="pr-comparatif-form" class="ev-input-row">
           <label for="pr-comparatif-kwh">Énergie (kWh)</label>
           <input id="pr-comparatif-kwh" type="number" min="1" step="1" value="30" />
+          <label for="pr-comparatif-duree">Durée de branchement prévue (min, optionnel)</label>
+          <input id="pr-comparatif-duree" type="number" min="0" step="1" placeholder="ex. 60" />
           <button type="submit" class="ev-btn-secondaire">Recalculer</button>
         </form>
+        <p class="pr-aide">La durée de branchement sert à estimer les frais au-delà d'un certain temps (confirmés uniquement pour Chargemap Pass sur Electra, voir notes ci-dessous).</p>
         <div id="pr-comparatif-resultat"></div>
       </section>
 
@@ -984,7 +987,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 168 : Prix recharge fonctionne sans PC allumé (Worker Cloudflare, à régler une fois dans Réglages)</div>
+      <div class="ev-hint ev-lien-centre">Version 169 : Prix recharge - tarif Chargemap Pass corrigé avec une vraie facture (frais de branchement au-delà de 60 min)</div>
     </div>
   </div>
 </section>
