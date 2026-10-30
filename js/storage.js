@@ -32,14 +32,17 @@ function avecPrixDomicile(profil) {
   return { ...profil, prix_domicile_eur_kwh: Math.round(prix * 10000) / 10000 };
 }
 
-// Version 2 du profil : Kona 65 kWh calée sur la fiche Hyundai (41 min de
-// 10 à 80 %). Un profil enregistré avec l'ancienne valeur (77 kW) est mis à jour.
-const VERSION_PROFIL = 2;
+// Version 3 du profil : tarif domicile réel (facture Primeo Energie du
+// 2026-10-30) remplace l'ancien tarif générique 0,21/0,27 -- seulement si
+// l'utilisateur ne l'a jamais modifié à la main (sinon son choix prime).
+const VERSION_PROFIL = 3;
 
 export function obtenirProfilVehicule() {
   const profil = lireJson(STORAGE_KEYS.profil, {});
   if ((profil.version_profil || 0) < VERSION_PROFIL && Object.keys(profil).length) {
     if (profil.puissance_dc_kw === 77) profil.puissance_dc_kw = PROFIL_PAR_DEFAUT.puissance_dc_kw;
+    if (profil.prix_hc_eur_kwh === 0.21) profil.prix_hc_eur_kwh = PROFIL_PAR_DEFAUT.prix_hc_eur_kwh;
+    if (profil.prix_hp_eur_kwh === 0.27) profil.prix_hp_eur_kwh = PROFIL_PAR_DEFAUT.prix_hp_eur_kwh;
     profil.version_profil = VERSION_PROFIL;
     ecrireJson(STORAGE_KEYS.profil, profil);
   }

@@ -43,8 +43,15 @@ export const PROFIL_PAR_DEFAUT = {
   // Borne murale « 7 kW » (monophasé 32 A = 7,4 kW).
   puissance_domicile_kw: 7.4,
   connecteurs_acceptes: ["CCS", "Type 2", "Mennekes"],
-  prix_hc_eur_kwh: 0.21,
-  prix_hp_eur_kwh: 0.27,
+  // Tarif réel Primeo Energie (offre Fixe, HP-HC), facture F5630022269 du
+  // 12/09/2026 : 0,1339 €/kWh HT en heures pleines, 0,1002 €/kWh HT en
+  // heures creuses (23h36-7h36) -- converti en TTC (TVA 20 %) ici, comme le
+  // reste des prix affichés dans l'appli. Remplace l'ancien tarif générique
+  // (0,21/0,27) qui n'était pas celui de l'utilisateur. Demande explicite
+  // de l'utilisateur le 2026-10-30 : "je te donne mon abonnement electrique
+  // [...] tous ce qu il te faut pour completer notre projet".
+  prix_hc_eur_kwh: 0.1202,
+  prix_hp_eur_kwh: 0.1607,
   part_hc_pct: 100,
   saison: "mi_saison",
   // Kilométrage réel (saisi à la main) -- sert au coût réel de possession

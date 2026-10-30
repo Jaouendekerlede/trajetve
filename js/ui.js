@@ -16,7 +16,7 @@ import { afficherCourbe, detruireCourbe } from "./courbe.js";
 import { rechercherBornesZone, borneCompatible } from "./ocm.js";
 import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
-import { $, toast, bandeau, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur, texteDepuis } from "./ui-commun.js";
+import { $, toast, bandeau, euros, nombre, nombreAffiche, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur, texteDepuis } from "./ui-commun.js";
 import { rendreJournal, cablerJournal, synchroniserRechargesDetectees } from "./ui-journal.js";
 import { rendreEntretien, cablerEntretien } from "./ui-entretien.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
@@ -806,7 +806,7 @@ function cablerCarte() {
     const aSupprimer = e.target.closest("[data-suppr-trace]")?.dataset.supprTrace;
     if (aSupprimer !== undefined) {
       const t = listerTraces().find((x) => String(x.date) === aSupprimer);
-      if (!t || !confirm(`Supprimer le trajet du ${new Date(t.date).toLocaleDateString("fr-FR")} (${nomCourt(t.destination || "Trajet").split(",")[0]}, ${nombre(t.km)} km) ?\n\nIl sera retiré de cette liste et des statistiques.`)) return;
+      if (!t || !confirm(`Supprimer le trajet du ${new Date(t.date).toLocaleDateString("fr-FR")} (${nomCourt(t.destination || "Trajet").split(",")[0]}, ${nombreAffiche(t.km)} km) ?\n\nIl sera retiré de cette liste et des statistiques.`)) return;
       supprimerTrace(t.date);
       rendreTraces();
       rendreStats();
@@ -817,7 +817,7 @@ function cablerCarte() {
     if (!t) return;
     afficherVue("bornes", { etat: "bas" });
     afficherTrajet({ coords: t.coords, arrets: [], bouchons: [] });
-    toast(`🗺️ ${nomCourt(t.destination || "Trajet")} · ${nombre(t.km)} km`);
+    toast(`🗺️ ${nomCourt(t.destination || "Trajet")} · ${nombreAffiche(t.km)} km`);
   });
   cablerArretsImposes();
   $("ev-reglage-taille-texte").addEventListener("input", (e) => ($("ev-reglage-taille-texte-val").textContent = e.target.value));
@@ -1680,7 +1680,7 @@ function etapesHtml(p) {
       <div class="ev-etape arret">
         <div class="ev-etape-rail"><div class="ev-etape-icone">🔋</div></div>
         <div class="ev-etape-corps">
-          <div class="ev-etape-titre">Arrêt ${a.numero} · km ${nombre(a.km_depuis_depart)}</div>
+          <div class="ev-etape-titre">Arrêt ${a.numero} · km ${nombreAffiche(a.km_depuis_depart)}</div>
           <div class="ev-etape-sous">Arrivée ${heure(arriveeMs)} · repart ${heure(arriveeMs + a.temps_charge_min * 60000)}</div>
           <div class="ev-etape-carte" data-arret="${i}">
             <strong>${a.impose ? "⭐ " : ""}${escapeHtml(a.nom_borne)}</strong>${a.impose ? ` <span class="ev-cb-pill ok">Votre aire</span>` : ""}
@@ -1739,7 +1739,7 @@ function afficherResultat(p) {
 
   $("ev-resultat-titre").textContent = `${nomCourt(p.from_name).split(",")[0]} → ${nomCourt(p.to_name).split(",")[0]}`;
   const tuiles = [
-    tuile("cyan", `${nombre(p.distance_km)} km`, "Distance"),
+    tuile("cyan", `${nombreAffiche(p.distance_km)} km`, "Distance"),
     tuile("violet", p.duree_text, "Route"),
     tuile("cyan", p.duree_totale_min != null ? formaterMinutes(p.duree_totale_min) : "—", "Total avec charge"),
     tuile(p.nb_arrets === 0 ? "good" : "warn", p.nb_arrets === 0 ? "Aucun" : String(p.nb_arrets), p.nb_arrets ? `Arrêt(s) · ${p.temps_charge_total_min} min` : "Arrêt"),
@@ -1755,11 +1755,11 @@ function afficherResultat(p) {
   let retour = "";
   if (p.retour) {
     retour = p.retour.ok
-      ? `↩️ Retour : ${nombre(p.retour.distance_km)} km, ${p.retour.duree_text}, ${p.retour.nb_arrets} arrêt(s), arrivée à ${nombre(p.retour.pct_batterie_arrivee)} % (tracé orange).`
+      ? `↩️ Retour : ${nombreAffiche(p.retour.distance_km)} km, ${p.retour.duree_text}, ${p.retour.nb_arrets} arrêt(s), arrivée à ${nombre(p.retour.pct_batterie_arrivee)} % (tracé orange).`
       : `↩️ Retour impossible à calculer : ${p.retour.erreur}`;
   }
   const peage = p.km_peage
-    ? `<div class="ev-meteo-info">🛣️ Péages : environ <strong>${euros(coutPeage(p.km_peage))}</strong> (estimation sur ${nombre(p.km_peage)} km à péage) · recharge + péages ≈ <strong>${euros(coutPeage(p.km_peage) + (p.cout_total_eur || 0))}</strong></div>`
+    ? `<div class="ev-meteo-info">🛣️ Péages : environ <strong>${euros(coutPeage(p.km_peage))}</strong> (estimation sur ${nombreAffiche(p.km_peage)} km à péage) · recharge + péages ≈ <strong>${euros(coutPeage(p.km_peage) + (p.cout_total_eur || 0))}</strong></div>`
     : "";
   // Nouvelle simulation à refaire pour ce trajet-ci.
   $("ev-vitesse-resultat").classList.add("hidden");
@@ -1861,7 +1861,7 @@ function carteItineraire(i, plan, route, badges, affiche) {
   const choisi = plan === affiche;
   const titre = `<div class="ev-itin-tete"><strong>Itinéraire ${i + 1}</strong>${choisi ? `<span class="ev-itin-coche">✓ affiché</span>` : ""}</div>`;
   const pastilles = badges.length ? `<div class="ev-itin-badges">${badges.map((b) => `<span class="ev-cb-pill ok">${b}</span>`).join("")}</div>` : "";
-  const routeTxt = `${nombre(route.distance_km)} km · ${route.duree_text} de route`;
+  const routeTxt = `${nombreAffiche(route.distance_km)} km · ${route.duree_text} de route`;
   if (!plan) {
     return `<div class="ev-itineraire attente">${titre}<div class="ev-itin-ligne">${routeTxt}</div><div class="ev-itin-sous">⏳ Calcul des recharges…</div></div>`;
   }
@@ -1871,8 +1871,8 @@ function carteItineraire(i, plan, route, badges, affiche) {
   const arrets = plan.nb_arrets ? `${plan.nb_arrets} arrêt${plan.nb_arrets > 1 ? "s" : ""}` : "sans arrêt";
   const ligne = `🏁 <strong>${formaterMinutes(plan.duree_totale_min ?? plan.duree_min)}</strong> au total · ${routeTxt} · ${arrets} · ${plan.cout_total_eur ? euros(plan.cout_total_eur) : "0 €"} · 🔋 ${nombre(plan.pct_batterie_arrivee)} %`;
   const details = [];
-  if (plan.km_autoroute) details.push(`🛣️ ${nombre(plan.km_autoroute)} km d'autoroute`);
-  details.push(plan.km_peage ? `péage sur ${nombre(plan.km_peage)} km (≈ ${euros(coutPeage(plan.km_peage))})` : "sans péage");
+  if (plan.km_autoroute) details.push(`🛣️ ${nombreAffiche(plan.km_autoroute)} km d'autoroute`);
+  details.push(plan.km_peage ? `péage sur ${nombreAffiche(plan.km_peage)} km (≈ ${euros(coutPeage(plan.km_peage))})` : "sans péage");
   if (plan.retard_trafic_min >= 5) details.push(`🚦 ${formaterMinutes(plan.retard_trafic_min)} de bouchons`);
   if (!choisi && affiche?.ok) details.push(`${ecartMinutes((plan.duree_totale_min ?? 0) - (affiche.duree_totale_min ?? 0))} par rapport à l'affiché`);
   return `<button type="button" class="ev-itineraire${choisi ? " choisi" : ""}" data-itin="${i}">${titre}${pastilles}<div class="ev-itin-ligne">${ligne}</div><div class="ev-itin-sous">${details.join(" · ")}</div></button>`;
@@ -1890,7 +1890,7 @@ function echangeursHtml(p) {
         e.sortie ? `<span class="ev-num ev-num-sortie">${escapeHtml(e.sortie)}</span>` : "",
         ...e.numeros.map((n) => `<span class="ev-num ev-num-${classeNumero(n)}">${escapeHtml(n)}</span>`),
       ].join("");
-      return `<div class="ev-echangeur"><span class="ev-echangeur-km">km ${nombre(e.km, e.km < 10 ? 1 : 0)}</span><span>${LIBELLES_ECHANGEUR[e.type]}</span>${badges}${e.direction ? `<span class="ev-echangeur-dir">➜ ${escapeHtml(e.direction)}</span>` : ""}</div>`;
+      return `<div class="ev-echangeur"><span class="ev-echangeur-km">km ${nombreAffiche(e.km, e.km < 10 ? 1 : 0)}</span><span>${LIBELLES_ECHANGEUR[e.type]}</span>${badges}${e.direction ? `<span class="ev-echangeur-dir">➜ ${escapeHtml(e.direction)}</span>` : ""}</div>`;
     })
     .join("");
   return `<details class="ev-accordeon ev-echangeurs"><summary>🛣️ Sorties et échangeurs (${liste.length})</summary><div class="ev-echangeurs-liste">${lignes}</div></details>`;
@@ -2129,12 +2129,12 @@ function renderProfilTrajet(p) {
   const stat = (icone, texte) => `<span>${icone} ${texte}</span>`;
   const stats = [
     stat("⚡", `<strong>${nombre(s.conso_moyenne_kwh100, 1)}</strong> kWh/100 km`),
-    stat("🔋", `<strong>${nombre(s.energie_totale_kwh, 1)}</strong> kWh au total`),
+    stat("🔋", `<strong>${nombreAffiche(s.energie_totale_kwh, 1)}</strong> kWh au total`),
   ];
   if (s.vitesse_moyenne_kmh) stats.push(stat("🚗", `<strong>${nombre(s.vitesse_moyenne_kmh)}</strong> km/h de moyenne`));
   if (pt.relief_ok) {
-    stats.push(stat("⛰️", `+<strong>${nombre(s.denivele_positif_m)}</strong> m / −<strong>${nombre(s.denivele_negatif_m)}</strong> m`));
-    stats.push(stat("🏔️", `alt. max <strong>${nombre(s.altitude_max_m)}</strong> m`));
+    stats.push(stat("⛰️", `+<strong>${nombreAffiche(s.denivele_positif_m)}</strong> m / −<strong>${nombreAffiche(s.denivele_negatif_m)}</strong> m`));
+    stats.push(stat("🏔️", `alt. max <strong>${nombreAffiche(s.altitude_max_m)}</strong> m`));
   }
   if (pt.meteo_ok) {
     stats.push(stat("🌡️", `<strong>${nombre(s.temperature_min)}</strong> à <strong>${nombre(s.temperature_max)}</strong> °C`));
@@ -2980,7 +2980,7 @@ export function proposerRechargeMaison() {
   const quand = new Date(t.ts).toLocaleString("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
   bandeau({
     id: "ev-conseil-recharge",
-    texte: `🔌 Trajet ${quand} vers ${nomCourt(t.destination || "").split(",")[0]} (${nombre(t.distance_km)} km) : branchez ce soir en heures creuses pour partir à 100 %.`,
+    texte: `🔌 Trajet ${quand} vers ${nomCourt(t.destination || "").split(",")[0]} (${nombreAffiche(t.distance_km)} km) : branchez ce soir en heures creuses pour partir à 100 %.`,
     boutons: [{ libelle: "OK", action: () => {} }],
   });
 }
@@ -3023,7 +3023,7 @@ function rendreTraces() {
   const traces = listerTraces();
   $("ev-traces-liste").innerHTML = traces.length
     ? traces
-        .map((t, i) => `<div class="ev-journal-ligne"><span>${new Date(t.date).toLocaleDateString("fr-FR")} · ${escapeHtml(nomCourt(t.destination || "Trajet").split(",")[0])} · ${nombre(t.km)} km</span><button type="button" class="ev-btn" data-trace="${i}">Voir</button><button type="button" class="ev-lien" data-suppr-trace="${t.date}" title="Supprimer ce trajet" aria-label="Supprimer ce trajet">✕</button></div>`)
+        .map((t, i) => `<div class="ev-journal-ligne"><span>${new Date(t.date).toLocaleDateString("fr-FR")} · ${escapeHtml(nomCourt(t.destination || "Trajet").split(",")[0])} · ${nombreAffiche(t.km)} km</span><button type="button" class="ev-btn" data-trace="${i}">Voir</button><button type="button" class="ev-lien" data-suppr-trace="${t.date}" title="Supprimer ce trajet" aria-label="Supprimer ce trajet">✕</button></div>`)
         .join("")
     : `<div class="ev-hint">Les trajets guidés apparaîtront ici.</div>`;
 }
@@ -3219,7 +3219,7 @@ async function basculerAutonomie() {
     console.warn("[AUTONOMIE] Zone atteignable TomTom indisponible, repli sur le cercle approximatif :", zone.erreur);
   }
   afficherAutonomie(centre.lat, centre.lon, kmRoute * PART_VOL_OISEAU);
-  toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : environ ${nombre(kmRoute)} km de route${pos.erreur ? ", autour du centre de la carte" : ""}. Niveau de batterie réglable dans Trajet.`);
+  toast(`🔋 Avec ${charge} % (réserve de ${marge} % gardée) : environ ${nombreAffiche(kmRoute)} km de route${pos.erreur ? ", autour du centre de la carte" : ""}. Niveau de batterie réglable dans Trajet.`);
 }
 
 // « Et si je roulais à 110 ? » : le même trajet, vitesse plafonnée.

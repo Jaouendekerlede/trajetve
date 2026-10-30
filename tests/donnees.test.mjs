@@ -112,6 +112,19 @@ test("mise à jour des réglages enregistrés : marge 15 %, recharge 80 %, Kona 
   assert.equal(s.obtenirProfilVehicule().puissance_dc_kw, 89);
 });
 
+test("mise à jour du tarif domicile : l'ancien tarif générique (0,21/0,27) est remplacé par le vrai tarif, sauf si modifié à la main", () => {
+  localStorage.setItem("trajetve_profil", JSON.stringify({ capacite_kwh: 64.8, prix_hc_eur_kwh: 0.21, prix_hp_eur_kwh: 0.27 }));
+  const p = s.obtenirProfilVehicule();
+  assert.equal(p.prix_hc_eur_kwh, 0.1202);
+  assert.equal(p.prix_hp_eur_kwh, 0.1607);
+
+  localStorage.clear();
+  localStorage.setItem("trajetve_profil", JSON.stringify({ capacite_kwh: 64.8, prix_hc_eur_kwh: 0.15, prix_hp_eur_kwh: 0.3 }));
+  const p2 = s.obtenirProfilVehicule();
+  assert.equal(p2.prix_hc_eur_kwh, 0.15, "valeur choisie par l'utilisateur : jamais écrasée");
+  assert.equal(p2.prix_hp_eur_kwh, 0.3);
+});
+
 test("conso apprise par type de route (mesures surtout sur un type)", () => {
   localStorage.clear();
   s.enregistrerMesureConso(60, 12, { ville: 2, route: 3, autoroute: 55 }); // 20 kWh/100 sur autoroute
