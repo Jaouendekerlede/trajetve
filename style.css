@@ -9,8 +9,12 @@
   --bloc: #141a25;
   --bloc-2: #1a2130;
   --texte: #e6eef9;
-  --texte-att: rgba(230, 238, 249, 0.66);
-  --texte-faible: rgba(230, 238, 249, 0.45);
+  /* Texte secondaire/tertiaire remonté (0,66/0,45 à l'origine) : lisible au
+     soleil ou en luminosité automatique sans attendre que l'utilisateur
+     active "Contraste fort" à la main. Demande explicite de l'utilisateur
+     le 2026-10-30 : "manque de contraste sur mon téléphone". */
+  --texte-att: rgba(230, 238, 249, 0.8);
+  --texte-faible: rgba(230, 238, 249, 0.62);
   --bordure: rgba(255, 255, 255, 0.09);
   --vert: #1a6fe8;
   --vert-clair: #6fb3ff;
@@ -53,8 +57,8 @@
   --bloc: #f3f6fa;
   --bloc-2: #e7ecf3;
   --texte: #101826;
-  --texte-att: rgba(16, 24, 38, 0.74);
-  --texte-faible: rgba(16, 24, 38, 0.62);
+  --texte-att: rgba(16, 24, 38, 0.86);
+  --texte-faible: rgba(16, 24, 38, 0.76);
   --bordure: rgba(16, 24, 38, 0.12);
   --vert: #1a6fe8;
   --vert-clair: #0b4fb3;
