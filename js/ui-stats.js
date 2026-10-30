@@ -47,6 +47,11 @@ export function rendreEtatKona(etat) {
     t.push(tuile("bad", "⚠️ Ouvert", quoi.charAt(0).toUpperCase() + quoi.slice(1)));
   }
   if (etat.avertissements?.length) t.push(tuile("bad", `${etat.avertissements.length}`, `Avertissement${etat.avertissements.length > 1 ? "s" : ""}`));
+  // Vitesse et contact : utiles surtout pour voir d'un coup d'œil que la
+  // voiture roule (et donc que les autres valeurs ci-dessus viennent
+  // d'être rafraîchies). Demande explicite de l'utilisateur le 2026-10-30.
+  if (Number.isFinite(etat.vitesse_kmh) && etat.vitesse_kmh > 1) t.push(tuile("good", `${Math.round(etat.vitesse_kmh)} km/h`, "En roulant"));
+  if (etat.contact_allume) t.push(tuile("warn", "🔑 Contact mis", "Allumage"));
   const maj = etat.derniere_maj_position ? texteDepuis(etat.derniere_maj_position) : "";
   conteneur.innerHTML = t.length
     ? `<div class="ev-tuiles">${t.join("")}</div><div class="ev-hint">${etat.source === "pleos" ? "Donnée officielle Pleos" : "Donnée Bluelink"}${maj ? " · position " + maj : ""}</div>`
