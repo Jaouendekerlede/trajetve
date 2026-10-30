@@ -5,7 +5,7 @@
 // directement de Hyundai via le relais JARVIS. Demande explicite de
 // l'utilisateur le 2026-10-26.
 
-import { $ } from "./ui-commun.js";
+import { $, nombreAffiche } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
 import { relaisConfigure, lireEtatVehiculeRelais } from "./relais.js";
 
@@ -28,10 +28,10 @@ export function rendreHistoriqueKona(trajets) {
   conteneur.innerHTML = trajets
     .map((t) => {
       const morceaux = [];
-      if (Number.isFinite(t.km)) morceaux.push(`${t.km} km`);
-      if (Number.isFinite(t.duree_min)) morceaux.push(`${t.duree_min} min`);
-      if (Number.isFinite(t.vitesse_max_kmh)) morceaux.push(`${t.vitesse_max_kmh} km/h max`);
-      if (Number.isFinite(t.temperature_exterieure_c)) morceaux.push(`${Math.round(t.temperature_exterieure_c)} °C`);
+      if (Number.isFinite(t.km)) morceaux.push(`${nombreAffiche(t.km, 1)} km`);
+      if (Number.isFinite(t.duree_min)) morceaux.push(`${nombreAffiche(t.duree_min, 1)} min`);
+      if (Number.isFinite(t.vitesse_max_kmh)) morceaux.push(`${nombreAffiche(t.vitesse_max_kmh)} km/h max`);
+      if (Number.isFinite(t.temperature_exterieure_c)) morceaux.push(`${nombreAffiche(Math.round(t.temperature_exterieure_c))} °C`);
       const avert = t.avertissements?.length ? ` · ⚠️ ${t.avertissements.length}` : "";
       return `<div class="ev-journal-ligne"><span>${escapeHtml(formatDate(t.debut))}</span><span>${escapeHtml(morceaux.join(" · ") || "Détails indisponibles")}${avert}</span></div>`;
     })

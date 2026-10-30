@@ -1,6 +1,6 @@
 // Journal des recharges (Menu › Outils) : bilan mensuel, ajout manuel.
 
-import { $, toast, euros, nombre, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
+import { $, toast, euros, nombre, nombreAffiche, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
 import { obtenirProfilVehicule, listerJournal, ajouterAuJournal, modifierJournal, retirerDuJournal, kmReelsParRecharge, consommationReelleSur } from "./storage.js";
 import { rechargesDetecteesParJarvis } from "./relais.js";
@@ -68,7 +68,7 @@ export function rendreJournal() {
   }
   const lignes = [...parMois.entries()].slice(0, 6).map(([cle, entrees]) => {
     const b = bilanRecharges(entrees);
-    return `<div class="ev-journal-mois"><strong>${escapeHtml(moisLisible(cle))}</strong><span>${b.n} recharge${b.n > 1 ? "s" : ""} · ${nombre(b.kwh, 1)} kWh · ${euros(b.cout)} · ~${nombre(b.km)} km</span></div>`;
+    return `<div class="ev-journal-mois"><strong>${escapeHtml(moisLisible(cle))}</strong><span>${b.n} recharge${b.n > 1 ? "s" : ""} · ${nombreAffiche(b.kwh, 1)} kWh · ${euros(b.cout)} · ~${nombreAffiche(b.km)} km</span></div>`;
   });
   const total = bilanRecharges(journal);
   // kWh/100 km réel : déduit des recharges Bluelink consécutives (odomètre
@@ -76,7 +76,7 @@ export function rendreJournal() {
   // seulement quand calculable (au moins 2 recharges Bluelink).
   const consoReelle = consommationReelleSur(journal);
   const tuileReelle = consoReelle !== null ? tuile("good", `${nombre(consoReelle, 1)} kWh/100 km`, "Consommation réelle") : "";
-  $("ev-journal-bilan").innerHTML = `<div class="ev-tuiles">${tuile("cyan", `${nombre(total.kwh)} kWh`, "Énergie totale")}${tuile("violet", euros(total.cout), "Dépensé")}${tuile("good", `~${nombre(total.km)} km`, "Parcourus avec (estimé)")}${tuileReelle}</div>${lignes.join("")}`;
+  $("ev-journal-bilan").innerHTML = `<div class="ev-tuiles">${tuile("cyan", `${nombreAffiche(total.kwh)} kWh`, "Énergie totale")}${tuile("violet", euros(total.cout), "Dépensé")}${tuile("good", `~${nombreAffiche(total.km)} km`, "Parcourus avec (estimé)")}${tuileReelle}</div>${lignes.join("")}`;
   const kmReels = kmReelsParRecharge(journal);
   $("ev-journal-liste").innerHTML = journal
     .slice(0, 15)

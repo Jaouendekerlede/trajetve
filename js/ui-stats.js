@@ -2,7 +2,7 @@
 // graphiques simples (km par jour, répartition par type de route --
 // demande explicite de l'utilisateur le 2026-10-26).
 
-import { $, toast, euros, nombre, nombreOuUndefined, tuile, texteDepuis } from "./ui-commun.js";
+import { $, toast, euros, nombre, nombreAffiche, nombreOuUndefined, tuile, texteDepuis } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
 import { listerJournal, listerTrajetsFaits, ajouterTrajetFait, retirerTrajetFait } from "./storage.js";
 import { statistiques } from "./statistiques.js";
@@ -35,8 +35,8 @@ export function rendreEtatKona(etat) {
   }
   const t = [];
   if (Number.isFinite(etat.batterie_pct)) t.push(tuile(couleurBatterie(etat.batterie_pct), `${Math.round(etat.batterie_pct)} %`, "Batterie"));
-  if (Number.isFinite(etat.autonomie_km)) t.push(tuile("cyan", `${nombre(etat.autonomie_km)} km`, "Autonomie"));
-  if (Number.isFinite(etat.odometre_km)) t.push(tuile("violet", `${nombre(etat.odometre_km)} km`, "Compteur réel"));
+  if (Number.isFinite(etat.autonomie_km)) t.push(tuile("cyan", `${nombreAffiche(etat.autonomie_km)} km`, "Autonomie"));
+  if (Number.isFinite(etat.odometre_km)) t.push(tuile("violet", `${nombreAffiche(etat.odometre_km)} km`, "Compteur réel"));
   if (etat.en_charge) t.push(tuile("good", "⚡ En charge", Number.isFinite(etat.minutes_restantes_charge) && etat.minutes_restantes_charge > 0 ? `${etat.minutes_restantes_charge} min restantes` : "Charge en cours"));
   else if (etat.branche) t.push(tuile("warn", "🔌 Branchée", "Pas en charge"));
   if (typeof etat.verrouille === "boolean") t.push(tuile(etat.verrouille ? "good" : "warn", etat.verrouille ? "🔒 Verrouillée" : "🔓 Déverrouillée", "Portes"));
@@ -71,11 +71,11 @@ export function rendreStats() {
   const s = statistiques(listerTrajetsFaits(), listerJournal(), periode, Date.now());
   $("ev-stats-tuiles").innerHTML = s.trajets || s.recharges
     ? [
-        tuile("good", `${nombre(s.km)} km`, `${s.trajets} trajet${s.trajets > 1 ? "s" : ""} guidé${s.trajets > 1 ? "s" : ""}`, "trajets"),
-        tuile("good", `${nombre(s.kwh)} kWh`, "Consommés (estimé)", "trajets"),
-        tuile("warn", euros(s.cout_recharges), `${s.recharges} recharge${s.recharges > 1 ? "s" : ""} · ${nombre(s.kwh_recharges)} kWh`, "recharges"),
+        tuile("good", `${nombreAffiche(s.km)} km`, `${s.trajets} trajet${s.trajets > 1 ? "s" : ""} guidé${s.trajets > 1 ? "s" : ""}`, "trajets"),
+        tuile("good", `${nombreAffiche(s.kwh)} kWh`, "Consommés (estimé)", "trajets"),
+        tuile("warn", euros(s.cout_recharges), `${s.recharges} recharge${s.recharges > 1 ? "s" : ""} · ${nombreAffiche(s.kwh_recharges)} kWh`, "recharges"),
         tuile("good", `${nombre(s.cout_km * 100, 1)} €`, "Pour 100 km", "trajets"),
-        tuile("good", `${nombre(s.co2_evite_kg)} kg`, "De CO₂ évités (~)", "trajets"),
+        tuile("good", `${nombreAffiche(s.co2_evite_kg)} kg`, "De CO₂ évités (~)", "trajets"),
       ].join("")
     : `<div class="ev-hint">Rien encore sur cette période : les trajets guidés et le journal des recharges alimentent ces chiffres.</div>`;
   rendreKmJournalier(listerTrajetsFaits());
@@ -142,7 +142,7 @@ function rendreRepartitionRoutes(trajets) {
   const max = Math.max(...Object.values(total), 1);
   conteneur.innerHTML = CATEGORIES_ROUTE.map(
     ([cle, label, couleur]) =>
-      `<div class="ev-barre-ligne"><span>${label}</span><span class="ev-barre-piste"><span class="ev-barre-remplissage" style="width:${Math.round((total[cle] / max) * 100)}%;background:${couleur}"></span></span><span class="ev-barre-valeur">${nombre(total[cle])} km</span></div>`,
+      `<div class="ev-barre-ligne"><span>${label}</span><span class="ev-barre-piste"><span class="ev-barre-remplissage" style="width:${Math.round((total[cle] / max) * 100)}%;background:${couleur}"></span></span><span class="ev-barre-valeur">${nombreAffiche(total[cle])} km</span></div>`,
   ).join("");
 }
 

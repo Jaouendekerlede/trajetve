@@ -12,8 +12,31 @@ export function toast(message) {
   toast.minuteur = setTimeout(() => el.classList.remove("visible"), 2800);
 }
 
+// Espace fine insécable entre chaque groupe de 3 chiffres (convention
+// française), uniquement sur la partie entière -- jamais utilisé pour un
+// export CSV (une espace dans la cellule empêcherait Excel de reconnaître
+// le nombre), seulement pour l'affichage à l'écran. Avant cette fonction,
+// un grand nombre (ex. kilométrage d'entretien) s'affichait "48000" au lieu
+// de "48 000", nettement moins lisible. Demande explicite de l'utilisateur
+// le 2026-10-30 : "des améliorations [...] pour que toutes les infos soit
+// plus lisible".
+function grouperMilliers(entier) {
+  return entier.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
 export function euros(x) {
-  return `${Number(x).toFixed(2).replace(".", ",")} €`;
+  const n = Number(x);
+  const signe = n < 0 ? "-" : "";
+  return `${signe}${grouperMilliers(Math.abs(n).toFixed(2))}`.replace(".", ",") + " €";
+}
+
+// Comme nombre(), mais groupée par milliers pour l'affichage (jamais dans
+// un CSV, voir ci-dessus -- construireCsv* continuent d'utiliser nombre()).
+export function nombreAffiche(x, dec = 0) {
+  const n = Number(x);
+  const signe = n < 0 ? "-" : "";
+  const [entier, decimale] = Math.abs(n).toFixed(dec).split(".");
+  return signe + grouperMilliers(entier) + (decimale !== undefined ? `,${decimale}` : "");
 }
 
 // "il y a X min/h/j" depuis une date ISO -- partagé entre la tuile "État de

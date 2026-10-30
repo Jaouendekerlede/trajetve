@@ -2,7 +2,7 @@
 // réel par km (recharge + entretien). Même gabarit que ui-journal.js.
 // Demande explicite de l'utilisateur le 2026-10-30.
 
-import { $, toast, euros, nombre, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
+import { $, toast, euros, nombre, nombreAffiche, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
 import { listerEntretien, ajouterEntretien, modifierEntretien, retirerEntretien, coutParKm, listerJournal, definirProfilVehicule } from "./storage.js";
 import { relaisConfigure, lireEtatVehiculeRelais } from "./relais.js";
@@ -25,10 +25,10 @@ export function rendreEntretien() {
   const coutTotal = entretien.reduce((s, e) => s + (e.cout_eur || 0), 0);
   const tuiles = [tuile("violet", euros(coutTotal), "Dépensé en entretien")];
   if (cout) {
-    tuiles.push(tuile("good", `${nombre(cout.eur_par_km, 3)} €/km`, `Coût réel (${nombre(cout.distance_km)} km)`));
+    tuiles.push(tuile("good", `${nombre(cout.eur_par_km, 3)} €/km`, `Coût réel (${nombreAffiche(cout.distance_km)} km)`));
   }
   $("ev-entretien-bilan").innerHTML = `<div class="ev-tuiles">${tuiles.join("")}</div>${
-    cout ? "" : hint(`Coût au km non calculable : renseignez le kilométrage dans Profil › Infos du véhicule.${(() => { const k = dernierKmReelConnu(); return k ? ` Dernier relevé réel connu : ${nombre(k)} km.` : ""; })()}`)
+    cout ? "" : hint(`Coût au km non calculable : renseignez le kilométrage dans Profil › Infos du véhicule.${(() => { const k = dernierKmReelConnu(); return k ? ` Dernier relevé réel connu : ${nombreAffiche(k)} km.` : ""; })()}`)
   }`;
   $("ev-entretien-km-relais-btn")?.classList.toggle("hidden", !(!cout && relaisConfigure()));
 
@@ -39,8 +39,8 @@ export function rendreEntretien() {
   $("ev-entretien-liste").innerHTML = entretien
     .slice(0, 20)
     .map((e) => {
-      const echeance = [e.prochaine_date_ts ? `prochaine fois : ${new Date(e.prochaine_date_ts).toLocaleDateString("fr-FR")}` : "", e.prochain_km ? `${nombre(e.prochain_km)} km` : ""].filter(Boolean).join(" · ");
-      return `<div class="ev-journal-ligne" data-editer="${escapeHtml(e.id)}"><span>${new Date(e.date_ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })} · ${escapeHtml(e.type || "Entretien")}</span><span>${euros(e.cout_eur || 0)}${e.km ? ` · ${nombre(e.km)} km` : ""}${echeance ? ` · ↻ ${escapeHtml(echeance)}` : ""}</span><button type="button" class="ev-lien" data-entretien="${escapeHtml(e.id)}" title="Supprimer">✕</button></div>`;
+      const echeance = [e.prochaine_date_ts ? `prochaine fois : ${new Date(e.prochaine_date_ts).toLocaleDateString("fr-FR")}` : "", e.prochain_km ? `${nombreAffiche(e.prochain_km)} km` : ""].filter(Boolean).join(" · ");
+      return `<div class="ev-journal-ligne" data-editer="${escapeHtml(e.id)}"><span>${new Date(e.date_ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })} · ${escapeHtml(e.type || "Entretien")}</span><span>${euros(e.cout_eur || 0)}${e.km ? ` · ${nombreAffiche(e.km)} km` : ""}${echeance ? ` · ↻ ${escapeHtml(echeance)}` : ""}</span><button type="button" class="ev-lien" data-entretien="${escapeHtml(e.id)}" title="Supprimer">✕</button></div>`;
     })
     .join("");
   $("ev-entretien-liste")
@@ -199,7 +199,7 @@ export function cablerEntretien() {
     btn.textContent = "🔗 Utiliser le relevé réel du relais";
     if (!etat || !Number.isFinite(etat.odometre_km)) return toast("⚠️ Kilométrage indisponible pour l'instant.");
     definirProfilVehicule({ kilometrage_actuel_km: etat.odometre_km });
-    toast(`🔧 Kilométrage actuel mis à jour : ${nombre(etat.odometre_km)} km`);
+    toast(`🔧 Kilométrage actuel mis à jour : ${nombreAffiche(etat.odometre_km)} km`);
     rendreEntretien();
   });
 }
