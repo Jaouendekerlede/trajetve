@@ -251,8 +251,18 @@ export function densifier(coords, pasM) {
 // Recale chaque point sur la route dessinée la plus proche (à moins de
 // `ecartMaxM`), orientée à peu près comme le tracé (pas sur une rue qui
 // croise). segments : [[lon, lat], [lon, lat]][].
+//
+// Aux ronds-points, plusieurs segments proches pointent dans toutes les
+// directions (vu la petite taille du cercle) : sans continuité avec le point
+// déjà recalé juste avant, le point suivant peut « sauter » sur l'autre côté
+// du cercle, coupant la courbe au lieu de la suivre -- vu en vrai pendant la
+// navigation (angles droits, saccades), corrigé le 2026-10-30. On choisit
+// donc, parmi les segments à portée, celui qui reste proche à la fois du
+// point brut ET du point précédent déjà recalé (plutôt que le plus proche du
+// seul point brut) : coût = distance au point brut + distance au recalage précédent.
 export function recalerSurRoutes(points, segments, ecartMaxM) {
   if (!segments.length) return points.slice();
+  let precedent = null;
   return points.map(([lon, lat], i) => {
     const kx = 111320 * Math.cos((lat * Math.PI) / 180);
     const ky = 110540;
@@ -261,7 +271,7 @@ export function recalerSurRoutes(points, segments, ecartMaxM) {
     const nt = Math.hypot(tx, ty) || 1;
     [tx, ty] = [tx / nt, ty / nt];
     let meilleur = null;
-    let dMin = ecartMaxM;
+    let coutMin = Infinity;
     for (const [a, b] of segments) {
       const ax = (a[0] - lon) * kx;
       const ay = (a[1] - lat) * ky;
@@ -275,11 +285,16 @@ export function recalerSurRoutes(points, segments, ecartMaxM) {
       if (Math.abs((dx * tx + dy * ty) / Math.sqrt(l2)) < 0.7) continue;
       const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2));
       const d = Math.hypot(ax + t * dx, ay + t * dy);
-      if (d < dMin) {
-        dMin = d;
-        meilleur = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+      if (d > ecartMaxM) continue;
+      const point = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+      const continuite = precedent ? Math.hypot((point[0] - precedent[0]) * kx, (point[1] - precedent[1]) * ky) : 0;
+      const cout = d + continuite;
+      if (cout < coutMin) {
+        coutMin = cout;
+        meilleur = point;
       }
     }
+    precedent = meilleur || precedent;
     return meilleur || [lon, lat];
   });
 }
