@@ -61,9 +61,15 @@ export function obtenirProfilVehicule() {
   return avecPrixDomicile(fusion);
 }
 
+// Kilométrage réel (coût par km) : optionnel en permanence, contrairement
+// aux champs techniques ci-dessous (toujours renseignés, avec une valeur par
+// défaut) -- traité à part pour ne jamais être forcé à un nombre par la
+// boucle de validation qui suit (CHAMPS_NUMERIQUES).
+const CHAMPS_KM = ["kilometrage_initial_km", "kilometrage_actuel_km"];
+
 export function definirProfilVehicule(champs) {
   const { prix_domicile_eur_kwh: _calcule, ...profil } = obtenirProfilVehicule();
-  for (const cle of ["nom", ...CHAMPS_NUMERIQUES, "part_hc_pct"]) {
+  for (const cle of ["nom", ...CHAMPS_NUMERIQUES, "part_hc_pct", ...CHAMPS_KM]) {
     if (champs[cle] !== undefined && champs[cle] !== null && champs[cle] !== "" && !Number.isNaN(champs[cle])) {
       profil[cle] = champs[cle];
     }
@@ -303,6 +309,50 @@ export function consommationReelleSur(journal) {
   const km = [...parId.values()].reduce((s, v) => s + v, 0);
   const kwh = journal.filter((e) => parId.has(e.id)).reduce((s, e) => s + (e.kwh || 0), 0);
   return km > 0 ? Math.round((kwh / km) * 1000) / 10 : null;
+}
+
+// ── Carnet d'entretien ──────────────────────────────────────────────────────
+// Même gabarit que le journal des recharges ci-dessus. Demande explicite de
+// l'utilisateur le 2026-10-30.
+
+const MAX_ENTRETIEN = 500;
+
+export function listerEntretien() {
+  return lireJson(STORAGE_KEYS.entretien, []);
+}
+
+// entree : { type, date_ts, km, cout_eur, prochaine_date_ts, prochain_km, notes }
+// -- seuls type/date_ts/cout_eur sont obligatoires, le reste est optionnel.
+export function ajouterEntretien(entree) {
+  const entretien = listerEntretien();
+  entretien.unshift({ id: `entretien_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, ...entree });
+  ecrireJson(STORAGE_KEYS.entretien, entretien.slice(0, MAX_ENTRETIEN));
+}
+
+export function retirerEntretien(id) {
+  ecrireJson(STORAGE_KEYS.entretien, listerEntretien().filter((e) => e.id !== id));
+}
+
+export function modifierEntretien(id, champs) {
+  ecrireJson(
+    STORAGE_KEYS.entretien,
+    listerEntretien().map((e) => (e.id === id ? { ...e, ...champs } : e)),
+  );
+}
+
+// Coût réel de possession par km : recharge (journal) + entretien, rapporté
+// au kilométrage réel saisi dans le profil. Jamais une estimation à partir
+// des seuls trajets suivis par l'appli (qui n'en couvrent qu'une partie) --
+// null si le kilométrage n'est pas renseigné ou que la distance n'est pas
+// positive, plutôt qu'un chiffre trompeur. Demande explicite du 2026-10-30.
+export function coutParKm() {
+  const profil = obtenirProfilVehicule();
+  if (!Number.isFinite(profil.kilometrage_actuel_km) || !Number.isFinite(profil.kilometrage_initial_km)) return null;
+  const distance = profil.kilometrage_actuel_km - profil.kilometrage_initial_km;
+  if (distance <= 0) return null;
+  const coutRecharge = listerJournal().reduce((s, e) => s + (e.cout_eur || 0), 0);
+  const coutEntretien = listerEntretien().reduce((s, e) => s + (e.cout_eur || 0), 0);
+  return { eur_par_km: (coutRecharge + coutEntretien) / distance, cout_recharge: coutRecharge, cout_entretien: coutEntretien, distance_km: distance };
 }
 
 // ── Abonnements de recharge ────────────────────────────────────────────────

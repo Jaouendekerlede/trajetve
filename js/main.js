@@ -6,6 +6,7 @@ import { restaurerDepuisAdresse, proposerRappelSauvegarde } from "./ui-sauvegard
 import { proposerInstallation } from "./ui-installation.js";
 import { toast } from "./ui-commun.js";
 import { verifierBatterieBasse } from "./alerte-batterie.js";
+import { verifierEntretienDu } from "./alerte-entretien.js";
 
 const DELAI_RAPPEL_SAUVEGARDE_MS = 8000;
 
@@ -29,6 +30,7 @@ if (restaures) {
 } else setTimeout(proposerRappelSauvegarde, DELAI_RAPPEL_SAUVEGARDE_MS);
 setTimeout(proposerRechargeMaison, 3000);
 verifierBatterieBasse();
+verifierEntretienDu();
 // Bandeau « Sauvegarder sur Google Drive ? » retiré : son bouton « Plus
 // tard » ne mémorisait pas le report, donc il revenait à chaque ouverture
 // tant qu'aucune sauvegarde n'avait abouti -- demande explicite de

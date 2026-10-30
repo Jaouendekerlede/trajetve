@@ -348,6 +348,7 @@
       <div class="ev-menu-groupe">
           <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-stats"><span class="ev-menu-icone" style="background:#8b5cf6"><span class="ev-menu-glyphe">📊</span></span><span><span class="ev-menu-nom">Mes statistiques</span><span class="ev-menu-detail">Kilomètres, coût, anciens trajets</span></span></button>
           <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-journal"><span class="ev-menu-icone" style="background:#0ea5e9"><span class="ev-menu-glyphe">📒</span></span><span><span class="ev-menu-nom">Journal des recharges</span><span class="ev-menu-detail">Recharges faites, ajout à la main</span></span></button>
+          <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-entretien"><span class="ev-menu-icone" style="background:#64748b"><span class="ev-menu-glyphe">🔧</span></span><span><span class="ev-menu-nom">Entretien</span><span class="ev-menu-detail">Carnet d'entretien, coût réel au km</span></span></button>
           <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-recherche"><span class="ev-menu-icone" style="background:#16a34a"><span class="ev-menu-glyphe">🔍</span></span><span><span class="ev-menu-nom">Rechercher des bornes</span><span class="ev-menu-detail">Par ville, enseigne, puissance</span></span></button>
           <button type="button" class="ev-menu-ligne" data-vue="outils" data-bloc="ev-bloc-calculateur"><span class="ev-menu-icone" style="background:#f97316"><span class="ev-menu-glyphe">⏱️</span></span><span><span class="ev-menu-nom">Calculateur de recharge</span><span class="ev-menu-detail">Temps et coût d'une recharge</span></span></button>
       </div>
@@ -547,6 +548,31 @@
         <div id="ev-journal-liste" class="ev-journal-liste"></div>
       </div>
 
+      <div class="ev-carte-bloc" id="ev-bloc-entretien">
+        <h3>🔧 Entretien</h3>
+        <div class="ev-hint">Vidanges, pneus, révisions, assurance... Touchez un entretien dans la liste pour le modifier. Le coût réel au km se calcule une fois le kilométrage renseigné dans Profil › Infos du véhicule.</div>
+        <div id="ev-entretien-bilan"></div>
+        <button id="ev-entretien-exporter-btn" class="ev-btn" type="button">📄 Exporter mon entretien (CSV)</button>
+        <details class="ev-details" id="ev-entretien-ajouter-details">
+          <summary id="ev-entretien-ajouter-titre">➕ Ajouter un entretien</summary>
+          <div class="ev-grille-2">
+            <label class="ev-champ">Type
+              <select id="ev-entretien-type" class="ev-input"></select>
+            </label>
+            <label class="ev-champ hidden" id="ev-entretien-type-autre-champ">Précisez <input type="text" id="ev-entretien-type-autre" class="ev-input"></label>
+            <label class="ev-champ">Date <input type="date" id="ev-entretien-date" class="ev-input"></label>
+            <label class="ev-champ">Kilométrage (optionnel) <input type="number" id="ev-entretien-km" class="ev-input" min="0" step="1"></label>
+            <label class="ev-champ">Coût (€) <input type="number" id="ev-entretien-cout" class="ev-input" min="0" step="0.01"></label>
+            <label class="ev-champ">Prochaine échéance - date (optionnel) <input type="date" id="ev-entretien-prochaine-date" class="ev-input"></label>
+            <label class="ev-champ">Prochaine échéance - km (optionnel) <input type="number" id="ev-entretien-prochain-km" class="ev-input" min="0" step="1"></label>
+            <label class="ev-champ ev-large">Notes (optionnel) <input type="text" id="ev-entretien-notes" class="ev-input"></label>
+            <button id="ev-entretien-ajouter-btn" class="ev-btn" type="button">Ajouter</button>
+          </div>
+          <button id="ev-entretien-annuler-btn" class="ev-lien hidden" type="button">✕ Annuler la modification</button>
+        </details>
+        <div id="ev-entretien-liste" class="ev-journal-liste"></div>
+      </div>
+
       <div class="ev-carte-bloc" id="ev-bloc-recherche">
         <h3>🔍 Rechercher des bornes</h3>
         <div class="ev-colonne">
@@ -665,6 +691,8 @@
           <label class="ev-champ">Charge DC max (kW)<input type="number" step="0.1" id="ev-profil-dc" class="ev-input" inputmode="decimal"><small class="ev-aide-champ">Puissance max réelle (Kona 64 kWh : 77)</small></label>
           <label class="ev-champ">Borne à domicile (kW)<input type="number" step="0.1" id="ev-profil-domicile" class="ev-input" inputmode="decimal"><small class="ev-aide-champ">Borne « 7 kW » = 7,4</small></label>
           <label class="ev-champ ev-large">Prises acceptées<input type="text" id="ev-profil-connecteurs" class="ev-input" placeholder="CCS, Type 2"></label>
+          <label class="ev-champ">Kilométrage de référence (km)<input type="number" step="1" min="0" id="ev-profil-km-initial" class="ev-input" inputmode="numeric"><small class="ev-aide-champ">Relevé de départ du suivi (ex. à l'achat)</small></label>
+          <label class="ev-champ">Kilométrage actuel (km)<input type="number" step="1" min="0" id="ev-profil-km-actuel" class="ev-input" inputmode="numeric"><small class="ev-aide-champ">Dernier relevé réel -- sert au coût réel au km (Outils › Entretien)</small></label>
           <label class="ev-champ ev-large">Saison (si la météo réelle n'est pas utilisée)
             <select id="ev-profil-saison" class="ev-input">
               <option value="ete">Été (consommation normale)</option>
@@ -1023,7 +1051,7 @@
       <button id="ev-revoir-accueil-btn" class="ev-lien ev-lien-centre" type="button">❓ Revoir la présentation de l'appli</button>
       <div class="ev-hint ev-lien-centre" id="ev-mention-profil"></div>
       <details class="ev-sous-menu"><summary>⚖️ Mentions légales</summary><p class="ev-hint" id="ev-mention-legale"></p></details>
-      <div class="ev-hint ev-lien-centre">Version 175 : Navigation - zoom plus serré sous 20 km/h, feux réessayés automatiquement en cas d'échec</div>
+      <div class="ev-hint ev-lien-centre">Version 176 : Nouveau - Carnet d'entretien et coût réel de possession par km (Menu › Outils)</div>
     </div>
   </div>
 </section>

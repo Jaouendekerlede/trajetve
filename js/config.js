@@ -15,6 +15,7 @@ export const STORAGE_KEYS = {
   radarsPersonnels: "trajetve_radars_personnels",
   bornesPersonnelles: "trajetve_bornes_personnelles",
   fiabiliteOperateurs: "trajetve_fiabilite_operateurs",
+  entretien: "trajetve_entretien",
 };
 
 export function getApiKeys() {
@@ -46,6 +47,12 @@ export const PROFIL_PAR_DEFAUT = {
   prix_hp_eur_kwh: 0.27,
   part_hc_pct: 100,
   saison: "mi_saison",
+  // Kilométrage réel (saisi à la main) -- sert au coût réel de possession
+  // par km (recharge + entretien) : jamais estimé à partir des trajets
+  // suivis par l'appli, qui n'en couvrent qu'une partie. Demande explicite
+  // de l'utilisateur le 2026-10-30.
+  kilometrage_initial_km: null,
+  kilometrage_actuel_km: null,
 };
 
 // Modèle physique de consommation (calcul détaillé). Calibré ensuite sur

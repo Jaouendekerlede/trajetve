@@ -18,6 +18,7 @@ import { resoudreLieu, haversineKm } from "./geo.js";
 import { escapeHtml, lienGoogleMaps, lienWaze, estNuit } from "./util.js";
 import { $, toast, bandeau, euros, nombre, nomCourt, nombreOuUndefined, hint, alerte, tuile, telechargerTexte, badgeOperateur, texteDepuis } from "./ui-commun.js";
 import { rendreJournal, cablerJournal, synchroniserRechargesDetectees } from "./ui-journal.js";
+import { rendreEntretien, cablerEntretien } from "./ui-entretien.js";
 import { rendreAbonnements, cablerAbonnements } from "./ui-abonnements.js";
 import { exporterSauvegarde, importerSauvegarde, envoyerLienRestauration, majInfoLien } from "./ui-sauvegarde.js";
 import { installerAppli, majBoutonInstallation } from "./ui-installation.js";
@@ -305,6 +306,7 @@ function afficherVue(vue, { etat, historique = true, rubrique = null } = {}) {
   else if (!navigationActive()) definirAppuiLong(null);
   if (vue === "outils") {
     rendreJournal();
+    rendreEntretien();
     rendreStats();
     rendreTrajets();
     rendreTraces();
@@ -2509,6 +2511,7 @@ function cablerFavoris() {
 
 function cablerOutils() {
   cablerJournal();
+  cablerEntretien();
   const select = $("ev-recherche-operateur-select");
   select.addEventListener("change", () => {
     const autre = select.value === "__autre__";
@@ -2669,6 +2672,8 @@ function rendreProfil() {
   rendreAbonnements();
   majConsoMesuree();
   $("ev-profil-connecteurs").value = (profil.connecteurs_acceptes || []).join(", ");
+  $("ev-profil-km-initial").value = profil.kilometrage_initial_km ?? "";
+  $("ev-profil-km-actuel").value = profil.kilometrage_actuel_km ?? "";
   $("ev-profil-saison").value = profil.saison || "mi_saison";
   $("ev-profil-prix-hc").value = profil.prix_hc_eur_kwh;
   $("ev-profil-prix-hp").value = profil.prix_hp_eur_kwh;
@@ -2900,6 +2905,8 @@ function cablerProfil() {
       part_hc_pct: nombreOuUndefined($("ev-profil-part-hc").value),
       connecteurs_acceptes: connecteurs.length ? connecteurs : undefined,
       saison: $("ev-profil-saison").value,
+      kilometrage_initial_km: nombreOuUndefined($("ev-profil-km-initial").value),
+      kilometrage_actuel_km: nombreOuUndefined($("ev-profil-km-actuel").value),
     });
     sauverReglages({
       adresse_domicile: $("ev-reglage-domicile").value.trim(),
