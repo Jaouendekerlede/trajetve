@@ -7,7 +7,10 @@
 // Zoom selon la vitesse : une courbe continue entre ces repères (plus on va
 // vite, plus on voit loin), au lieu de paliers. À 130 km/h le champ est plus
 // large qu'à 110.
+// Sous 20 km/h (quasi à l'arrêt), resserre encore -- demande explicite de
+// l'utilisateur le 2026-10-30 (le zoom restait figé à 18 jusqu'à 0 km/h).
 export const REPERES_ZOOM = [
+  { kmh: 5, zoom: 19 },
   { kmh: 20, zoom: 18 },
   { kmh: 50, zoom: 17 },
   { kmh: 80, zoom: 16 },

@@ -50,7 +50,8 @@ test("le zoom le plus serré l'emporte (sortie qui finit sur un rond-point)", ()
 
 test("hors manœuvre : zoom progressif selon la vitesse, sans bouger pour un rien", () => {
   const { zoomPourVitesse } = mod;
-  assert.deepEqual([10, 20, 50, 80, 110, 130, 160].map(zoomPourVitesse), [18, 18, 17, 16, 15, 14.6, 14.6]);
+  const attendu = [10, 20, 50, 80, 110, 130, 160].map(zoomPourVitesse);
+  assert.deepEqual(attendu.map((v) => Math.round(v * 1000) / 1000), [18.667, 18, 17, 16, 15, 14.6, 14.6]);
   assert.ok(zoomPourVitesse(130) < zoomPourVitesse(110), "le champ s'élargit encore après 110 km/h");
   // 52 km/h avec un zoom de 17 : la cible (16,95) est trop proche pour bouger.
   assert.equal(zoom(52, 0, [], [], 17).zoom, 17);
@@ -81,11 +82,14 @@ test("accélération puis ralentissement : la vue s'élargit puis se resserre, s
   const montee = Array.from({ length: 40 }, (_, s) => Math.min(130, s * 4));
   const descente = Array.from({ length: 40 }, (_, s) => Math.max(30, 130 - s * 4));
   const zooms = rouler([...montee, ...Array(20).fill(130), ...descente, ...Array(20).fill(30)]);
-  assert.equal(zooms[0], 18);
+  assert.equal(zooms[0], 19, "à l'arrêt (0 km/h) : zoom le plus resserré");
   assert.ok(Math.min(...zooms) <= 14.8, `vue la plus large : ${Math.min(...zooms)}`);
   assert.ok(zooms[zooms.length - 1] >= 17.4, `retour à ${zooms[zooms.length - 1]} à 30 km/h`);
   // La cible bouge par pas de 0,2 au moins ; la caméra lisse ensuite ce pas à l'écran.
-  assert.ok(sautMax(zooms) <= 0.4, `plus grand changement d'une seconde à l'autre : ${sautMax(zooms)}`);
+  // 0,5 (pas 0,4) depuis l'ajout du repère à 5 km/h : la pente y est plus
+  // raide (1 niveau de zoom sur 15 km/h au lieu de 30), pour resserrer
+  // davantage sous 20 km/h (demande explicite du 2026-10-30).
+  assert.ok(sautMax(zooms) <= 0.5, `plus grand changement d'une seconde à l'autre : ${sautMax(zooms)}`);
 });
 
 test("accélération franche (0 à 100 km/h en 8 s) : le zoom suit en quelques secondes", () => {

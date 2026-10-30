@@ -718,10 +718,17 @@ function appliquerFeux(route) {
   }
 }
 
+// Délai avant de retenter une recherche de feux en échec (service OpenStreetMap
+// en panne/surchargé au moment précis du calcul du trajet) -- sans ça, un
+// raté au départ laisse le trajet entier sans feux affichés, signalé en
+// conduite réelle le 2026-10-30 ("un coup les feux apparaissent, un coup non").
+const DELAI_RELANCE_FEUX_MS = 30000;
+
 // Feux autour des manœuvres pas encore vues (les recalculs reprennent
 // surtout les mêmes : pas de nouvelle requête pour elles).
 async function chercherFeux(route) {
   if (!etat?.prefs.feux) return;
+  clearTimeout(etat.relanceFeux);
   const a = manoeuvresAFeux(route).filter(({ instr }) => {
     const p = pointSurRoute(instr.offset);
     instr.cleFeux = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`;
@@ -740,6 +747,7 @@ async function chercherFeux(route) {
   if (!etat) return;
   if (!r.ok) {
     for (const { instr } of a) etat.manoeuvresFeux.delete(instr.cleFeux);
+    if (etat.route === route) etat.relanceFeux = setTimeout(() => chercherFeux(route), DELAI_RELANCE_FEUX_MS);
     return;
   }
   for (const f of r.feux) etat.feuxConnus.set(`${f.lat},${f.lon}`, f);
@@ -3017,6 +3025,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   if (etat.watchId !== undefined) navigator.geolocation.clearWatch(etat.watchId);
   clearInterval(etat.surveillanceSignal);
   clearTimeout(etat.retourSuivi);
+  clearTimeout(etat.relanceFeux);
   $("ev-nav-gps")?.classList.add("hidden");
   if (etat.demoTimer) clearInterval(etat.demoTimer);
   if (etat.raf) cancelAnimationFrame(etat.raf);
