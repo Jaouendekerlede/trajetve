@@ -522,12 +522,22 @@ function recalculerFeux() {
   vue.dessinerFeux(etat.route.feuxSurTrace);
 }
 
+// Délai avant de retenter une recherche de radars en échec (même raison que
+// DELAI_RELANCE_FEUX_MS ci-dessous : un raté au départ laissait le trajet
+// entier sans radars, sans nouvelle tentative).
+const DELAI_RELANCE_RADARS_MS = 30000;
+
 // Radars fixes du trajet, une fois (et après un nouveau plan) : on n'en
 // montre que les « zones de danger » permises par la loi.
-async function chercherRadars() {
-  if (!etat?.prefs.dangers || !etat.route) return;
-  const r = await radarsLeLongDu(etat.route.coords);
-  if (!etat?.route || !r.ok) return;
+async function chercherRadars(route = etat?.route) {
+  if (!etat?.prefs.dangers || !route) return;
+  clearTimeout(etat.relanceRadars);
+  const r = await radarsLeLongDu(route.coords);
+  if (!etat?.route) return;
+  if (!r.ok) {
+    if (etat.route === route) etat.relanceRadars = setTimeout(() => chercherRadars(route), DELAI_RELANCE_RADARS_MS);
+    return;
+  }
   // Radars officiels (OSM) + ceux signalés soi-même (voir signalerRadarIci) --
   // ces derniers passent par la même conversion en « zone de danger » que
   // les officiels juste en dessous, jamais un point précis.
@@ -3026,6 +3036,7 @@ export function arreterNavigation({ depuisRetour = false } = {}) {
   clearInterval(etat.surveillanceSignal);
   clearTimeout(etat.retourSuivi);
   clearTimeout(etat.relanceFeux);
+  clearTimeout(etat.relanceRadars);
   $("ev-nav-gps")?.classList.add("hidden");
   if (etat.demoTimer) clearInterval(etat.demoTimer);
   if (etat.raf) cancelAnimationFrame(etat.raf);

@@ -4,7 +4,8 @@
 
 import { $, toast, euros, nombre, nombreOuUndefined, hint, tuile } from "./ui-commun.js";
 import { escapeHtml } from "./util.js";
-import { listerEntretien, ajouterEntretien, modifierEntretien, retirerEntretien, coutParKm, listerJournal } from "./storage.js";
+import { listerEntretien, ajouterEntretien, modifierEntretien, retirerEntretien, coutParKm, listerJournal, definirProfilVehicule } from "./storage.js";
+import { relaisConfigure, lireEtatVehiculeRelais } from "./relais.js";
 
 const TYPES_PREREGLES = ["Vidange", "Pneus", "Plaquettes de frein", "Révision", "Assurance", "Contrôle technique"];
 
@@ -29,6 +30,7 @@ export function rendreEntretien() {
   $("ev-entretien-bilan").innerHTML = `<div class="ev-tuiles">${tuiles.join("")}</div>${
     cout ? "" : hint(`Coût au km non calculable : renseignez le kilométrage dans Profil › Infos du véhicule.${(() => { const k = dernierKmReelConnu(); return k ? ` Dernier relevé réel connu : ${nombre(k)} km.` : ""; })()}`)
   }`;
+  $("ev-entretien-km-relais-btn")?.classList.toggle("hidden", !(!cout && relaisConfigure()));
 
   if (!entretien.length) {
     $("ev-entretien-liste").innerHTML = hint("Aucun entretien enregistré pour l'instant.");
@@ -184,4 +186,20 @@ export function cablerEntretien() {
   });
   $("ev-entretien-annuler-btn").addEventListener("click", annulerEditionEntretien);
   $("ev-entretien-exporter-btn").addEventListener("click", exporterEntretienCsv);
+
+  // Préremplit le kilométrage actuel avec le vrai relevé du relais (Pleos),
+  // bien plus à jour que les seules recharges Bluelink -- un tap, jamais
+  // automatique/silencieux. Demande explicite de l'utilisateur le 2026-10-30.
+  $("ev-entretien-km-relais-btn")?.addEventListener("click", async () => {
+    const btn = $("ev-entretien-km-relais-btn");
+    btn.disabled = true;
+    btn.textContent = "🔗 Lecture en cours…";
+    const etat = await lireEtatVehiculeRelais();
+    btn.disabled = false;
+    btn.textContent = "🔗 Utiliser le relevé réel du relais";
+    if (!etat || !Number.isFinite(etat.odometre_km)) return toast("⚠️ Kilométrage indisponible pour l'instant.");
+    definirProfilVehicule({ kilometrage_actuel_km: etat.odometre_km });
+    toast(`🔧 Kilométrage actuel mis à jour : ${nombre(etat.odometre_km)} km`);
+    rendreEntretien();
+  });
 }
