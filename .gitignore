@@ -7,3 +7,6 @@ src-tauri/gen/android/build/
 src-tauri/gen/android/local.properties
 src-tauri/keystore/
 *.apk
+*.apk.idsig
+# Secret de lecture du relais (voir PushNotifications.kt) -- jamais dans un dépôt public.
+src-tauri/gen/android/app/src/main/java/fr/jaouendekerlede/trajetve/Secrets.kt

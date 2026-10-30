@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1006663403026",
+    "project_id": "trajetve",
+    "storage_bucket": "trajetve.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1006663403026:android:92385e78d0e4a7c50f3acb",
+        "android_client_info": {
+          "package_name": "fr.jaouendekerlede.trajetve"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSUF5-B3nL5pXwzyTIKE7nlzJc5JDsuvU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
