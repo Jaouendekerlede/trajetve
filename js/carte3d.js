@@ -1214,7 +1214,7 @@ function recalerAutour(lat, lon) {
   const coords = traceNav?.[0];
   if (!coords?.length || !carte?.getSource("trajet")) return;
   const maintenant = Date.now();
-  if (recalage?.essai && maintenant - recalage.essai < 2000 && !recalage.fenetre) return;
+  if (recalage?.essai && maintenant - recalage.essai < 2000 && !recalage.complet) return;
   // Point du tracé le plus proche de la voiture, puis la fenêtre autour.
   let i0 = 0;
   let dMin = Infinity;
@@ -1234,13 +1234,21 @@ function recalerAutour(lat, lon) {
   const lons = fenetre.map((p) => p[0]);
   const marge = 0.0005;
   const segs = segmentsRoutesCarte([Math.min(...lons) - marge, Math.min(...lats) - marge, Math.max(...lons) + marge, Math.max(...lats) + marge]);
-  recalage = { centre: [lat, lon], trace: coords, essai: maintenant, segs, fenetre: null };
+  recalage = { centre: [lat, lon], trace: coords, essai: maintenant, segs, fenetre: null, complet: false };
   if (segs.length < 3) return; // tuiles pas encore chargées : nouvel essai bientôt
+  // Les tuiles peuvent être chargées pour les routes alentour mais pas
+  // encore pour un rond-point un peu plus loin dans la fenêtre : les points
+  // sans segment à portée retombent sur leur position brute (non recalée),
+  // ce qui coupe la courbe à cet endroit précis. `complet` distingue ce cas
+  // (retente dans 2 s, sans attendre les 300 m du prochain déclenchement
+  // normal) d'un recalage réellement abouti -- corrigé le 2026-10-30.
+  const recale = recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M);
+  recalage.complet = recale.every((p, i) => p[0] !== fenetre[i][0] || p[1] !== fenetre[i][1]);
   // Lissé comme le tracé initial (ligne 1111) : sans ça, le recalage sur les
   // routes de la carte remplace la ligne par des segments bruts (facettés),
   // perdant le lissage -- la voiture (voitureRecalee, sur ce même `fenetre`)
   // suit ainsi la même courbe lissée que celle affichée.
-  recalage.fenetre = lisser(recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M));
+  recalage.fenetre = lisser(recale);
   const affiche = [...coords.slice(0, a), ...recalage.fenetre, ...coords.slice(b + 1)];
   carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: affiche }, properties: {} });
 }
@@ -1248,7 +1256,7 @@ function recalerAutour(lat, lon) {
 function voitureRecalee(lat, lon) {
   if (!enNavigation || !traceNav) return { lat, lon };
   const [la, lo] = recalage?.centre || [];
-  if (!recalage || recalage.trace !== traceNav[0] || !recalage.fenetre || haversineKm(la, lo, lat, lon) * 1000 > RECALAGE_TOUS_LES_M) recalerAutour(lat, lon);
+  if (!recalage || recalage.trace !== traceNav[0] || !recalage.complet || haversineKm(la, lo, lat, lon) * 1000 > RECALAGE_TOUS_LES_M) recalerAutour(lat, lon);
   return (recalage?.fenetre && pointSurLigne(lat, lon, recalage.fenetre, 15)) || { lat, lon };
 }
 
