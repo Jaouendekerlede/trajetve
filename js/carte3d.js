@@ -1236,7 +1236,11 @@ function recalerAutour(lat, lon) {
   const segs = segmentsRoutesCarte([Math.min(...lons) - marge, Math.min(...lats) - marge, Math.max(...lons) + marge, Math.max(...lats) + marge]);
   recalage = { centre: [lat, lon], trace: coords, essai: maintenant, segs, fenetre: null };
   if (segs.length < 3) return; // tuiles pas encore chargées : nouvel essai bientôt
-  recalage.fenetre = recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M);
+  // Lissé comme le tracé initial (ligne 1111) : sans ça, le recalage sur les
+  // routes de la carte remplace la ligne par des segments bruts (facettés),
+  // perdant le lissage -- la voiture (voitureRecalee, sur ce même `fenetre`)
+  // suit ainsi la même courbe lissée que celle affichée.
+  recalage.fenetre = lisser(recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M));
   const affiche = [...coords.slice(0, a), ...recalage.fenetre, ...coords.slice(b + 1)];
   carte.getSource("trajet").setData({ type: "Feature", geometry: { type: "LineString", coordinates: affiche }, properties: {} });
 }
