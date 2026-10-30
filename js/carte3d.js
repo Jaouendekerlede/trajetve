@@ -1242,8 +1242,23 @@ function recalerAutour(lat, lon) {
   // ce qui coupe la courbe à cet endroit précis. `complet` distingue ce cas
   // (retente dans 2 s, sans attendre les 300 m du prochain déclenchement
   // normal) d'un recalage réellement abouti -- corrigé le 2026-10-30.
+  //
+  // Un point isolé non apparié (bord de la fenêtre, route privée, pont sans
+  // géométrie exploitable...) est normal et ne doit pas déclencher de
+  // nouvelle tentative : seule une suite d'au moins 20 m sans aucun segment
+  // à portée indique un vrai trou (tuiles pas chargées). Sans ce seuil, le
+  // premier essai suivant un redémarrage retente en boucle toutes les 2 s en
+  // continu dès qu'un seul point sur ~280 ne matche pas -- vu en vrai en
+  // navigation (petites saccades répétées), corrigé le 2026-10-30.
   const recale = recalerSurRoutes(fenetre, segs, ECART_RECALAGE_M);
-  recalage.complet = recale.every((p, i) => p[0] !== fenetre[i][0] || p[1] !== fenetre[i][1]);
+  let suiteNonAppariee = 0;
+  let pireSuite = 0;
+  for (let i = 0; i < recale.length; i++) {
+    const apparie = recale[i][0] !== fenetre[i][0] || recale[i][1] !== fenetre[i][1];
+    suiteNonAppariee = apparie ? 0 : suiteNonAppariee + 1;
+    if (suiteNonAppariee > pireSuite) pireSuite = suiteNonAppariee;
+  }
+  recalage.complet = pireSuite * 4 < 20;
   // Lissé comme le tracé initial (ligne 1111) : sans ça, le recalage sur les
   // routes de la carte remplace la ligne par des segments bruts (facettés),
   // perdant le lissage -- la voiture (voitureRecalee, sur ce même `fenetre`)
