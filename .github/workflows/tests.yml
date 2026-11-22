@@ -14,6 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - name: Installe les dépendances (jsdom pour les tests DOM)
+        run: npm ci
       - name: Vérification de la syntaxe
         run: for f in js/*.js service-worker.js; do node --check "$f"; done
       - name: Tests
