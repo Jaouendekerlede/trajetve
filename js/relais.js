@@ -46,11 +46,15 @@ function suffixeLecture() {
 
 // État du véhicule publié par JARVIS (batterie_pct, autonomie_km, en_charge,
 // branche...), ou null si non configuré/indisponible/périmé (>15 min).
-export async function lireEtatVehiculeRelais() {
+// forcer=true (bouton "Actualiser") : relit Pleos tout de suite côté relais,
+// sans attendre que le cache de 5 min expire -- voir worker.js.
+export async function lireEtatVehiculeRelais({ forcer = false } = {}) {
   const base = urlRelais();
   if (!base) return null;
+  const lecture = suffixeLecture();
+  const jonction = lecture ? "&" : "?";
   try {
-    const r = await fetch(`${base}/vehicule${suffixeLecture()}`, { signal: avecDelai() });
+    const r = await fetch(`${base}/vehicule${lecture}${forcer ? `${jonction}forcer=1` : ""}`, { signal: avecDelai() });
     if (!r.ok) return null;
     const d = await r.json();
     return d?.ok ? d : null;

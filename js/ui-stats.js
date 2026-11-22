@@ -63,7 +63,7 @@ export async function rafraichirEtatKona({ forcer = false } = {}) {
   if (!relaisConfigure()) return rendreEtatKona(null);
   if (!forcer && Date.now() - derniereLectureEtatKona < 60000) return;
   derniereLectureEtatKona = Date.now();
-  rendreEtatKona(await lireEtatVehiculeRelais());
+  rendreEtatKona(await lireEtatVehiculeRelais({ forcer }));
 }
 
 // Tuiles km/kWh/€ par 100km/CO2 : dérivées des trajets guidés + ajoutés à
@@ -165,6 +165,14 @@ export function rendreTrajets() {
 }
 
 export function cablerStats(ouvrirBloc) {
+  $("ev-kona-actualiser-btn").addEventListener("click", async () => {
+    const btn = $("ev-kona-actualiser-btn");
+    btn.disabled = true;
+    btn.textContent = "🔄 Actualisation…";
+    await rafraichirEtatKona({ forcer: true });
+    btn.disabled = false;
+    btn.textContent = "🔄 Actualiser";
+  });
   for (const b of document.querySelectorAll("[data-periode]")) {
     b.addEventListener("click", () => {
       periode = b.dataset.periode;

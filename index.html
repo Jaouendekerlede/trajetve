@@ -480,7 +480,16 @@
              batterie, autonomie, compteur réel, verrouillage, charge,
              climatisation... Demande explicite de l'utilisateur le
              2026-10-26 : « avoir vraiment un suivi de la Kona ». -->
-        <h4 class="ev-sous-titre">🚗 État de la Kona</h4>
+        <div class="ev-haut-ligne" style="align-items: center; justify-content: space-between;">
+          <h4 class="ev-sous-titre" style="margin: 0;">🚗 État de la Kona</h4>
+          <!-- Contourne le cache de 5 min du relais (voir worker.js) : relit
+               Pleos tout de suite plutôt que de servir une position vieille
+               de plusieurs minutes. Demande explicite de l'utilisateur après
+               avoir constaté MyHyundai afficher toujours l'adresse du
+               domicile (position jamais rafraîchie quand la voiture ne
+               bouge pas). -->
+          <button type="button" id="ev-kona-actualiser-btn" class="ev-lien">🔄 Actualiser</button>
+        </div>
         <div id="ev-kona-etat"></div>
         <div class="ev-segments ev-stats-periodes">
           <button type="button" data-periode="mois" class="active">Ce mois</button>
